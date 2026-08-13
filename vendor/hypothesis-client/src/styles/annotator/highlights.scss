@@ -1,0 +1,110 @@
+$color-highlight: rgba(255, 255, 60, 0.4);
+$color-highlight-second: rgba(206, 206, 60, 0.4);
+$color-highlight-focused: rgba(156, 230, 255, 0.5);
+
+// Hide content from sighted users but make it visible to screen readers.
+//
+// Resources:
+// - https://webaim.org/techniques/css/invisiblecontent/ (see "CSS clip")
+// - https://cloudfour.com/thinks/see-no-evil-hidden-content-and-accessibility/#showing-additional-content-for-screen-readers
+// - https://tailwindcss.com/docs/screen-readers#screen-reader-only-elements Tailwind's `sr-only` class
+@mixin screen-reader-only {
+  // Take the content out of the normal layout flow.
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  white-space: nowrap;
+
+  // Visually hide the content and prevent it from interfering with mouse/touch
+  // text selection by clipping it to an empty box. Compared to moving content with
+  // `top`/`left` this is less likely to cause the browser to scroll to a
+  // different part of the page when the hidden text has screen-reader focus.
+  clip: rect(0 0 0 0);
+  overflow: hidden;
+}
+
+// SVG highlights when the "Show Highlights" toggle is turned off.
+.hypothesis-svg-highlight {
+  fill: transparent;
+}
+
+// `hypothesis-highlights-always-on` is a class that is toggled on the root
+// of the annotated document when highlights are enabled/disabled.
+.hypothesis-highlights-always-on {
+  .hypothesis-svg-highlight {
+    fill: $color-highlight;
+
+    &.is-opaque {
+      fill: yellow;
+    }
+
+    &.is-focused {
+      fill: $color-highlight-focused;
+    }
+  }
+
+  .hypothesis-highlight {
+    background-color: $color-highlight;
+
+    // For PDFs, we still create highlight elements to wrap the text but the
+    // highlight effect is created by another element.
+    &.is-transparent {
+      background-color: transparent;
+    }
+
+    cursor: pointer;
+
+    // Make highlights visible to screen readers.
+    // See also - https://developer.paciellogroup.com/blog/2017/12/short-note-on-making-your-mark-more-accessible/.
+    &::before {
+      @include screen-reader-only;
+
+      // nb. The leading/trailing spaces are intended to ensure the text is treated
+      // as separate words by assistive technologies from the content before/after it.
+      content: ' annotation start ';
+    }
+    &::after {
+      @include screen-reader-only;
+      content: ' annotation end ';
+    }
+
+    // Give a highlight inside a larger highlight a different color to stand out.
+    & .hypothesis-highlight {
+      background-color: $color-highlight-second;
+      &.is-transparent {
+        background-color: transparent;
+      }
+
+      // Limit the number of different highlight shades by making highlights
+      // that are 3+ levels deep transparent.
+      //
+      // This was historically done to improve readability in PDFs [1], but that
+      // is no longer an issue as in PDFs highlights are created by drawing
+      // SVGs on top of the <canvas>.
+      //
+      // [1] https://github.com/hypothesis/client/issues/1995.
+      & .hypothesis-highlight {
+        background-color: transparent;
+      }
+    }
+
+    // When an annotation card is hovered in the sidebar, the corresponding
+    // highlights are shown with a "focused" color.
+    &.hypothesis-highlight-focused {
+      background-color: $color-highlight-focused !important;
+
+      .hypothesis-highlight {
+        background-color: transparent !important;
+      }
+    }
+  }
+}
+
+// Placeholder element to which annotations for off-screen content in PDFs
+// is anchored.
+.annotator-placeholder {
+  opacity: 0;
+  position: absolute;
+  top: 50%;
+  z-index: -1;
+}

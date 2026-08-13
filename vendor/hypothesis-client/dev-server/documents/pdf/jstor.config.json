@@ -1,0 +1,24 @@
+{
+  "clientConfig": {
+    "contentInfoBanner": {
+      "logo": {
+        "logo": "/jstor-logo.svg",
+        "link": "https://www.jstor.org",
+        "title": "Document provided by JSTOR"
+      },
+      "item": {
+        "title": "Populations of Thrips tabaci, with Special Reference to Virus Transmission",
+        "subtitle": "A subtitle"
+      },
+      "container": {
+        "title": "Journal of Animal Ecology",
+        "subtitle": "Container subtitle"
+      },
+      "links": {
+        "previousItem": "https://jstor.org/stable/book123.1",
+        "nextItem": "https://jstor.org/stable/book123.3",
+        "currentItem": "https://jstor.org/stable/book123.2"
+      }
+    }
+  }
+}
