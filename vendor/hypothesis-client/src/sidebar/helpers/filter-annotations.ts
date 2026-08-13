@@ -1,0 +1,207 @@
+import {
+  cfiInRange,
+  splitCFIRange,
+  stripCFIAssertions,
+} from '../../shared/cfi';
+import type { Annotation } from '../../types/api';
+import { pageLabelInRange } from '../util/page-range';
+import * as unicodeUtils from '../util/unicode';
+import {
+  cfi as getCFI,
+  description,
+  quote,
+  pageLabel,
+} from './annotation-metadata';
+import type { Facet } from './query-parser';
+
+type Filter = {
+  matches: (ann: Annotation) => boolean;
+};
+
+/**
+ * A Matcher specifies how to test whether an annotation matches a query term
+ * for a specific field.
+ */
+type Matcher<T = string> = {
+  /** Extract the field values to be matched against a query term */
+  fieldValues: (ann: Annotation) => T[];
+
+  /**
+   * Test whether a query term matches a field value. Both value and term will
+   * have been normalized using `normalize`.
+   */
+  matches: (value: T, term: T) => boolean;
+
+  /** Normalize a parsed term or field value for comparison */
+  normalize: (val: T) => T;
+};
+
+/**
+ * Normalize a string query term or field value.
+ *
+ * The normalization eliminates differences of Unicode composition, case and
+ * accent. This means for example that a search for "eclair" will match an
+ * annotation containing "Éclair".
+ */
+function normalizeStr(val: string): string {
+  return unicodeUtils.removeMarks(unicodeUtils.normalize(val)).toLowerCase();
+}
+
+/**
+ * Filter that matches annotations against a single query term.
+ */
+class TermFilter<TermType extends string> implements Filter {
+  term: TermType;
+  matcher: Matcher<TermType>;
+
+  constructor(term: TermType, matcher: Matcher<TermType>) {
+    this.term = matcher.normalize(term);
+    this.matcher = matcher;
+  }
+
+  /**
+   * Return true if an annotation matches this filter.
+   */
+  matches(ann: Annotation): boolean {
+    const matcher = this.matcher;
+    return matcher
+      .fieldValues(ann)
+      .some(value => matcher.matches(matcher.normalize(value), this.term));
+  }
+}
+
+/**
+ * Filter that combines other filters using AND or OR combinators.
+ */
+class BooleanOpFilter implements Filter {
+  operator: 'and' | 'or';
+  filters: Filter[];
+
+  /**
+   * @param op - Boolean operator
+   * @param filters - Array of filters to test against
+   */
+  constructor(op: 'and' | 'or', filters: Filter[]) {
+    this.operator = op;
+    this.filters = filters;
+  }
+
+  /**
+   * Return true if an annotation matches this filter.
+   */
+  matches(ann: Annotation): boolean {
+    if (this.operator === 'and') {
+      return this.filters.every(filter => filter.matches(ann));
+    } else {
+      return this.filters.some(filter => filter.matches(ann));
+    }
+  }
+}
+
+/**
+ * Create a matcher that tests whether a query term appears anywhere in a
+ * string field value.
+ */
+function stringFieldMatcher(
+  fieldValues: (ann: Annotation) => string[],
+): Matcher {
+  return {
+    fieldValues,
+    matches: (value, term) => value.includes(term),
+    normalize: normalizeStr,
+  };
+}
+
+/**
+ * Map of field name (from a parsed query) to matcher for that field.
+ */
+const fieldMatchers: Record<string, Matcher | Matcher<number>> = {
+  quote: stringFieldMatcher(ann => {
+    // The quote field matches "the textual version of what was annotated". This
+    // can mean the text (for text annotations) or a text representation of the
+    // selection.
+    return [quote(ann) ?? description(ann) ?? ''];
+  }),
+
+  cfi: {
+    fieldValues: ann => [getCFI(ann)?.trim() ?? ''],
+    matches: (cfi: string, cfiTerm: string) => {
+      // Here we use "-" as a separator between the start and end part of the
+      // range, as it is easy to parse.
+      //
+      // If we wanted to use a more standard CFI range representation,
+      // we could follow https://idpf.org/epub/linking/cfi/#sec-ranges.
+      //
+      // If `cfiTerm` does not contain a hyphen, the result will be an empty
+      // range that does not match any CFIs.
+      const [start, end] = splitCFIRange(cfiTerm);
+      return cfiInRange(cfi, start, end);
+    },
+    normalize: (val: string) => stripCFIAssertions(val.trim()),
+  },
+
+  page: {
+    fieldValues: ann => [pageLabel(ann)?.trim() ?? ''],
+    matches: (pageLabel: string, pageTerm: string) =>
+      pageLabelInRange(pageLabel, pageTerm),
+    normalize: (val: string) => val.trim(),
+  },
+
+  since: {
+    fieldValues: ann => [new Date(ann.updated).valueOf()],
+    matches: (updatedTime: number, age: number) => {
+      const delta = (Date.now() - updatedTime) / 1000;
+      return delta <= age;
+    },
+    normalize: (timestamp: number) => timestamp,
+  },
+
+  tag: stringFieldMatcher(ann => ann.tags),
+  text: stringFieldMatcher(ann => [ann.text]),
+  uri: stringFieldMatcher(ann => [ann.uri]),
+  user: stringFieldMatcher(ann => [
+    ann.user,
+    ann.user_info?.display_name ?? '',
+  ]),
+};
+
+/**
+ * Filter a set of annotations against a parsed query.
+ */
+export function filterAnnotations(
+  annotations: Annotation[],
+  filters: Record<string, Facet>,
+): Annotation[] {
+  const makeTermFilter = <TermType>(field: string, term: TermType) =>
+    new TermFilter(
+      term,
+      // Suppress error about potential mismatch of query term type
+      // and what the matcher expects. We assume these match up.
+      fieldMatchers[field] as Matcher<any>,
+    );
+
+  // Convert the input filter object into a filter tree, expanding "any"
+  // filters.
+  const fieldFilters = Object.entries(filters)
+    .filter(([, filter]) => filter.terms.length > 0)
+    .map(([field, filter]) => {
+      let termFilters;
+      if (field === 'any') {
+        const anyFields = ['quote', 'text', 'tag', 'user'];
+        termFilters = filter.terms.map(
+          term =>
+            new BooleanOpFilter(
+              'or',
+              anyFields.map(field => makeTermFilter(field, term)),
+            ),
+        );
+      } else {
+        termFilters = filter.terms.map(term => makeTermFilter(field, term));
+      }
+      return new BooleanOpFilter(filter.operator, termFilters);
+    });
+
+  const rootFilter = new BooleanOpFilter('and', fieldFilters);
+
+  return annotations.filter(ann => rootFilter.matches(ann));
+}

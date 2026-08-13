@@ -1,7 +1,6 @@
 Hypothesis client
 =================
 
-[![Continuous integration](https://github.com/hypothesis/client/workflows/Continuous%20integration/badge.svg?branch=main)][gha]
 [![npm version](https://img.shields.io/npm/v/hypothesis.svg)][npm]
 [![BSD licensed](https://img.shields.io/badge/license-BSD-blue.svg)][license]
 
@@ -18,7 +17,7 @@ It’s used by the [Hypothesis browser extension][ext], and can also be
 
 [service]: https://github.com/hypothesis/h
 [ext]: https://chrome.google.com/webstore/detail/hypothesis-web-pdf-annota/bjfhmglciegochdpefhhlphglcehbmek
-[embed]: https://h.readthedocs.io/projects/client/en/latest/publishers/embedding/
+[embed]: https://h.readthedocs.io/projects/client/en/latest/publishers/embedding.html
 
 Development
 -----------

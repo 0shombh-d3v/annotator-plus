@@ -1,8 +1,7 @@
-import { mount } from 'enzyme';
+import { mockImportedComponents } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import GroupListSection, { $imports } from '../GroupListSection';
-
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
 
 describe('GroupListSection', () => {
   const testGroups = [
@@ -22,7 +21,7 @@ describe('GroupListSection', () => {
     ...props
   } = {}) => {
     return mount(
-      <GroupListSection groups={groups} heading={heading} {...props} />
+      <GroupListSection groups={groups} heading={heading} {...props} />,
     );
   };
 
@@ -42,6 +41,15 @@ describe('GroupListSection', () => {
   it('renders groups', () => {
     const wrapper = createGroupListSection();
     assert.equal(wrapper.find('GroupListItem').length, testGroups.length);
+  });
+
+  [true, false].forEach(showIcons => {
+    it('renders icons if `showIcons` is true', () => {
+      const wrapper = createGroupListSection({ showIcons });
+      wrapper
+        .find('GroupListItem')
+        .forEach(item => assert.equal(item.prop('showIcon'), showIcons));
+    });
   });
 
   it('expands group specified by `expandedGroup` prop', () => {

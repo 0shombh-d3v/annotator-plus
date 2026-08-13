@@ -1,8 +1,5 @@
-'use strict';
-
-const { execSync } = require('child_process');
-
-const wrapText = require('wrap-text');
+import { execSync } from 'node:child_process';
+import wrapText from 'wrap-text';
 
 /**
  * Return a `Date` indicating when a Git tag was created.
@@ -15,7 +12,7 @@ function getTagDate(tag) {
     `git tag --list "${tag}" "--format=%(committerdate) -- %(taggerdate)"`,
     {
       encoding: 'utf-8',
-    }
+    },
   );
   const [commitDate, tagDate] = result.trim().split('--');
   const date = new Date(tagDate || commitDate);
@@ -46,7 +43,7 @@ function getHighestVersionTag() {
  */
 async function* itemsInGitHubAPIResponse(octokit, options) {
   for await (const page of octokit.paginate.iterator(options)) {
-    for (let item of page.data) {
+    for (const item of page.data) {
       yield item;
     }
   }
@@ -127,7 +124,10 @@ function formatChangeList(pullRequests) {
  *
  * Tag names are usually `vX.Y.Z` where `X.Y.Z` is the package version.
  */
-async function changelistSinceTag(octokit, tag = getHighestVersionTag()) {
+export async function changelistSinceTag(
+  octokit,
+  tag = getHighestVersionTag(),
+) {
   const org = 'hypothesis';
   const repo = 'client';
 
@@ -135,8 +135,8 @@ async function changelistSinceTag(octokit, tag = getHighestVersionTag()) {
   return formatChangeList(mergedPRs);
 }
 
-if (require.main === module) {
-  const { Octokit } = require('@octokit/rest');
+async function main() {
+  const { Octokit } = await import('@octokit/rest');
   const octokit = new Octokit({ auth: process.env.GITHUB_TOKEN });
   const tag = process.argv[2] || getHighestVersionTag();
 
@@ -149,6 +149,6 @@ if (require.main === module) {
     });
 }
 
-module.exports = {
-  changelistSinceTag,
-};
+if (import.meta.url.endsWith(process.argv[1])) {
+  main();
+}

@@ -1,12 +1,15 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
+import sinon from 'sinon';
 
+import { wrapMentions } from '../../helpers/mentions';
 import { LinkType } from '../../markdown-commands';
 import MarkdownEditor, { $imports } from '../MarkdownEditor';
-
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
-import { checkAccessibility } from '../../../test-util/accessibility';
 
 describe('MarkdownEditor', () => {
   const formatResult = {
@@ -36,7 +39,7 @@ describe('MarkdownEditor', () => {
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
       '../markdown-commands': fakeMarkdownCommands,
-      './MarkdownView': MarkdownView,
+      '@hypothesis/annotation-ui': { MarkdownView },
       '../../shared/user-agent': {
         isMacOS: fakeIsMacOS,
       },
@@ -48,10 +51,28 @@ describe('MarkdownEditor', () => {
   });
 
   function createComponent(props = {}, mountProps = {}) {
+    const { usersForMentions = {}, ...rest } = props;
     return mount(
-      <MarkdownEditor label="Test editor" text="test" {...props} />,
-      mountProps
+      <MarkdownEditor
+        label="Test editor"
+        text="test"
+        mentionsEnabled={false}
+        usersForMentions={{ status: 'loaded', users: [], ...usersForMentions }}
+        mentionMode="username"
+        {...rest}
+      />,
+      mountProps,
     );
+  }
+
+  function typeInTextarea(wrapper, text, key = undefined) {
+    const textarea = wrapper.find('textarea');
+    const textareaDOMNode = textarea.getDOMNode();
+
+    textareaDOMNode.value = text;
+    textareaDOMNode.selectionStart = text.length;
+
+    textarea.simulate('input', { key });
   }
 
   const commands = [
@@ -101,7 +122,7 @@ describe('MarkdownEditor', () => {
     {
       command: 'Numbered list',
       key: 'o',
-      effect: [fakeMarkdownCommands.toggleBlockStyle, '1. '],
+      effect: [fakeMarkdownCommands.toggleBlockStyle, sinon.match.func],
     },
   ];
   commands.forEach(({ command, key, effect }) => {
@@ -111,7 +132,7 @@ describe('MarkdownEditor', () => {
         const text = 'toolbar command test';
         const wrapper = createComponent({ text, onEditText });
         const button = wrapper.find(
-          `ToolbarButton[title="${command}"] > IconButton button`
+          `ToolbarButton[title="${command}"] > IconButton button`,
         );
         const input = wrapper.find('textarea').getDOMNode();
         input.selectionStart = 0;
@@ -124,7 +145,7 @@ describe('MarkdownEditor', () => {
         assert.calledWith(
           formatFunction,
           sinon.match({ text, selectionStart: 0, selectionEnd: text.length }),
-          ...args
+          ...args,
         );
       });
 
@@ -150,11 +171,11 @@ describe('MarkdownEditor', () => {
               test.setOs();
               const wrapper = createComponent();
               const button = wrapper.find(
-                `ToolbarButton[title="${command}"] > IconButton`
+                `ToolbarButton[title="${command}"] > IconButton`,
               );
 
               const buttonTitlePattern = new RegExp(
-                `${test.expectedModifier}-${key.toUpperCase()}`
+                `${test.expectedModifier}-${key.toUpperCase()}`,
               );
               assert.match(button.props().title, buttonTitlePattern);
             });
@@ -191,11 +212,58 @@ describe('MarkdownEditor', () => {
                 selectionStart: 0,
                 selectionEnd: text.length,
               }),
-              ...args
+              ...args,
             );
           });
         });
       }
+    });
+  });
+
+  describe('"mention" toolbar command', () => {
+    [true, false].forEach(mentionsEnabled => {
+      it('shows mention button only if mentions are enabled', () => {
+        const wrapper = createComponent({ mentionsEnabled });
+
+        assert.equal(
+          wrapper.exists(`ToolbarButton[title="Mention"] > IconButton button`),
+          mentionsEnabled,
+        );
+      });
+    });
+
+    it('inserts @ character and opens suggestions', () => {
+      const onEditText = sinon.stub();
+      const text = 'toolbar command test';
+      const wrapper = createComponent({
+        text,
+        onEditText,
+        mentionsEnabled: true,
+      });
+      const button = wrapper.find(
+        `ToolbarButton[title="Mention"] > IconButton button`,
+      );
+      const input = wrapper.find('textarea').getDOMNode();
+      input.selectionStart = 0;
+      input.selectionEnd = text.length;
+
+      const fakeInputListener = sinon.stub();
+      input.addEventListener('input', fakeInputListener);
+
+      button.simulate('click');
+
+      assert.calledWith(
+        fakeInputListener,
+        sinon.match({ type: 'input', key: '@' }),
+      );
+      assert.calledWith(onEditText, 'formatted text');
+      assert.calledWith(
+        fakeMarkdownCommands.toggleSpanStyle,
+        sinon.match({ text, selectionStart: 0, selectionEnd: text.length }),
+        '@',
+        '',
+        '',
+      );
     });
   });
 
@@ -290,25 +358,34 @@ describe('MarkdownEditor', () => {
   });
 
   it('sets accessible label for input field', () => {
-    const wrapper = createComponent({ label: 'Annotation body' });
+    const wrapper = createComponent({ label: 'Enter comment' });
     const inputField = wrapper.find('textarea');
-    assert.equal(inputField.prop('aria-label'), 'Annotation body');
+    assert.equal(inputField.prop('aria-label'), 'Enter comment');
+    assert.equal(inputField.prop('placeholder'), 'Enter comment');
+  });
+
+  it('unwraps mention tags', () => {
+    const wrapper = createComponent({
+      text: wrapMentions('Hello @bob', 'hypothes.is'),
+    });
+
+    assert.equal(wrapper.find('TextArea').prop('value'), 'Hello @bob');
   });
 
   describe('keyboard navigation', () => {
-    let newContainer;
     let wrapper;
 
     beforeEach(() => {
-      newContainer = document.createElement('div');
-      document.body.appendChild(newContainer);
-      wrapper = mount(<MarkdownEditor label="Test editor" text="test" />, {
-        attachTo: newContainer,
-      });
-    });
-
-    afterEach(() => {
-      newContainer.remove();
+      wrapper = mount(
+        <MarkdownEditor
+          label="Test editor"
+          text="test"
+          mentionMode="username"
+          mentionsEnabled
+          usersForMentions={{ status: 'loading' }}
+        />,
+        { connected: true },
+      );
     });
 
     const pressKey = key =>
@@ -317,7 +394,7 @@ describe('MarkdownEditor', () => {
         .simulate('keydown', { key });
 
     function testArrowKeySequence(buttons) {
-      for (let button of buttons) {
+      for (const button of buttons) {
         pressKey('ArrowRight');
         const label =
           document.activeElement.getAttribute('title') ||
@@ -340,6 +417,7 @@ describe('MarkdownEditor', () => {
         'Insert math',
         'Numbered list',
         'Bulleted list',
+        'Mention',
         'Formatting help',
         'Preview',
         'Bold',
@@ -378,11 +456,227 @@ describe('MarkdownEditor', () => {
     assert.deepEqual(wrapper.find('MarkdownView').prop('style'), textStyle);
   });
 
+  [true, false].forEach(showHelpLink => {
+    it('hides help menu when `showHelpLink` is false', () => {
+      const wrapper = createComponent({ showHelpLink });
+      const helpLink = wrapper.find('Link[aria-label="Formatting help"]');
+      assert.equal(helpLink.exists(), showHelpLink);
+    });
+  });
+
+  context('when @mentions are enabled', () => {
+    function keyDownInTextarea(wrapper, key) {
+      const textarea = wrapper.find('textarea');
+      textarea.simulate('keydown', { key });
+      wrapper.update();
+    }
+
+    function getHighlightedSuggestion(wrapper) {
+      return wrapper
+        .find('MentionSuggestionsPopover')
+        .prop('highlightedSuggestion');
+    }
+
+    function suggestionsPopoverIsOpen(wrapper) {
+      return wrapper.find('MentionSuggestionsPopover').prop('open');
+    }
+
+    [true, false].forEach(mentionsEnabled => {
+      it('renders suggestions Popover if @mentions are enabled', () => {
+        const wrapper = createComponent({ mentionsEnabled });
+        assert.equal(
+          wrapper.exists('MentionSuggestionsPopover'),
+          mentionsEnabled,
+        );
+
+        // Popover is opened after typing "@"
+        typeInTextarea(wrapper, '@');
+        if (mentionsEnabled) {
+          assert.isTrue(suggestionsPopoverIsOpen(wrapper));
+        }
+      });
+    });
+
+    it('opens suggestions when an @mention is typed in textarea', () => {
+      const wrapper = createComponent({ mentionsEnabled: true });
+      typeInTextarea(wrapper, '@johndoe');
+
+      assert.isTrue(suggestionsPopoverIsOpen(wrapper));
+    });
+
+    it('closes suggestions when cursor moves away from @mention', () => {
+      const wrapper = createComponent({ mentionsEnabled: true });
+
+      // Popover is open after typing the at-mention
+      typeInTextarea(wrapper, '@johndoe');
+      assert.isTrue(suggestionsPopoverIsOpen(wrapper));
+
+      // Once a space is typed after the at-mention, the popover is closed
+      typeInTextarea(wrapper, '@johndoe ');
+      assert.isFalse(suggestionsPopoverIsOpen(wrapper));
+    });
+
+    it('closes suggestions when @mention is removed', () => {
+      const wrapper = createComponent({ mentionsEnabled: true });
+
+      // Popover is open after typing the at-mention
+      typeInTextarea(wrapper, '@johndoe');
+      assert.isTrue(suggestionsPopoverIsOpen(wrapper));
+
+      // Once the at-mention is removed, the popover is closed
+      typeInTextarea(wrapper, '');
+      assert.isFalse(suggestionsPopoverIsOpen(wrapper));
+    });
+
+    it('closes suggestions if caret is no longer "inside" a mention', () => {
+      const wrapper = createComponent({ mentionsEnabled: true });
+
+      // Popover is open after typing the at-mention
+      typeInTextarea(wrapper, 'Hello @johndoe');
+      assert.isTrue(suggestionsPopoverIsOpen(wrapper));
+
+      const textarea = wrapper.find('textarea');
+      const textareaDOMNode = textarea.getDOMNode();
+
+      // We move the cursor to the left, "out" of the mention
+      textareaDOMNode.selectionStart = 2;
+      act(() =>
+        textareaDOMNode.dispatchEvent(
+          new KeyboardEvent('keyup', { key: 'ArrowLeft' }),
+        ),
+      );
+      wrapper.update();
+
+      // The suggestions should now be closed
+      assert.isFalse(suggestionsPopoverIsOpen(wrapper));
+    });
+
+    it('closes suggestions when onClose is called', () => {
+      const wrapper = createComponent({ mentionsEnabled: true });
+
+      // Popover is initially open
+      typeInTextarea(wrapper, '@johndoe');
+      assert.isTrue(suggestionsPopoverIsOpen(wrapper));
+
+      wrapper.find('MentionSuggestionsPopover').props().onClose();
+      wrapper.update();
+      assert.isFalse(suggestionsPopoverIsOpen(wrapper));
+    });
+
+    it('allows changing highlighted suggestion via vertical arrow keys', () => {
+      const wrapper = createComponent({
+        mentionsEnabled: true,
+        usersForMentions: {
+          status: 'loaded',
+          users: [
+            { username: 'one', displayName: 'johndoe' },
+            { username: 'two', displayName: 'johndoe' },
+            { username: 'three', displayName: 'johndoe' },
+          ],
+        },
+      });
+
+      typeInTextarea(wrapper, '@johndoe');
+
+      // Initially, first suggestion is highlighted
+      assert.equal(getHighlightedSuggestion(wrapper), 0);
+
+      // Pressing arrow up has no effect while first suggestion is highlighted
+      keyDownInTextarea(wrapper, 'ArrowUp');
+      assert.equal(getHighlightedSuggestion(wrapper), 0);
+
+      // Pressing arrow down, we can highlight subsequent suggestions
+      keyDownInTextarea(wrapper, 'ArrowDown');
+      assert.equal(getHighlightedSuggestion(wrapper), 1);
+      keyDownInTextarea(wrapper, 'ArrowDown');
+      assert.equal(getHighlightedSuggestion(wrapper), 2);
+
+      // Once last suggestion is highlighted, pressing arrow down has no effect
+      keyDownInTextarea(wrapper, 'ArrowDown');
+      assert.equal(getHighlightedSuggestion(wrapper), 2);
+
+      // Pressing arrow up, we can highlight preceding suggestions
+      keyDownInTextarea(wrapper, 'ArrowUp');
+      assert.equal(getHighlightedSuggestion(wrapper), 1);
+      keyDownInTextarea(wrapper, 'ArrowUp');
+      assert.equal(getHighlightedSuggestion(wrapper), 0);
+    });
+
+    it('applies highlighted suggestion when `Enter` is pressed', () => {
+      const onEditText = sinon.stub();
+      const onInsertMentionSuggestion = sinon.stub();
+      const wrapper = createComponent({
+        onEditText,
+        onInsertMentionSuggestion,
+        mentionsEnabled: true,
+        usersForMentions: {
+          status: 'loaded',
+          users: [
+            { username: 'one', displayName: 'johndoe' },
+            { username: 'two', displayName: 'johndoe' },
+            { username: 'three', displayName: 'johndoe' },
+          ],
+        },
+      });
+
+      typeInTextarea(wrapper, '@johndoe');
+
+      // Arrow down is pressed to highlight second suggestion
+      keyDownInTextarea(wrapper, 'ArrowDown');
+      // Then Enter is pressed to apply it
+      keyDownInTextarea(wrapper, 'Enter');
+
+      // The textarea should include the username for second suggestion
+      assert.calledWith(onEditText, '@two ');
+      // Selected mention should have been passed to onInsertMentionSuggestion
+      assert.calledWith(
+        onInsertMentionSuggestion,
+        sinon.match({ username: 'two', displayName: 'johndoe' }),
+      );
+    });
+
+    it('sets users to "loading" if users for mentions are being loaded', () => {
+      const wrapper = createComponent({
+        mentionsEnabled: true,
+        usersForMentions: { status: 'loading' },
+      });
+      const popover = wrapper.find('MentionSuggestionsPopover');
+
+      assert.isEmpty(popover.prop('users'));
+      assert.isTrue(popover.prop('loadingUsers'));
+    });
+
+    it('resets highlighted suggestion when editing textarea input', () => {
+      const wrapper = createComponent({
+        mentionsEnabled: true,
+        usersForMentions: {
+          status: 'loaded',
+          users: [
+            { username: 'one', displayName: 'johndoe' },
+            { username: 'two', displayName: 'johndoe' },
+            { username: 'three', displayName: 'johndoe' },
+          ],
+        },
+      });
+
+      typeInTextarea(wrapper, '@johndoe');
+
+      // Move highlighted suggestions down
+      keyDownInTextarea(wrapper, 'ArrowDown');
+      assert.equal(getHighlightedSuggestion(wrapper), 1);
+      keyDownInTextarea(wrapper, 'ArrowDown');
+      assert.equal(getHighlightedSuggestion(wrapper), 2);
+
+      // After input, first suggestion is highlighted again
+      wrapper.find('textarea').simulate('input');
+      assert.equal(getHighlightedSuggestion(wrapper), 0);
+    });
+  });
+
   it(
     'should pass a11y checks',
     checkAccessibility([
       {
-        // eslint-disable-next-line react/display-name
         content: () => createComponent(),
       },
       {
@@ -398,6 +692,34 @@ describe('MarkdownEditor', () => {
           return wrapper;
         },
       },
-    ])
+      {
+        name: 'Suggestions popover',
+        content: () => {
+          $imports.$restore({
+            // We need to render MentionSuggestionsPopover, as some aria
+            // attributes reference elements rendered by it
+            './MentionSuggestionsPopover': true,
+          });
+
+          const wrapper = createComponent(
+            {
+              mentionsEnabled: true,
+              usersForMentions: {
+                status: 'loaded',
+                users: [
+                  { username: 'one', displayName: 'johndoe' },
+                  { username: 'two', displayName: 'johndoe' },
+                  { username: 'three', displayName: 'johndoe' },
+                ],
+              },
+            },
+            { connected: true },
+          );
+          typeInTextarea(wrapper, '@johndoe');
+
+          return wrapper;
+        },
+      },
+    ]),
   );
 });

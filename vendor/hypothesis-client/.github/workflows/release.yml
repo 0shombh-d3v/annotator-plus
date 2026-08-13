@@ -1,0 +1,156 @@
+name: Release
+
+permissions:
+  id-token: write # Required for AWS OIDC auth and trusted publishing.
+  contents: write # Required to tag
+
+concurrency:
+  group: ${{ github.event.repository.name }}-deploy
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - github-actions-release # TESTING
+
+env:
+  # S3 bucket that hosts the client's assets
+  S3_BUCKET: cdn.hypothes.is
+  # URL that the client's assets are served from
+  CDN_URL: https://cdn.hypothes.is/hypothesis
+
+jobs:
+  continuous-integration:
+    uses: ./.github/workflows/continuous-integration.yml
+    name: continuous integration
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  release-staging:
+    needs: continuous-integration
+    runs-on: ubuntu-latest
+    # This presently uses the AWS / Sentry auth from the old "QA" environment.
+    # We should eventually rename that environment or create a new one.
+    environment: qa
+    env:
+      NOTEBOOK_APP_URL: https://staging.hypothes.is/notebook
+      PROFILE_APP_URL: https://staging.hypothes.is/user-profile
+      SIDEBAR_APP_URL: https://staging.hypothes.is/app.html
+
+    steps:
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.CLIENT_RELEASE_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Cache the node_modules dir
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-node_modules-${{ hashFiles('yarn.lock') }}
+    - name: Install
+      run: yarn install --immutable
+    - name: Get version
+      run: |
+        git fetch --tags --quiet
+        LAST_COMMIT_HASH=$(git show HEAD --no-patch --format="%h")
+        STAGING_VERSION=$(git tag --list | sort --version-sort --reverse | head -n1 | tail -c +2)-stg-$LAST_COMMIT_HASH
+        echo "STAGING_VERSION=$STAGING_VERSION" >> $GITHUB_ENV
+    - name: Build app
+      run: |
+        yarn version "$STAGING_VERSION"
+        make clean build
+    - name: Upload files to Sentry
+      env:
+        SENTRY_AUTH_TOKEN: ${{ secrets.sentry_auth_token }}
+      run: |
+        SENTRY_CMD="yarn run sentry-cli releases --org hypothesis --project client"
+        $SENTRY_CMD new $STAGING_VERSION
+        yarn run sentry-cli sourcemaps upload --org hypothesis --project client --release $STAGING_VERSION --url-prefix $CDN_URL/$STAGING_VERSION/build/scripts/ build/scripts
+        $SENTRY_CMD finalize $STAGING_VERSION
+    - name: Deploy to S3
+      run: scripts/deploy-to-s3.js --bucket ${{ env.S3_BUCKET }} --tag staging --no-cache-entry
+
+  release-prod:
+    if: github.ref_name == 'main'
+    needs: release-staging
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      NOTEBOOK_APP_URL: https://hypothes.is/notebook
+      PROFILE_APP_URL: https://hypothes.is/user-profile
+      SIDEBAR_APP_URL: https://hypothes.is/app.html
+
+    steps:
+    - uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.CLIENT_RELEASE_ROLE_ARN }}
+        aws-region: us-east-1
+
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Cache the node_modules dir
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-node_modules-${{ hashFiles('yarn.lock') }}
+    - name: Install
+      run: yarn install --immutable
+    - name: Determine release version
+      run: |
+        git fetch --tags --quiet
+        PREV_VERSION=$(git tag --list | sort --version-sort --reverse | head -n1 | tail -c +2)
+        NEW_VERSION=$(node scripts/bump-version.js minor $PREV_VERSION)
+        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+    - name: Tag new version
+      run: |
+        git tag v$NEW_VERSION
+        git push https://github.com/hypothesis/client.git v$NEW_VERSION
+        sleep 2  # Wait for GitHub to see new tag
+    - name: Build app
+      run: |
+        yarn version $NEW_VERSION
+        make clean build
+    - name: Upload files to Sentry
+      env:
+        SENTRY_AUTH_TOKEN: ${{ secrets.sentry_auth_token }}
+      run: |
+        SENTRY_CMD="yarn run sentry-cli releases --org hypothesis --project client"
+        $SENTRY_CMD new $NEW_VERSION
+        yarn run sentry-cli sourcemaps upload --org hypothesis --project client --release $NEW_VERSION --url-prefix $CDN_URL/$NEW_VERSION/build/scripts/ build/scripts
+        $SENTRY_CMD finalize $NEW_VERSION
+    - name: Create GitHub release
+      run: scripts/create-github-release.js v$NEW_VERSION
+      env:
+        GITHUB_TOKEN: ${{ secrets.github_token }}
+    - name: Setup Nodejs
+      uses: actions/setup-node@v4
+      with:
+        # Explicitly setting up node 24, since npm >=11.5.1 is required for trusted publishing
+        node-version: '24'
+    - name: Publish npm package
+      run: |
+        npm publish --access public
+        scripts/wait-for-npm-release.sh latest
+    - name: Deploy to S3
+      run: scripts/deploy-to-s3.js --bucket ${{ env.S3_BUCKET }}
+
+  update-extension:
+    needs: release-prod
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update extension
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.cross_repo_workflow_trigger_token }}
+        script: |
+          await github.rest.actions.createWorkflowDispatch({
+            owner: 'hypothesis',
+            repo: 'browser-extension',
+            workflow_id: 'update-client.yml',
+            ref: 'main',
+          });

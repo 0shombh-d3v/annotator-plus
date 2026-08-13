@@ -1,19 +1,17 @@
-import { mount } from 'enzyme';
+import { EditIcon } from '@hypothesis/frontend-shared';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
 import MenuItem, { $imports } from '../MenuItem';
 
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
-
 describe('MenuItem', () => {
-  let containers = [];
   const createMenuItem = props => {
-    let newContainer = document.createElement('div');
-    containers.push(newContainer);
-    document.body.appendChild(newContainer);
     return mount(<MenuItem label="Test item" {...props} />, {
-      attachTo: newContainer,
+      connected: true,
     });
   };
 
@@ -25,10 +23,6 @@ describe('MenuItem', () => {
 
   afterEach(() => {
     $imports.$restore();
-    containers.forEach(container => {
-      container.remove();
-    });
-    containers = [];
   });
 
   describe('link menu items', () => {
@@ -38,13 +32,6 @@ describe('MenuItem', () => {
       assert.equal(link.length, 1);
       assert.equal(link.prop('href'), 'https://example.com');
       assert.equal(link.prop('rel'), 'noopener noreferrer');
-    });
-
-    it('renders an `<img>` icon if an icon URL is provided', () => {
-      const src = 'https://example.com/icon.svg';
-      const wrapper = createMenuItem({ icon: src });
-      const icon = wrapper.find('img');
-      assert.equal(icon.prop('src'), src);
     });
 
     it('invokes `onClick` callback when pressing `Enter` or space', () => {
@@ -84,7 +71,7 @@ describe('MenuItem', () => {
       const wrapper = createMenuItem({ isSelected: true });
       assert.equal(
         wrapper.find(menuItemSelector).prop('role'),
-        'menuitemradio'
+        'menuitemradio',
       );
       assert.equal(wrapper.find(menuItemSelector).prop('aria-checked'), true);
       // aria-haspopup should be false without a submenu
@@ -93,29 +80,34 @@ describe('MenuItem', () => {
   });
 
   describe('icons for top-level menu items', () => {
-    it('renders an icon if an icon name is provided', () => {
-      const wrapper = createMenuItem({ icon: 'edit' });
-      assert.isTrue(wrapper.exists('Icon[name="edit"]'));
+    it('renders an icon if an icon is provided', () => {
+      const wrapper = createMenuItem({ icon: EditIcon });
+      assert.isTrue(wrapper.exists('EditIcon'));
     });
 
-    it('adds a left container if `icon` is "blank"', () => {
-      const wrapper = createMenuItem({ icon: 'blank' });
-      assert.equal(
-        wrapper.find('[data-testid="left-item-container"]').length,
-        1
+    it('adds a left container if left content is provided', () => {
+      const wrapper = createMenuItem({
+        leftChannelContent: <span>Hi</span>,
+        icon: EditIcon,
+      });
+      const leftChannel = wrapper.find('[data-testid="left-item-container"]');
+      assert.equal(leftChannel.text(), 'Hi');
+      assert.isFalse(
+        wrapper.exists('EditIcon'),
+        'Icon ignored if left channel content provided',
       );
     });
 
-    it('does not add a left container if `icon` is missing', () => {
+    it('does not add a left container if neither icon nor left content provided', () => {
       const wrapper = createMenuItem();
       assert.equal(
         wrapper.find('[data-testid="left-item-container"]').length,
-        0
+        0,
       );
     });
 
     it('renders an icon on the left if `icon` provided', () => {
-      const wrapper = createMenuItem({ icon: 'edit' });
+      const wrapper = createMenuItem({ icon: EditIcon });
       const leftItem = wrapper.find('[data-testid="left-item-container"]');
 
       // There should be only one icon space, on the left.
@@ -134,7 +126,7 @@ describe('MenuItem', () => {
       assert.equal(wrapper.find(menuItemSelector).prop('aria-expanded'), true);
 
       wrapper.setProps({ isSubmenuVisible: false });
-      assert.isTrue(wrapper.exists('Icon[name="expand-menu"]'));
+      assert.isTrue(wrapper.exists('MenuExpandIcon'));
       assert.equal(wrapper.find(menuItemSelector).prop('aria-haspopup'), true);
       assert.equal(wrapper.find(menuItemSelector).prop('aria-expanded'), false);
       assert.isNotOk(wrapper.find(menuItemSelector).prop('aria-expanded'));
@@ -146,7 +138,7 @@ describe('MenuItem', () => {
       // aria-expanded should be undefined
       assert.equal(
         wrapper.find(menuItemSelector).prop('aria-expanded'),
-        undefined
+        undefined,
       );
     });
 
@@ -174,16 +166,12 @@ describe('MenuItem', () => {
 
     it('renders submenu item icons on the right', () => {
       const wrapper = createMenuItem({
-        icon: 'edit',
+        icon: EditIcon,
         isSubmenuItem: true,
         submenu: <div role="menuitem">Submenu content</div>,
       });
       const rightItem = wrapper.find('[data-testid="right-item-container"]');
-
-      assert.equal(rightItem.length, 1);
-
-      // The actual icon for the submenu should be shown on the right.
-      assert.equal(rightItem.at(0).children().length, 1);
+      assert.isTrue(rightItem.find('EditIcon').exists());
     });
 
     it('does not render submenu content if `isSubmenuVisible` is undefined', () => {
@@ -196,10 +184,10 @@ describe('MenuItem', () => {
         isSubmenuVisible: true,
         submenu: <div role="menuitem">Submenu content</div>,
       });
-      assert.equal(wrapper.find('Slider').prop('visible'), true);
+      assert.equal(wrapper.find('Slider').prop('direction'), 'in');
       assert.equal(
         wrapper.find('MenuKeyboardNavigation').prop('visible'),
-        true
+        true,
       );
       assert.equal(wrapper.find('Slider').children().text(), 'Submenu content');
     });
@@ -209,10 +197,10 @@ describe('MenuItem', () => {
         isSubmenuVisible: false,
         submenu: <div>Submenu content</div>,
       });
-      assert.equal(wrapper.find('Slider').prop('visible'), false);
+      assert.equal(wrapper.find('Slider').prop('direction'), 'out');
       assert.equal(
         wrapper.find('MenuKeyboardNavigation').prop('visible'),
-        false
+        false,
       );
 
       // The submenu content may still be rendered if the submenu is currently
@@ -252,7 +240,7 @@ describe('MenuItem', () => {
         clock.tick(1);
         assert.equal(
           document.activeElement.getAttribute('data-testid'),
-          'menu-item'
+          'menu-item',
         );
       } finally {
         clock.restore();
@@ -279,13 +267,41 @@ describe('MenuItem', () => {
       }
       // no assert needed
     });
+
+    [
+      {
+        label: 'The label',
+        submenuToggleTitle: 'Explicit title',
+        expectedTitle: 'Explicit title',
+      },
+      {
+        label: <span>Rich label</span>,
+        submenuToggleTitle: 'Explicit title',
+        expectedTitle: 'Explicit title',
+      },
+      { label: 'The label', expectedTitle: 'Show actions for The label' },
+      { label: <span>Rich label</span>, expectedTitle: 'Toggle submenu' },
+    ].forEach(({ label, submenuToggleTitle, expectedTitle }) => {
+      it('shows right title in SubmenuToggle', () => {
+        const wrapper = createMenuItem({
+          label,
+          submenuToggleTitle,
+          isSubmenuVisible: true,
+          submenu: <div role="menuitem">Submenu content</div>,
+        });
+
+        assert.equal(
+          wrapper.find('SubmenuToggle').prop('title'),
+          expectedTitle,
+        );
+      });
+    });
   });
 
   it(
     'should pass a11y checks',
     checkAccessibility([
       {
-        // eslint-disable-next-line react/display-name
         content: () => (
           <div role="menu">
             <MenuItem label="Test item" />
@@ -294,7 +310,6 @@ describe('MenuItem', () => {
       },
       {
         name: 'menu radio button',
-        // eslint-disable-next-line react/display-name
         content: () => (
           <div role="menu">
             <MenuItem label="Test" isSelected={false} />
@@ -303,7 +318,6 @@ describe('MenuItem', () => {
       },
       {
         name: 'with link',
-        // eslint-disable-next-line react/display-name
         content: () => (
           <div role="menu">
             <MenuItem label="Test" href="https://foobar.com" />
@@ -312,7 +326,6 @@ describe('MenuItem', () => {
       },
       {
         name: 'with icon',
-        // eslint-disable-next-line react/display-name
         content: () => (
           <div role="menu">
             <MenuItem label="Test" icon="edit" />
@@ -321,7 +334,6 @@ describe('MenuItem', () => {
       },
       {
         name: 'with submenu',
-        // eslint-disable-next-line react/display-name
         content: () => (
           <div role="menu">
             <MenuItem
@@ -332,6 +344,6 @@ describe('MenuItem', () => {
           </div>
         ),
       },
-    ])
+    ]),
   );
 });

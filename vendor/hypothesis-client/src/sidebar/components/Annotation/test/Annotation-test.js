@@ -1,10 +1,11 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
+import sinon from 'sinon';
 
 import * as fixtures from '../../../test/annotation-fixtures';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
-
 import Annotation, { $imports } from '../Annotation';
 
 describe('Annotation', () => {
@@ -33,8 +34,9 @@ describe('Annotation', () => {
         isReply={false}
         replyCount={0}
         threadIsCollapsed={true}
+        settings={{}}
         {...props}
-      />
+      />,
     );
   };
 
@@ -56,7 +58,7 @@ describe('Annotation', () => {
     fakeStore = {
       defaultAuthority: sinon.stub().returns('example.com'),
       getDraft: sinon.stub().returns(null),
-      isAnnotationFocused: sinon.stub().returns(false),
+      isAnnotationHovered: sinon.stub().returns(false),
       isFeatureEnabled: sinon
         .stub()
         .withArgs('client_display_names')
@@ -64,10 +66,13 @@ describe('Annotation', () => {
       isSavingAnnotation: sinon.stub().returns(false),
       profile: sinon.stub().returns({ userid: 'acct:foo@bar.com' }),
       setExpanded: sinon.stub(),
+      isAnnotationHighlighted: sinon.stub().returns(false),
+      focusedGroup: sinon.stub(),
     };
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
+      '@hypothesis/frontend-shared': { formatDateTime: date => date },
       '../../helpers/annotation-metadata': fakeMetadata,
       '../../helpers/annotation-user': fakeAnnotationUser,
       '../../store': { useSidebarStore: () => fakeStore },
@@ -80,21 +85,33 @@ describe('Annotation', () => {
 
   describe('annotation accessibility (ARIA) attributes', () => {
     it('should add a descriptive `aria-label` for an existing annotation', () => {
-      const wrapper = createComponent();
+      const annotation = fixtures.defaultAnnotation();
+      const wrapper = createComponent({ annotation });
 
       assert.equal(
-        wrapper.find('article').props()['aria-label'],
-        'Annotation by Richard Lionheart'
+        wrapper.find('article').prop('aria-label'),
+        `Annotation by Richard Lionheart on ${annotation.created}`,
       );
     });
 
     it('should add a descriptive `aria-label` for a new annotation', () => {
       const wrapper = createComponent({ annotation: fixtures.newAnnotation() });
 
-      assert.equal(
-        wrapper.find('article').props()['aria-label'],
-        'New annotation by Richard Lionheart'
+      assert.isTrue(
+        wrapper.find('article').prop('aria-label').startsWith('New annotation'),
       );
+    });
+
+    [true, false].forEach(isHighlighted => {
+      it('should mention if annotation is highlighted', () => {
+        fakeStore.isAnnotationHighlighted.returns(isHighlighted);
+        const wrapper = createComponent();
+
+        assert.equal(
+          wrapper.find('article').prop('aria-label').endsWith(' - Highlighted'),
+          isHighlighted,
+        );
+      });
     });
   });
 
@@ -107,12 +124,12 @@ describe('Annotation', () => {
       assert.isTrue(quote.exists());
     });
 
-    it('sets the quote to "focused" if annotation is currently focused', () => {
-      fakeStore.isAnnotationFocused.returns(true);
+    it('sets the quote to hovered if annotation is currently hovered', () => {
+      fakeStore.isAnnotationHovered.returns(true);
       fakeMetadata.quote.returns('quote');
       const wrapper = createComponent();
 
-      assert.isTrue(wrapper.find('AnnotationQuote').props().isFocused);
+      assert.isTrue(wrapper.find('AnnotationQuote').props().isHovered);
     });
 
     it('does not render quote if annotation does not have a quote', () => {
@@ -125,6 +142,61 @@ describe('Annotation', () => {
     });
   });
 
+  describe('annotation thumbnail', () => {
+    it('does not render a thumbnail if annotation has no shape selector', () => {
+      const wrapper = createComponent();
+      assert.isFalse(wrapper.exists('AnnotationThumbnail'));
+    });
+
+    it('renders a thumbnail if annotation has a shape selector', () => {
+      const annotation = fixtures.defaultAnnotation();
+      annotation.target[0].description = 'This is a thing';
+      annotation.target[0].selector = [
+        {
+          type: 'ShapeSelector',
+          shape: {
+            type: 'rect',
+            left: 0,
+            top: 10,
+            right: 10,
+            bottom: 0,
+          },
+          text: 'Some text',
+        },
+      ];
+      const wrapper = createComponent({ annotation });
+      const thumbnail = wrapper.find('AnnotationThumbnail');
+      assert.isTrue(thumbnail.exists());
+      assert.equal(thumbnail.prop('tag'), annotation.$tag);
+      assert.equal(thumbnail.prop('description'), 'This is a thing');
+      assert.equal(thumbnail.prop('textInImage'), 'Some text');
+      assert.equal(thumbnail.prop('showDescription'), true);
+    });
+
+    it('hides thumbnail description when editing', () => {
+      setEditingMode(true);
+      const annotation = fixtures.defaultAnnotation();
+      annotation.target[0].description = 'This is a thing';
+      annotation.target[0].selector = [
+        {
+          type: 'ShapeSelector',
+          shape: {
+            type: 'rect',
+            left: 0,
+            top: 10,
+            right: 10,
+            bottom: 0,
+          },
+          text: 'Some text',
+        },
+      ];
+      const wrapper = createComponent({ annotation });
+      const thumbnail = wrapper.find('AnnotationThumbnail');
+      assert.isTrue(thumbnail.exists());
+      assert.isFalse(thumbnail.prop('showDescription'));
+    });
+  });
+
   it('should show a "Saving" message when annotation is saving', () => {
     fakeStore.isSavingAnnotation.returns(true);
 
@@ -132,7 +204,7 @@ describe('Annotation', () => {
 
     assert.include(
       wrapper.find('[data-testid="saving-message"]').text(),
-      'Saving...'
+      'Saving...',
     );
   });
 
@@ -175,7 +247,7 @@ describe('Annotation', () => {
         assert.calledWith(
           fakeAnnotationsService.reply,
           theAnnot,
-          'acct:foo@bar.com'
+          'acct:foo@bar.com',
         );
       });
     });
@@ -230,6 +302,18 @@ describe('Annotation', () => {
     });
   });
 
+  [true, false].forEach(showActions => {
+    it('renders ModerationControl when actions are shown', () => {
+      fakeStore.isSavingAnnotation.returns(!showActions);
+
+      const wrapper = createComponent({
+        annotation: fixtures.defaultAnnotation(),
+      });
+
+      assert.equal(wrapper.exists('ModerationControl'), showActions);
+    });
+  });
+
   it(
     'should pass a11y checks',
     checkAccessibility([
@@ -255,6 +339,6 @@ describe('Annotation', () => {
           return createComponent({ isReply: true, threadIsCollapsed: true });
         },
       },
-    ])
+    ]),
   );
 });

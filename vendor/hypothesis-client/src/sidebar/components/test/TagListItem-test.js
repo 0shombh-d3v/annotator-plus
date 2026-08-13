@@ -1,9 +1,8 @@
-import { mount } from 'enzyme';
+import { checkAccessibility } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
-import TagListItem from '../TagListItem';
 import TagList from '../TagList';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
+import TagListItem from '../TagListItem';
 
 describe('TagListItem', () => {
   const createComponent = props =>
@@ -16,7 +15,7 @@ describe('TagListItem', () => {
       <TagList>
         <TagListItem tag="my tag" href="http://www.example.com/my-tag" />
         <TagListItem tag="purple" />
-      </TagList>
+      </TagList>,
     );
 
   it('renders the tag text', () => {
@@ -49,6 +48,6 @@ describe('TagListItem', () => {
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponentInList(),
-    })
+    }),
   );
 });

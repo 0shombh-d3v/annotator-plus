@@ -1,16 +1,16 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import * as fixtures from '../../../test/annotation-fixtures';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
-
 import AnnotationHeader, { $imports } from '../AnnotationHeader';
 
 describe('AnnotationHeader', () => {
+  let activeFeatures;
   let fakeAnnotationAuthorLink;
   let fakeAnnotationDisplayName;
-  let fakeDomainAndTitle;
   let fakeGroup;
   let fakeIsHighlight;
   let fakeIsReply;
@@ -28,16 +28,19 @@ describe('AnnotationHeader', () => {
         threadIsCollapsed={false}
         settings={fakeSettings}
         {...props}
-      />
+      />,
     );
   };
 
   beforeEach(() => {
+    activeFeatures = {
+      client_display_names: true,
+    };
+
     fakeAnnotationAuthorLink = sinon
       .stub()
       .returns('http://www.example.com/user/');
     fakeAnnotationDisplayName = sinon.stub().returns('Wackford Squeers');
-    fakeDomainAndTitle = sinon.stub().returns({});
     fakeGroup = {
       name: 'My Group',
       links: {
@@ -54,10 +57,13 @@ describe('AnnotationHeader', () => {
 
     fakeStore = {
       defaultAuthority: sinon.stub().returns('example.com'),
-      isFeatureEnabled: sinon
-        .stub()
-        .withArgs('client_display_names')
-        .returns(true),
+      isFeatureEnabled: sinon.stub().callsFake(feature => {
+        const enabled = activeFeatures[feature];
+        if (enabled === undefined) {
+          throw new Error(`Unknown feature "${feature}"`);
+        }
+        return enabled;
+      }),
       getGroup: sinon.stub().returns(fakeGroup),
       getLink: sinon
         .stub()
@@ -71,7 +77,6 @@ describe('AnnotationHeader', () => {
     $imports.$mock({
       '../../store': { useSidebarStore: () => fakeStore },
       '../../helpers/annotation-metadata': {
-        domainAndTitle: fakeDomainAndTitle,
         isHighlight: fakeIsHighlight,
         isReply: fakeIsReply,
         hasBeenEdited: fakeHasBeenEdited,
@@ -83,6 +88,7 @@ describe('AnnotationHeader', () => {
       '../../helpers/permissions': {
         isPrivate: fakeIsPrivate,
       },
+      '@hypothesis/annotation-ui': { AnnotationTimestamps: () => null },
     });
   });
 
@@ -96,7 +102,7 @@ describe('AnnotationHeader', () => {
 
       const wrapper = createAnnotationHeader();
 
-      assert.isTrue(wrapper.find('Icon').filter({ name: 'lock' }).exists());
+      assert.isTrue(wrapper.find('LockFilledIcon').exists());
     });
 
     it('should not render an "Only Me" icon if the annotation is being edited', () => {
@@ -104,7 +110,7 @@ describe('AnnotationHeader', () => {
 
       const wrapper = createAnnotationHeader({ isEditing: true });
 
-      assert.isFalse(wrapper.find('Icon').filter({ name: 'lock' }).exists());
+      assert.isFalse(wrapper.find('LockFilledIcon').exists());
     });
 
     it('should not render an "Only Me" icon if the annotation is not private', () => {
@@ -122,7 +128,7 @@ describe('AnnotationHeader', () => {
 
       assert.equal(
         wrapper.find('AnnotationUser').props().authorLink,
-        'http://www.example.com/user/'
+        'http://www.example.com/user/',
       );
     });
 
@@ -138,7 +144,7 @@ describe('AnnotationHeader', () => {
       const wrapper = createAnnotationHeader();
       assert.equal(
         wrapper.find('AnnotationUser').props().displayName,
-        'Wackford Squeers'
+        'Wackford Squeers',
       );
     });
   });
@@ -284,8 +290,10 @@ describe('AnnotationHeader', () => {
       fakeIsReply.returns(false);
       const wrapper = createAnnotationHeader();
 
-      // Extended header information is rendered in a second (flex) row
-      assert.equal(wrapper.find('HeaderRow').length, 2);
+      assert.equal(
+        wrapper.find('[data-testid="extended-header-info"]').length,
+        1,
+      );
     });
 
     it('should not render extended header information if annotation is reply', () => {
@@ -294,7 +302,10 @@ describe('AnnotationHeader', () => {
         showDocumentInfo: true,
       });
 
-      assert.equal(wrapper.find('HeaderRow').length, 1);
+      assert.equal(
+        wrapper.find('[data-testid="extended-header-info"]').length,
+        0,
+      );
     });
 
     describe('annotation is-highlight icon', () => {
@@ -303,9 +314,8 @@ describe('AnnotationHeader', () => {
         const wrapper = createAnnotationHeader({
           isEditing: false,
         });
-        const highlightIcon = wrapper.find('Icon[name="highlight"]');
 
-        assert.isTrue(highlightIcon.exists());
+        assert.isTrue(wrapper.find('HighlightIcon').exists());
       });
 
       it('should not display the is-highlight icon if annotation is not a highlight', () => {
@@ -313,105 +323,49 @@ describe('AnnotationHeader', () => {
         const wrapper = createAnnotationHeader({
           isEditing: false,
         });
-        const highlightIcon = wrapper.find('Icon[name="highlight"]');
 
-        assert.isFalse(highlightIcon.exists());
+        assert.isFalse(wrapper.find('HighlightIcon').exists());
       });
     });
 
-    describe('Annotation share info', () => {
-      it('should render annotation share/group information if group is available', () => {
-        const wrapper = createAnnotationHeader();
-
-        assert.isTrue(wrapper.find('AnnotationShareInfo').exists());
+    describe('Annotation group info', () => {
+      [
+        { route: 'sidebar', groupVisible: false },
+        { route: 'notebook', groupVisible: true },
+      ].forEach(({ route, groupVisible }) => {
+        it('should render group if not in sidebar', () => {
+          fakeStore.route.returns(route);
+          const wrapper = createAnnotationHeader();
+          assert.equal(
+            wrapper.find('AnnotationGroupInfo').exists(),
+            groupVisible,
+          );
+        });
       });
 
-      it('should not render annotation share/group information if group is unavailable', () => {
+      it('should not render group if unavailable', () => {
+        fakeStore.route.returns('notebook');
         fakeStore.getGroup.returns(undefined);
         const wrapper = createAnnotationHeader();
 
-        assert.isFalse(wrapper.find('AnnotationShareInfo').exists());
+        assert.isFalse(wrapper.find('AnnotationGroupInfo').exists());
       });
     });
 
     describe('annotation document info', () => {
-      const fakeDocumentInfo = {
-        titleText: 'This document',
-        titleLink: 'http://www.example.com',
-        domain: 'www.foo.com',
-      };
-
-      beforeEach(() => {
-        fakeDomainAndTitle.returns(fakeDocumentInfo);
-      });
-
-      it('should not render document info if on sidebar route', () => {
-        fakeStore.route.returns('sidebar');
-        const wrapper = createAnnotationHeader();
-
-        const documentInfo = wrapper.find('AnnotationDocumentInfo');
-
-        assert.isFalse(documentInfo.exists());
-      });
-
-      it('should not render document info if document does not have a title', () => {
-        fakeStore.route.returns('notebook');
-        fakeDomainAndTitle.returns({});
-
-        const wrapper = createAnnotationHeader();
-
-        const documentInfo = wrapper.find('AnnotationDocumentInfo');
-
-        assert.isFalse(documentInfo.exists());
-      });
-
       [
-        {
-          route: 'notebook',
-          documentInfo: fakeDocumentInfo,
-          expectedPresence: true,
-        },
-        { route: 'notebook', documentInfo: {}, expectedPresence: false },
-        {
-          route: 'sidebar',
-          documentInfo: fakeDocumentInfo,
-          expectedPresence: false,
-        },
-      ].forEach(testCase => {
-        it('should render document info if document info available and not on sidebar route', () => {
-          fakeStore.route.returns(testCase.route);
-          fakeDomainAndTitle.returns(testCase.documentInfo);
-
+        { route: 'sidebar', shouldRenderDoc: false },
+        { route: 'notebook', shouldRenderDoc: true },
+      ].forEach(({ route, shouldRenderDoc }) => {
+        it('should not render document info if on sidebar route', () => {
+          fakeStore.route.returns(route);
           const wrapper = createAnnotationHeader();
-          const documentInfo = wrapper.find('AnnotationDocumentInfo');
 
-          assert.equal(documentInfo.exists(), testCase.expectedPresence);
+          assert.equal(
+            wrapper.find('AnnotationDocumentInfo').exists(),
+            shouldRenderDoc,
+          );
         });
-      });
-
-      it('should set document properties as props to `AnnotationDocumentInfo`', () => {
-        fakeStore.route.returns('notebook');
-        const wrapper = createAnnotationHeader();
-
-        const documentInfo = wrapper.find('AnnotationDocumentInfo');
-
-        assert.isTrue(documentInfo.exists());
-        assert.equal(documentInfo.props().title, 'This document');
-        // Link is not set because Annotation prop (default fixture) doesn't
-        // have a URL (html link)
-        assert.equal(documentInfo.props().link, '');
-        assert.equal(documentInfo.props().domain, 'www.foo.com');
-      });
-
-      it('should provide document link for document info if annotation has an HTML link/URL', () => {
-        const annotation = fixtures.defaultAnnotation();
-        annotation.links = { html: 'http://www.whatever' };
-        fakeStore.route.returns('notebook');
-        const wrapper = createAnnotationHeader({ annotation });
-
-        const documentInfo = wrapper.find('AnnotationDocumentInfo');
-
-        assert.equal(documentInfo.props().link, 'http://www.example.com');
       });
     });
   });
@@ -440,6 +394,34 @@ describe('AnnotationHeader', () => {
     });
   });
 
+  describe('page numbers', () => {
+    beforeEach(() => {
+      // Un-mock the `pageLabel` function.
+      $imports.$restore({
+        '../../helpers/annotation-metadata': true,
+      });
+    });
+
+    it('should not display page number if missing', () => {
+      const annotation = fixtures.defaultAnnotation();
+      const wrapper = createAnnotationHeader({ annotation });
+      assert.isFalse(wrapper.exists('[data-testid="page-number"]'));
+    });
+
+    it('should display page number if available', () => {
+      const annotation = fixtures.defaultAnnotation();
+      annotation.target[0].selector.push({
+        type: 'PageSelector',
+        index: 10,
+        label: '11',
+      });
+      const wrapper = createAnnotationHeader({ annotation });
+      const pageNumber = wrapper.find('[data-testid="page-number"]');
+      assert.isTrue(pageNumber.exists());
+      assert.equal(pageNumber.text(), 'p. 11');
+    });
+  });
+
   it(
     'should pass a11y checks',
     checkAccessibility([
@@ -459,6 +441,6 @@ describe('AnnotationHeader', () => {
             isEditing: true,
           }),
       },
-    ])
+    ]),
   );
 });

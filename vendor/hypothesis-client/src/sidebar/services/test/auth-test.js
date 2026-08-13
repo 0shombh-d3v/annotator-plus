@@ -27,7 +27,7 @@ describe('AuthService', () => {
         accessToken: 'firstAccessToken',
         refreshToken: 'firstRefreshToken',
         expiresAt: Date.now() + 100,
-      })
+      }),
     );
     return auth.login();
   }
@@ -45,7 +45,7 @@ describe('AuthService', () => {
         Promise.resolve({
           'oauth.authorize': 'https://hypothes.is/oauth/authorize/',
           'oauth.revoke': 'https://hypothes.is/oauth/revoke/',
-        })
+        }),
       ),
     };
 
@@ -136,8 +136,8 @@ describe('AuthService', () => {
 
     context('when the access token request fails', () => {
       const expectedErr = new Error('Grant token exchange failed');
-      beforeEach('make access token requests fail', () => {
-        fakeClient.exchangeGrantToken.returns(Promise.reject(expectedErr));
+      beforeEach(() => {
+        fakeClient.exchangeGrantToken.rejects(expectedErr);
       });
 
       function assertThatAccessTokenPromiseWasRejectedAnd(func) {
@@ -154,7 +154,7 @@ describe('AuthService', () => {
             'Hypothesis login lost: You must reload the page to annotate.',
             {
               autoDismiss: false,
-            }
+            },
           );
         });
       });
@@ -189,7 +189,7 @@ describe('AuthService', () => {
       fakeClient.exchangeGrantToken.returns(
         new Promise(resolve => {
           respond = resolve;
-        })
+        }),
       );
 
       // The first time getAccessToken() is called it makes an `exchangeGrantToken`
@@ -217,7 +217,7 @@ describe('AuthService', () => {
 
     it('should refresh the access token if it expired', () => {
       fakeClient.exchangeGrantToken.returns(
-        Promise.resolve(successfulTokenResponse)
+        Promise.resolve(successfulTokenResponse),
       );
 
       function callTokenGetter() {
@@ -228,7 +228,7 @@ describe('AuthService', () => {
             accessToken: 'secondAccessToken',
             expiresIn: 100,
             refreshToken: 'secondRefreshToken',
-          })
+          }),
         );
 
         return tokenPromise;
@@ -251,7 +251,7 @@ describe('AuthService', () => {
     // multiple times and the refresh response hasn't come back yet.
     it('does not send more than one refresh request', () => {
       fakeClient.exchangeGrantToken.returns(
-        Promise.resolve(successfulTokenResponse)
+        Promise.resolve(successfulTokenResponse),
       );
 
       // Perform an initial token fetch which will exchange the JWT grant for an
@@ -266,7 +266,7 @@ describe('AuthService', () => {
           // Delay the response to the refresh request.
           let respond;
           fakeClient.refreshToken.returns(
-            new Promise(resolve => (respond = resolve))
+            new Promise(resolve => (respond = resolve)),
           );
 
           // Request an auth token multiple times.
@@ -291,7 +291,7 @@ describe('AuthService', () => {
     });
 
     context('when a refresh request fails', () => {
-      beforeEach('make refresh token requests fail', () => {
+      beforeEach(() => {
         fakeClient.refreshToken.returns(Promise.reject(new Error('failed')));
         fakeClient.exchangeGrantToken.returns(successfulTokenResponse);
       });
@@ -328,7 +328,7 @@ describe('AuthService', () => {
 
       it(`should not read persisted access tokens if a grant token (${grantToken}) was set`, () => {
         fakeClient.exchangeGrantToken.returns(
-          Promise.resolve(successfulTokenResponse)
+          Promise.resolve(successfulTokenResponse),
         );
         fakeSettings.services = [{ authority, grantToken }];
         return auth.getAccessToken().then(token => {
@@ -362,7 +362,7 @@ describe('AuthService', () => {
           accessToken: 'secondToken',
           expiresAt: Date.now() + 1000,
           refreshToken: 'secondRefreshToken',
-        })
+        }),
       );
       return auth.getAccessToken();
     }
@@ -433,7 +433,7 @@ describe('AuthService', () => {
           accessToken: 'secondToken',
           expiresAt: Date.now() + 100,
           refreshToken: 'secondRefreshToken',
-        })
+        }),
       );
 
       // Fetch the token again from the service and check that it gets
@@ -529,9 +529,11 @@ describe('AuthService', () => {
       fakeSettings.services = [];
     });
 
-    it('calls OAuthClient#authorize', async () => {
-      await auth.login();
-      assert.calledWith(fakeClient.authorize, fakeWindow);
+    ['login', 'signup'].forEach(action => {
+      it('calls OAuthClient#authorize', async () => {
+        await auth.login({ action });
+        assert.calledWith(fakeClient.authorize, fakeWindow);
+      });
     });
 
     it('resolves when auth completes successfully', () => {

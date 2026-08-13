@@ -1,5 +1,4 @@
 import { fakeReduxStore } from '../../test/fake-redux-store';
-
 import { actionTypes, awaitStateChange } from '../util';
 
 describe('sidebar/store/util', () => {
@@ -13,7 +12,7 @@ describe('sidebar/store/util', () => {
         {
           SOME_ACTION: 'SOME_ACTION',
           ANOTHER_ACTION: 'ANOTHER_ACTION',
-        }
+        },
       );
     });
   });
@@ -43,11 +42,10 @@ describe('sidebar/store/util', () => {
     });
 
     it('should wait for awaitStateChange to return a non-null value', () => {
-      let valPromise;
       const expected = 5;
 
       store.setState({ val: 2 });
-      valPromise = awaitStateChange(store, getValWhenGreaterThanTwo);
+      const valPromise = awaitStateChange(store, getValWhenGreaterThanTwo);
       store.setState({ val: 5 });
 
       return valPromise.then(actual => {

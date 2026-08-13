@@ -1,6 +1,6 @@
-import { mount } from 'enzyme';
+import { mockImportedComponents } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 import HypothesisApp, { $imports } from '../HypothesisApp';
 
 describe('HypothesisApp', () => {
@@ -12,8 +12,10 @@ describe('HypothesisApp', () => {
   let fakeServiceConfig = null;
   let fakeSession = null;
   let fakeShouldAutoDisplayTutorial = null;
+  let fakeShouldShowYoutubeDisclaimer = null;
   let fakeSettings = null;
   let fakeToastMessenger = null;
+  let fakeIsThirdPartyService;
 
   const createComponent = (props = {}) => {
     return mount(
@@ -24,7 +26,7 @@ describe('HypothesisApp', () => {
         session={fakeSession}
         toastMessenger={fakeToastMessenger}
         {...props}
-      />
+      />,
     );
   };
 
@@ -32,6 +34,7 @@ describe('HypothesisApp', () => {
     fakeApplyTheme = sinon.stub().returns({});
     fakeServiceConfig = sinon.stub();
     fakeShouldAutoDisplayTutorial = sinon.stub().returns(false);
+    fakeShouldShowYoutubeDisclaimer = sinon.stub().returns(false);
 
     fakeStore = {
       clearGroups: sinon.stub(),
@@ -55,7 +58,9 @@ describe('HypothesisApp', () => {
       getLink: sinon.stub(),
     };
 
-    fakeAuth = {};
+    fakeAuth = {
+      login: sinon.stub().resolves(),
+    };
 
     fakeSession = {
       load: sinon.stub().returns(Promise.resolve({ userid: null })),
@@ -76,15 +81,21 @@ describe('HypothesisApp', () => {
 
     fakeConfirm = sinon.stub().resolves(false);
 
+    fakeIsThirdPartyService = sinon.stub().returns(false);
+
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
+      '@hypothesis/frontend-shared': { confirm: fakeConfirm },
       '../config/service-config': { serviceConfig: fakeServiceConfig },
       '../store': { useSidebarStore: () => fakeStore },
       '../helpers/session': {
         shouldAutoDisplayTutorial: fakeShouldAutoDisplayTutorial,
+        shouldShowYoutubeDisclaimer: fakeShouldShowYoutubeDisclaimer,
       },
       '../helpers/theme': { applyTheme: fakeApplyTheme },
-      '../../shared/prompts': { confirm: fakeConfirm },
+      '../helpers/is-third-party-service': {
+        isThirdPartyService: fakeIsThirdPartyService,
+      },
     });
   });
 
@@ -120,6 +131,10 @@ describe('HypothesisApp', () => {
       contentComponent: 'NotebookView',
     },
     {
+      route: 'profile',
+      contentComponent: 'ProfileView',
+    },
+    {
       route: 'stream',
       contentComponent: 'StreamView',
     },
@@ -145,78 +160,78 @@ describe('HypothesisApp', () => {
     });
   });
 
-  describe('"status" field of "auth" prop passed to children', () => {
-    const getStatus = wrapper => wrapper.find('TopBar').prop('auth').status;
+  describe('YouTube disclaimer banner', () => {
+    it('renders YouTubeDisclaimerBanner when not on modal route and shouldShowYoutubeDisclaimer returns true', () => {
+      fakeStore.route.returns('sidebar');
+      fakeShouldShowYoutubeDisclaimer.returns(true);
 
-    it('is "unknown" if profile has not yet been fetched', () => {
-      fakeStore.hasFetchedProfile.returns(false);
       const wrapper = createComponent();
-      assert.equal(getStatus(wrapper), 'unknown');
+
+      assert.isTrue(wrapper.find('YouTubeDisclaimerBanner').exists());
     });
 
-    it('is "logged-out" if userid is null', () => {
-      fakeStore.profile.returns({ userid: null });
+    it('does not render YouTubeDisclaimerBanner when shouldShowYoutubeDisclaimer returns false', () => {
+      fakeShouldShowYoutubeDisclaimer.returns(false);
+
       const wrapper = createComponent();
-      assert.equal(getStatus(wrapper), 'logged-out');
+
+      assert.isFalse(wrapper.find('YouTubeDisclaimerBanner').exists());
     });
 
-    it('is "logged-in" if userid is non-null', () => {
-      fakeStore.profile.returns({ userid: 'acct:jimsmith@hypothes.is' });
-      const wrapper = createComponent();
-      assert.equal(getStatus(wrapper), 'logged-in');
-    });
-  });
+    it('does not render YouTubeDisclaimerBanner on modal routes', () => {
+      fakeShouldShowYoutubeDisclaimer.returns(true);
+      fakeStore.route.returns('profile');
 
-  [
-    {
-      // User who has set a display name
-      profile: {
-        userid: 'acct:jim@hypothes.is',
-        user_info: {
-          display_name: 'Jim Smith',
-        },
-      },
-      expectedAuth: {
-        status: 'logged-in',
-        userid: 'acct:jim@hypothes.is',
-        username: 'jim',
-        displayName: 'Jim Smith',
-      },
-    },
-    {
-      // User who has not set a display name
-      profile: {
-        userid: 'acct:jim@hypothes.is',
-        user_info: {
-          display_name: null,
-        },
-      },
-      expectedAuth: {
-        status: 'logged-in',
-        userid: 'acct:jim@hypothes.is',
-        username: 'jim',
-        displayName: 'jim',
-      },
-    },
-  ].forEach(({ profile, expectedAuth }) => {
-    it('passes expected "auth" prop to children', () => {
-      fakeStore.profile.returns(profile);
       const wrapper = createComponent();
-      const auth = wrapper.find('TopBar').prop('auth');
-      assert.deepEqual(auth, expectedAuth);
+
+      assert.isFalse(wrapper.find('YouTubeDisclaimerBanner').exists());
     });
   });
+
+  // Add tests for common behaviors shared between "Log in" and "Sign up" actions.
+  function addCommonLoginTests(action) {
+    const clickButton = wrapper =>
+      wrapper
+        .find('TopBar')
+        .prop(action === 'login' ? 'onLogin' : 'onSignUp')();
+
+    it('clears groups', async () => {
+      const wrapper = createComponent();
+      await clickButton(wrapper);
+      assert.called(fakeStore.clearGroups);
+    });
+
+    it('initiates the OAuth login flow', async () => {
+      const wrapper = createComponent();
+      await clickButton(wrapper);
+      assert.calledWith(fakeAuth.login, { action });
+    });
+
+    it('reloads the session when login completes', async () => {
+      const wrapper = createComponent();
+      await clickButton(wrapper);
+      assert.called(fakeSession.reload);
+    });
+
+    it('closes the login prompt panel', async () => {
+      const wrapper = createComponent();
+      await clickButton(wrapper);
+      assert.called(fakeStore.closeSidebarPanel);
+    });
+
+    it('reports an error if login fails', async () => {
+      fakeAuth.login.returns(Promise.reject(new Error('Login failed')));
+
+      const wrapper = createComponent();
+      await clickButton(wrapper);
+      assert.called(fakeToastMessenger.error);
+    });
+  }
 
   describe('"Sign up" action', () => {
     const clickSignUp = wrapper => wrapper.find('TopBar').props().onSignUp();
 
-    beforeEach(() => {
-      sinon.stub(window, 'open');
-    });
-
-    afterEach(() => {
-      window.open.restore();
-    });
+    addCommonLoginTests('signup');
 
     context('when using a third-party service', () => {
       beforeEach(() => {
@@ -229,21 +244,10 @@ describe('HypothesisApp', () => {
         assert.calledWith(fakeFrameSync.notifyHost, 'signupRequested');
       });
 
-      it('does not open a URL directly', () => {
+      it('does not log in', () => {
         const wrapper = createComponent();
         clickSignUp(wrapper);
-        assert.notCalled(window.open);
-      });
-    });
-
-    context('when not using a third-party service', () => {
-      it('opens the signup URL in a new tab', () => {
-        fakeStore.getLink
-          .withArgs('signup')
-          .returns('https://ann.service/signup');
-        const wrapper = createComponent();
-        clickSignUp(wrapper);
-        assert.calledWith(window.open, 'https://ann.service/signup');
+        assert.notCalled(fakeAuth.login);
       });
     });
   });
@@ -251,41 +255,7 @@ describe('HypothesisApp', () => {
   describe('"Log in" action', () => {
     const clickLogIn = wrapper => wrapper.find('TopBar').props().onLogin();
 
-    beforeEach(() => {
-      fakeAuth.login = sinon.stub().returns(Promise.resolve());
-    });
-
-    it('clears groups', async () => {
-      const wrapper = createComponent();
-      await clickLogIn(wrapper);
-      assert.called(fakeStore.clearGroups);
-    });
-
-    it('initiates the OAuth login flow', async () => {
-      const wrapper = createComponent();
-      await clickLogIn(wrapper);
-      assert.called(fakeAuth.login);
-    });
-
-    it('reloads the session when login completes', async () => {
-      const wrapper = createComponent();
-      await clickLogIn(wrapper);
-      assert.called(fakeSession.reload);
-    });
-
-    it('closes the login prompt panel', async () => {
-      const wrapper = createComponent();
-      await clickLogIn(wrapper);
-      assert.called(fakeStore.closeSidebarPanel);
-    });
-
-    it('reports an error if login fails', async () => {
-      fakeAuth.login.returns(Promise.reject(new Error('Login failed')));
-
-      const wrapper = createComponent();
-      await clickLogIn(wrapper);
-      assert.called(fakeToastMessenger.error);
-    });
+    addCommonLoginTests('login');
 
     it('sends "loginRequested" event to host page if using a third-party service', async () => {
       // If the client is using a third-party annotation service then clicking
@@ -298,7 +268,7 @@ describe('HypothesisApp', () => {
 
       assert.equal(fakeFrameSync.notifyHost.callCount, 1);
       assert.isTrue(
-        fakeFrameSync.notifyHost.calledWithExactly('loginRequested')
+        fakeFrameSync.notifyHost.calledWithExactly('loginRequested'),
       );
     });
   });
@@ -395,7 +365,7 @@ describe('HypothesisApp', () => {
     });
 
     context('when a third-party service is in use', () => {
-      beforeEach('configure a third-party service to be in use', () => {
+      beforeEach(() => {
         fakeServiceConfig.returns({});
       });
 

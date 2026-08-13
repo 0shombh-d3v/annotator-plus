@@ -1,9 +1,8 @@
-import { mount } from 'enzyme';
+import { mockImportedComponents } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
 import GroupList, { $imports } from '../GroupList';
-
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
 
 describe('GroupList', () => {
   let fakeServiceConfig;
@@ -51,6 +50,7 @@ describe('GroupList', () => {
       getLink: sinon.stub().returns(''),
       getMyGroups: sinon.stub().returns([]),
       focusedGroup: sinon.stub().returns(testGroup),
+      importsPending: sinon.stub().returns(0),
       profile: sinon.stub().returns({ userid: null }),
     };
     fakeServiceConfig = sinon.stub().returns(null);
@@ -73,6 +73,13 @@ describe('GroupList', () => {
     assert.equal(menu.props().title, 'Select group (now viewing: Test group)');
   });
 
+  it('disables menu if imports are in progress', () => {
+    fakeStore.importsPending.returns(1);
+    const wrapper = createGroupList();
+    const menu = wrapper.find('Menu');
+    assert.isTrue(menu.prop('disabled'));
+  });
+
   it('adds descriptive label text if no currently-focused group', () => {
     fakeStore.focusedGroup.returns(undefined);
     const wrapper = createGroupList();
@@ -90,7 +97,7 @@ describe('GroupList', () => {
     fakeStore.getCurrentlyViewingGroups.returns([testGroup]);
     const wrapper = createGroupList();
     assert.isTrue(
-      wrapper.exists('GroupListSection[heading="Currently Viewing"]')
+      wrapper.exists('GroupListSection[heading="Currently Viewing"]'),
     );
   });
 
@@ -98,7 +105,7 @@ describe('GroupList', () => {
     fakeStore.getFeaturedGroups.returns([testGroup]);
     const wrapper = createGroupList();
     assert.isTrue(
-      wrapper.exists('GroupListSection[heading="Featured Groups"]')
+      wrapper.exists('GroupListSection[heading="Featured Groups"]'),
     );
   });
 
@@ -125,7 +132,7 @@ describe('GroupList', () => {
     sections.forEach(section => {
       assert.deepEqual(
         section.prop('groups'),
-        fakeGroupsByOrganization(testGroups)
+        fakeGroupsByOrganization(testGroups),
       );
     });
   });
@@ -143,25 +150,37 @@ describe('GroupList', () => {
       userid: 'acct:john@otherpublisher.org',
       expectNewGroupButton: false,
     },
-  ].forEach(({ userid, expectNewGroupButton }) => {
-    it('displays "New private group" button if user is logged in with first-party account', () => {
+    {
+      userid: 'acct:john@hypothes.is',
+      expectNewGroupButton: false,
+      groupsAllowlist: ['foo', 'bar'],
+    },
+  ].forEach(({ userid, expectNewGroupButton, groupsAllowlist }) => {
+    it('displays "Create new group" button if user is logged in with first-party account', () => {
+      fakeSettings.groupsAllowlist = groupsAllowlist;
       fakeStore.profile.returns({ userid });
       const wrapper = createGroupList();
-      const newGroupButton = wrapper.find(
-        'MenuItem[label="New private group"]'
-      );
+      const newGroupButton = wrapper.find('MenuItem[label="Create new group"]');
       assert.equal(newGroupButton.length, expectNewGroupButton ? 1 : 0);
     });
   });
 
-  it('opens new window at correct URL when "New private group" is clicked', () => {
+  it('opens new window at correct URL when "Create new group" is clicked', () => {
     fakeStore.getLink
       .withArgs('groups.new')
       .returns('https://example.com/groups/new');
     fakeStore.profile.returns({ userid: 'jsmith@hypothes.is' });
     const wrapper = createGroupList();
-    const newGroupButton = wrapper.find('MenuItem[label="New private group"]');
+    const newGroupButton = wrapper.find('MenuItem[label="Create new group"]');
     assert.equal(newGroupButton.props().href, 'https://example.com/groups/new');
+  });
+
+  it('shows group type icons', () => {
+    populateGroupSections();
+    const wrapper = createGroupList();
+    const sections = wrapper.find('GroupListSection');
+    assert.isTrue(sections.exists());
+    sections.forEach(section => assert.isTrue(section.prop('showIcons')));
   });
 
   context('when `isThirdPartyService` is true', () => {
@@ -184,11 +203,12 @@ describe('GroupList', () => {
       assert.equal(wrapper.find('img').prop('alt'), 'Test Org');
     });
 
-    it('uses a blank string for the `alt` attribute if the organization name is missing', () => {
-      fakeServiceConfig.returns({ icon: 'test-icon' });
-      testGroup.organization = {};
+    it('does not show group icons', () => {
+      populateGroupSections();
       const wrapper = createGroupList();
-      assert.equal(wrapper.find('img').prop('alt'), '');
+      const sections = wrapper.find('GroupListSection');
+      assert.isTrue(sections.exists());
+      sections.forEach(section => assert.isFalse(section.prop('showIcons')));
     });
   });
 
@@ -203,14 +223,18 @@ describe('GroupList', () => {
     fakeServiceConfig.returns({ icon: 'test-icon' });
     const wrapper = createGroupList();
     const label = wrapper.find('Menu').prop('label');
-    const img = mount(label).find('img');
+    const img = mount(<div>{label}</div>).find('img');
     assert.equal(img.prop('src'), 'test-icon');
   });
 
   it('does not render an icon if the the publisher-provided icon is missing', () => {
     const wrapper = createGroupList();
     const label = wrapper.find('Menu').prop('label');
-    assert.isFalse(mount(label).find('img').exists());
+    assert.isFalse(
+      mount(<div>{label}</div>)
+        .find('img')
+        .exists(),
+    );
   });
 
   /**
@@ -232,7 +256,7 @@ describe('GroupList', () => {
     // Expand a group in one of the sections.
     act(() => {
       wrapper.find('GroupListSection').first().prop('onExpandGroup')(
-        testGroups[0]
+        testGroups[0],
       );
     });
     wrapper.update();
@@ -253,7 +277,7 @@ describe('GroupList', () => {
     // Expand one of the submenus.
     act(() => {
       wrapper.find('GroupListSection').first().prop('onExpandGroup')(
-        testGroups[0]
+        testGroups[0],
       );
     });
     wrapper.update();

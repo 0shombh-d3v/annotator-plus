@@ -39,7 +39,6 @@ const linksResponse = {
  * Fake `retryPromiseOperation` that does not wait between retries.
  */
 async function fakeRetryPromiseOperation(callback) {
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const result = await callback();
@@ -94,7 +93,7 @@ describe('APIRoutesService', () => {
         ([routesA, routesB]) => {
           assert.equal(routesA, routesB);
           assert.equal(fakeFetchJSON.callCount, 1);
-        }
+        },
       );
     });
 
@@ -125,7 +124,7 @@ describe('APIRoutesService', () => {
         ([linksA, linksB]) => {
           assert.equal(linksA, linksB);
           assert.deepEqual(fakeFetchJSON.callCount, 2);
-        }
+        },
       );
     });
 

@@ -91,8 +91,8 @@ describe('sidebar/config/build-settings', () => {
             'https://embedder.com',
             'requestConfig',
             [],
-            3000
-          )
+            3000,
+          ),
         );
       });
 
@@ -119,11 +119,11 @@ describe('sidebar/config/build-settings', () => {
         });
         await assert.rejects(
           buildSettings({}, fakeWindow),
-          /The target parent frame has exceeded the ancestor tree|Try reducing the/g
+          /The target parent frame has exceeded the ancestor tree|Try reducing the/g,
         );
       });
 
-      it('adds RPC settings to resulting SidebarSettings', async () => {
+      it('adds settings received via RPC to merged settings', async () => {
         fakeJsonRpc.call.resolves({ foo: 'baz' }); // host config
 
         const result = await buildSettings({}, fakeWindow);
@@ -134,7 +134,7 @@ describe('sidebar/config/build-settings', () => {
         });
       });
 
-      it('merges ConfigFromHost returned from RPC with ConfigFromSidebar', async () => {
+      it('merges settings received via RPC with sidebar settings', async () => {
         const configFromSidebar = { foo: 'bar', appType: 'via' };
         fakeJsonRpc.call.resolves({ foo: 'baz' }); // host config
         const result = await buildSettings(configFromSidebar, fakeWindow);
@@ -149,12 +149,12 @@ describe('sidebar/config/build-settings', () => {
         });
       });
 
-      it('rejects if RPC request for ConfigFromHost fails', async () => {
+      it('rejects if RPC request for config fails', async () => {
         fakeJsonRpc.call.rejects(new Error('Nope'));
         const configFromSidebar = { foo: 'bar', appType: 'via' };
         await assert.rejects(
           buildSettings(configFromSidebar, fakeWindow),
-          'Nope'
+          'Nope',
         );
       });
 
@@ -185,8 +185,8 @@ describe('sidebar/config/build-settings', () => {
             'https://embedder.com',
             'requestGroups',
             [0], // passes service index to requestGroups
-            0 // no timeout
-          )
+            0, // no timeout
+          ),
         );
       });
 
@@ -202,7 +202,7 @@ describe('sidebar/config/build-settings', () => {
         const result = await buildSettings(configFromSidebar, fakeWindow);
         await assert.rejects(
           result.services[0].groups,
-          'Unable to fetch groups'
+          'Unable to fetch groups',
         );
       });
 
@@ -246,7 +246,7 @@ describe('sidebar/config/build-settings', () => {
         });
         await assert.rejects(
           buildSettings({}, fakeWindow),
-          'Improper `requestConfigFromFrame` object. Both `ancestorLevel` and `origin` need to be specified'
+          'Improper `requestConfigFromFrame` object. Both `ancestorLevel` and `origin` need to be specified',
         );
       });
 
@@ -259,7 +259,7 @@ describe('sidebar/config/build-settings', () => {
         });
         await assert.rejects(
           buildSettings({}, fakeWindow),
-          'Improper `requestConfigFromFrame` object. Both `ancestorLevel` and `origin` need to be specified'
+          'Improper `requestConfigFromFrame` object. Both `ancestorLevel` and `origin` need to be specified',
         );
       });
     });

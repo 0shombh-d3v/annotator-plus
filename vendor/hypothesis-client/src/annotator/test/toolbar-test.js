@@ -6,6 +6,7 @@ describe('ToolbarController', () => {
 
   const createToolbar = options => {
     return new ToolbarController(container, {
+      setSidebarOpen: sinon.stub(),
       ...options,
     });
   };
@@ -35,6 +36,11 @@ describe('ToolbarController', () => {
     assert.equal(controller.sidebarOpen, false);
     assert.equal(controller.highlightsVisible, false);
     assert.equal(controller.newAnnotationType, 'note');
+  });
+
+  it('passes sidebarContainerId to Toolbar when provided', () => {
+    createToolbar({ sidebarContainerId: 'sidebar-iframe-container' });
+    assert.equal(toolbarProps.sidebarContainerId, 'sidebar-iframe-container');
   });
 
   it('re-renders when `useMinimalControls` changes', () => {
@@ -89,6 +95,26 @@ describe('ToolbarController', () => {
     });
   });
 
+  it('re-renders when `supportedAnnotationTools` changes', () => {
+    const controller = createToolbar();
+    assert.deepEqual(controller.supportedAnnotationTools, ['selection']);
+    assert.deepEqual(toolbarProps.supportedTools, ['selection']);
+
+    controller.supportedAnnotationTools = ['selection', 'rect'];
+
+    assert.deepEqual(toolbarProps.supportedTools, ['selection', 'rect']);
+  });
+
+  it('re-renders when `activeTool` changes', () => {
+    const controller = createToolbar();
+    assert.equal(controller.activeTool, null);
+    assert.equal(toolbarProps.activeTool, null);
+
+    controller.activeTool = 'rect';
+
+    assert.equal(toolbarProps.activeTool, 'rect');
+  });
+
   it('calls `setSidebarOpen` callback when sidebar toggle button is clicked', () => {
     const setSidebarOpen = sinon.stub();
     const controller = createToolbar({ setSidebarOpen });
@@ -128,10 +154,21 @@ describe('ToolbarController', () => {
     const setSidebarOpen = sinon.stub();
     createToolbar({ createAnnotation, setSidebarOpen });
 
-    toolbarProps.createAnnotation();
+    toolbarProps.createAnnotation('selection');
 
-    assert.called(createAnnotation);
+    assert.calledWith(createAnnotation, 'selection');
     assert.called(setSidebarOpen);
+  });
+
+  it('does not open sidebar when createAnnotation is called with a non-selection tool', () => {
+    const createAnnotation = sinon.stub();
+    const setSidebarOpen = sinon.stub();
+    createToolbar({ createAnnotation, setSidebarOpen });
+
+    toolbarProps.createAnnotation('rect');
+
+    assert.calledWith(createAnnotation, 'rect');
+    assert.notCalled(setSidebarOpen);
   });
 
   describe('#getWidth', () => {
@@ -149,6 +186,75 @@ describe('ToolbarController', () => {
       const controller = createToolbar();
       toolbarProps.toggleSidebarRef.current = 'a-button';
       assert.equal(controller.sidebarToggleButton, 'a-button');
+    });
+  });
+
+  describe('#keyboardModeState', () => {
+    it('returns current keyboard mode state', () => {
+      const controller = createToolbar();
+      assert.deepEqual(controller.keyboardModeState, {
+        keyboardActive: false,
+        keyboardMode: null,
+      });
+    });
+
+    it('re-renders when keyboard mode state is set', () => {
+      const controller = createToolbar();
+      controller.keyboardModeState = {
+        keyboardActive: true,
+        keyboardMode: 'resize',
+      };
+
+      assert.equal(toolbarProps.keyboardActive, true);
+      assert.equal(toolbarProps.keyboardMode, 'resize');
+    });
+  });
+
+  describe('#modeButtonCallbacks', () => {
+    it('re-renders when mode button callbacks are set', () => {
+      const controller = createToolbar();
+      const onModeClick = sinon.stub();
+      const onActivateMoveMode = sinon.stub();
+      const onActivatePointMoveMode = sinon.stub();
+
+      controller.modeButtonCallbacks = {
+        onModeClick,
+        onActivateMoveMode,
+        onActivatePointMoveMode,
+      };
+
+      assert.equal(toolbarProps.onModeClick, onModeClick);
+      assert.equal(toolbarProps.onActivateMoveMode, onActivateMoveMode);
+      assert.equal(
+        toolbarProps.onActivatePointMoveMode,
+        onActivatePointMoveMode,
+      );
+    });
+
+    it('returns the current mode button callbacks', () => {
+      const controller = createToolbar();
+      const onModeClick = sinon.stub();
+      const onActivateMoveMode = sinon.stub();
+      const onActivatePointMoveMode = sinon.stub();
+
+      controller.modeButtonCallbacks = {
+        onModeClick,
+        onActivateMoveMode,
+        onActivatePointMoveMode,
+      };
+
+      const callbacks = controller.modeButtonCallbacks;
+      assert.equal(callbacks.onModeClick, onModeClick);
+      assert.equal(callbacks.onActivateMoveMode, onActivateMoveMode);
+      assert.equal(callbacks.onActivatePointMoveMode, onActivatePointMoveMode);
+    });
+
+    it('returns undefined callbacks when not set', () => {
+      const controller = createToolbar();
+      const callbacks = controller.modeButtonCallbacks;
+      assert.isUndefined(callbacks.onModeClick);
+      assert.isUndefined(callbacks.onActivateMoveMode);
+      assert.isUndefined(callbacks.onActivatePointMoveMode);
     });
   });
 });

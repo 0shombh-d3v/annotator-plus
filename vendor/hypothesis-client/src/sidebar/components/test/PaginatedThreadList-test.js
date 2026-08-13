@@ -1,8 +1,7 @@
-import { mount } from 'enzyme';
+import { mockImportedComponents } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import PaginatedThreadList, { $imports } from '../PaginatedThreadList';
-
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('PaginatedThreadList', () => {
   // Fake props
@@ -28,7 +27,7 @@ describe('PaginatedThreadList', () => {
         onChangePage={fakeOnChangePage}
         threads={fakeThreads}
         {...props}
-      />
+      />,
     );
   }
 
@@ -108,8 +107,8 @@ describe('PaginatedThreadList', () => {
       const wrapper = createComponent(componentProps);
 
       assert.equal(
-        wrapper.find('PaginationNavigation').props().totalPages,
-        testCase.pageCount
+        wrapper.find('Pagination').props().totalPages,
+        testCase.pageCount,
       );
     });
 
@@ -122,8 +121,8 @@ describe('PaginatedThreadList', () => {
       });
 
       assert.equal(
-        wrapper.find('PaginationNavigation').props().currentPage,
-        testCase.currentPage
+        wrapper.find('Pagination').props().currentPage,
+        testCase.currentPage,
       );
     });
 
@@ -137,7 +136,7 @@ describe('PaginatedThreadList', () => {
 
       assert.deepEqual(
         wrapper.find('ThreadList').props().threads,
-        testCase.pageThreads
+        testCase.pageThreads,
       );
     });
   });

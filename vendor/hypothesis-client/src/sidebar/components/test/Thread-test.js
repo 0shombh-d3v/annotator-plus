@@ -1,11 +1,12 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
 import Thread from '../Thread';
 import { $imports } from '../Thread';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 // Utility functions to build nested threads
 let lastThreadId = 0;
@@ -73,7 +74,7 @@ describe('Thread', () => {
         thread={createThread()}
         threadsService={fakeThreadsService}
         {...props}
-      />
+      />,
     );
   };
 
@@ -115,7 +116,7 @@ describe('Thread', () => {
 
     // Retrieve the (caret) button for showing and hiding replies
     const getToggleButton = wrapper => {
-      return wrapper.find('IconButton');
+      return wrapper.find('button[data-testid="toggle-button"]');
     };
 
     beforeEach(() => {
@@ -148,7 +149,7 @@ describe('Thread', () => {
       // is an `annotation` object
       const wrapper = createComponent();
 
-      assert.isTrue(wrapper.exists('ModerationBanner'));
+      assert.isTrue(wrapper.exists('FlagBanner'));
     });
 
     it('renders the annotation', () => {
@@ -209,9 +210,7 @@ describe('Thread', () => {
       collapsedThread.parent = '1';
       const wrapper = createComponent({ thread: collapsedThread });
 
-      assert.isTrue(
-        wrapper.find('IconButton[title="Expand replies"]').exists()
-      );
+      assert.isTrue(wrapper.find('button[title="Expand replies"]').exists());
     });
 
     it('does not render child threads', () => {
@@ -264,7 +263,10 @@ describe('Thread', () => {
       const wrapper = createComponent({ thread });
 
       act(() => {
-        wrapper.find('LabeledButton').props().onClick();
+        wrapper
+          .find('button[data-testid="show-hidden-button"]')
+          .props()
+          .onClick();
       });
 
       assert.calledOnce(fakeThreadsService.forceVisible);
@@ -309,7 +311,7 @@ describe('Thread', () => {
 
       assert.equal(
         wrapper.find(childListSelector).find('Thread').length,
-        threadWithChildren.replyCount
+        threadWithChildren.replyCount,
       );
     });
 
@@ -324,7 +326,7 @@ describe('Thread', () => {
       // all of the second child's replies plus the second child itself.
       assert.equal(
         wrapper.find(childListSelector).find('Thread').length,
-        threadWithChildren.children[1].replyCount + 1
+        threadWithChildren.children[1].replyCount + 1,
       );
     });
   });
@@ -340,7 +342,7 @@ describe('Thread', () => {
       'should pass a11y checks',
       checkAccessibility({
         content: () => createComponent({ thread: threadWithChildren }),
-      })
+      }),
     );
   });
 });

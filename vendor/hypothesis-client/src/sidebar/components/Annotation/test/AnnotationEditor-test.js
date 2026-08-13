@@ -1,12 +1,13 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+  waitFor,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
+import sinon from 'sinon';
 
 import * as fixtures from '../../../test/annotation-fixtures';
-import { waitFor } from '../../../../test-util/wait';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
-
 import AnnotationEditor, { $imports } from '../AnnotationEditor';
 
 describe('AnnotationEditor', () => {
@@ -16,6 +17,8 @@ describe('AnnotationEditor', () => {
   let fakeTagsService;
   let fakeSettings;
   let fakeToastMessenger;
+  let fakeGroupsService;
+  let fakeUseUnsavedChanges;
 
   let fakeStore;
 
@@ -30,8 +33,9 @@ describe('AnnotationEditor', () => {
         settings={fakeSettings}
         tags={fakeTagsService}
         toastMessenger={fakeToastMessenger}
+        groups={fakeGroupsService}
         {...props}
-      />
+      />,
     );
   }
 
@@ -54,6 +58,9 @@ describe('AnnotationEditor', () => {
       error: sinon.stub(),
       success: sinon.stub(),
     };
+    fakeGroupsService = {
+      loadFocusedGroupMembers: sinon.stub().resolves(undefined),
+    };
 
     fakeStore = {
       createDraft: sinon.stub(),
@@ -61,10 +68,20 @@ describe('AnnotationEditor', () => {
       setDefault: sinon.stub(),
       removeDraft: sinon.stub(),
       removeAnnotations: sinon.stub(),
+      isFeatureEnabled: sinon.stub().returns(false),
+      usersWhoAnnotated: sinon.stub().returns([]),
+      usersWhoWereMentioned: sinon.stub().returns([]),
+      getFocusedGroupMembers: sinon.stub().returns({ status: 'not-loaded' }),
+      defaultAuthority: sinon.stub().returns(''),
     };
+
+    fakeUseUnsavedChanges = sinon.stub();
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
+      '../hooks/unsaved-changes': {
+        useUnsavedChanges: fakeUseUnsavedChanges,
+      },
       '../../store': { useSidebarStore: () => fakeStore },
       '../../helpers/theme': { applyTheme: fakeApplyTheme },
     });
@@ -90,7 +107,7 @@ describe('AnnotationEditor', () => {
       const wrapper = createComponent();
       assert.deepEqual(
         wrapper.find('MarkdownEditor').prop('textStyle'),
-        textStyle
+        textStyle,
       );
     });
 
@@ -105,6 +122,21 @@ describe('AnnotationEditor', () => {
       const call = fakeStore.createDraft.getCall(0);
       assert.calledOnce(fakeStore.createDraft);
       assert.equal(call.args[1].text, 'updated text');
+    });
+
+    [
+      { annotation: fixtures.newReply(), expectedLabel: 'Enter reply' },
+      {
+        annotation: fixtures.defaultAnnotation(),
+        expectedLabel: 'Enter comment',
+      },
+    ].forEach(({ annotation, expectedLabel }) => {
+      it('sets proper label', () => {
+        const wrapper = createComponent({ annotation });
+        const editor = wrapper.find('MarkdownEditor');
+
+        assert.equal(editor.prop('label'), expectedLabel);
+      });
     });
   });
 
@@ -155,6 +187,37 @@ describe('AnnotationEditor', () => {
     });
   });
 
+  describe('editing target descriptions', () => {
+    const getDescription = wrapper => wrapper.find('ThumbnailDescriptionInput');
+
+    beforeEach(() => {
+      fakeStore.isFeatureEnabled.withArgs('image_descriptions').returns(true);
+    });
+
+    it('does not show description input if annotation has no shape selector', () => {
+      const wrapper = createComponent();
+      assert.isFalse(getDescription(wrapper).exists());
+    });
+
+    it('updates draft when description is edited', () => {
+      const annotation = Object.assign(fixtures.defaultAnnotation(), {
+        target: [
+          {
+            selector: [{ type: 'ShapeSelector' }],
+          },
+        ],
+      });
+      const wrapper = createComponent({ annotation });
+      wrapper.find('ThumbnailDescriptionInput').prop('onEdit')(
+        'new-description',
+      );
+
+      const draftCall = fakeStore.createDraft.getCall(0);
+
+      assert.deepEqual(draftCall.args[1].description, 'new-description');
+    });
+  });
+
   describe('saving the annotation', () => {
     it('saves the annotation when save callback invoked', async () => {
       const annotation = fixtures.defaultAnnotation();
@@ -188,7 +251,7 @@ describe('AnnotationEditor', () => {
 
       await act(
         async () =>
-          await wrapper.find('AnnotationPublishControl').props().onSave()
+          await wrapper.find('AnnotationPublishControl').props().onSave(),
       );
 
       const draftCall = fakeStore.createDraft.getCall(0);
@@ -222,7 +285,7 @@ describe('AnnotationEditor', () => {
       assert.calledOnce(fakeAnnotationsService.save);
       assert.calledWith(
         fakeAnnotationsService.save,
-        wrapper.props().annotation
+        wrapper.props().annotation,
       );
     });
 
@@ -239,7 +302,7 @@ describe('AnnotationEditor', () => {
       assert.calledOnce(fakeAnnotationsService.save);
       assert.calledWith(
         fakeAnnotationsService.save,
-        wrapper.props().annotation
+        wrapper.props().annotation,
       );
     });
 
@@ -253,13 +316,26 @@ describe('AnnotationEditor', () => {
       assert.notCalled(fakeAnnotationsService.save);
     });
 
+    it('warns if user closes tab while there is a non-empty draft', () => {
+      // If the draft is empty, the warning is disabled.
+      const wrapper = createComponent();
+      assert.calledWith(fakeUseUnsavedChanges, false);
+
+      // If the draft changes to non-empty, the warning is enabled.
+      fakeUseUnsavedChanges.resetHistory();
+      const draft = fixtures.defaultDraft();
+      draft.text = 'something is here';
+      wrapper.setProps({ draft });
+      assert.calledWith(fakeUseUnsavedChanges, true);
+    });
+
     describe('handling publish options', () => {
       it('sets the publish control to disabled if the annotation is empty', () => {
         // default draft has no tags or text
         const wrapper = createComponent();
 
         assert.isTrue(
-          wrapper.find('AnnotationPublishControl').props().isDisabled
+          wrapper.find('AnnotationPublishControl').props().isDisabled,
         );
       });
 
@@ -269,7 +345,7 @@ describe('AnnotationEditor', () => {
         const wrapper = createComponent({ draft });
 
         assert.isFalse(
-          wrapper.find('AnnotationPublishControl').props().isDisabled
+          wrapper.find('AnnotationPublishControl').props().isDisabled,
         );
       });
 
@@ -307,7 +383,7 @@ describe('AnnotationEditor', () => {
           assert.calledWith(
             fakeStore.setDefault,
             'annotationPrivacy',
-            'shared'
+            'shared',
           );
         });
 
@@ -369,6 +445,233 @@ describe('AnnotationEditor', () => {
     assert.isFalse(wrapper.find('AnnotationLicense').exists());
   });
 
+  [true, false].forEach(enableHelpPanel => {
+    it('hides help links if Help panel is disabled', () => {
+      fakeSettings = {
+        services: [
+          {
+            enableHelpPanel,
+          },
+        ],
+      };
+
+      const wrapper = createComponent();
+
+      assert.equal(
+        wrapper.find('MarkdownEditor').prop('showHelpLink'),
+        enableHelpPanel,
+      );
+    });
+  });
+
+  describe('loading focused group members', () => {
+    [
+      {
+        mentionsEnabled: true,
+        focusedGroupMembers: { status: 'not-loaded' },
+        shouldLoadMembers: true,
+      },
+      {
+        mentionsEnabled: false,
+        focusedGroupMembers: { status: 'not-loaded' },
+        shouldLoadMembers: false,
+      },
+      {
+        mentionsEnabled: true,
+        focusedGroupMembers: { status: 'loaded', members: [] },
+        shouldLoadMembers: false,
+      },
+      {
+        mentionsEnabled: true,
+        focusedGroupMembers: { status: 'loading' },
+        shouldLoadMembers: false,
+      },
+    ].forEach(({ mentionsEnabled, focusedGroupMembers, shouldLoadMembers }) => {
+      it('loads focused group members when mounted', () => {
+        fakeStore.isFeatureEnabled.returns(mentionsEnabled);
+        fakeStore.getFocusedGroupMembers.returns(focusedGroupMembers);
+
+        createComponent();
+
+        assert.equal(
+          fakeGroupsService.loadFocusedGroupMembers.called,
+          shouldLoadMembers,
+        );
+      });
+    });
+  });
+
+  [
+    {
+      defaultAuthority: 'example.com',
+      expectedMentionMode: 'username',
+    },
+    {
+      defaultAuthority: 'foo.com',
+      expectedMentionMode: 'display-name',
+    },
+  ].forEach(({ defaultAuthority, expectedMentionMode }) => {
+    it('sets expected mention mode based on annotation author', () => {
+      fakeStore.defaultAuthority.returns(defaultAuthority);
+
+      const wrapper = createComponent({
+        annotation: {
+          ...fixtures.defaultAnnotation(),
+          user: 'acct:username@example.com',
+        },
+      });
+
+      assert.equal(
+        wrapper.find('MarkdownEditor').prop('mentionMode'),
+        expectedMentionMode,
+      );
+    });
+  });
+
+  function insertMentionSuggestion(wrapper, user) {
+    wrapper.find('MarkdownEditor').props().onInsertMentionSuggestion(user);
+  }
+
+  context('when annotation author is a third party user', () => {
+    it('initializes display names map with annotation mentions', () => {
+      const mentions = [
+        {
+          userid: 'acct:ignored@example.com',
+        },
+        {
+          userid: 'acct:foo@example.com',
+          display_name: 'Foo',
+          username: 'foo',
+        },
+        {
+          userid: 'acct:bar@example.com',
+          display_name: 'Bar',
+          username: 'bar',
+        },
+      ];
+      const annotation = {
+        ...fixtures.defaultAnnotation(),
+        mentions,
+        user: 'acct:username@example.com', // Third party user
+      };
+      const wrapper = createComponent({ annotation });
+
+      wrapper.find('AnnotationPublishControl').props().onSave();
+
+      assert.calledWith(
+        fakeAnnotationsService.save,
+        annotation,
+        sinon.match({
+          mentionMode: 'display-name',
+          usersMap: new Map([
+            [
+              'Foo',
+              {
+                userid: 'acct:foo@example.com',
+                displayName: 'Foo',
+                username: 'foo',
+              },
+            ],
+            [
+              'Bar',
+              {
+                userid: 'acct:bar@example.com',
+                displayName: 'Bar',
+                username: 'bar',
+              },
+            ],
+          ]),
+        }),
+      );
+    });
+
+    it('tracks user info for inserted mention suggestions', () => {
+      const annotation = {
+        ...fixtures.defaultAnnotation(),
+        mentions: [],
+        user: 'acct:username@example.com', // Third party user
+      };
+      const wrapper = createComponent({ annotation });
+
+      insertMentionSuggestion(wrapper, {
+        userid: 'acct:jane_doe@example.com',
+        displayName: 'Jane Doe',
+        username: 'jane_doe',
+      });
+      insertMentionSuggestion(wrapper, {
+        userid: 'acct:johndoe@example.com',
+        displayName: 'John Doe',
+        username: 'johndoe',
+      });
+
+      // Users without displayName are ignored
+      insertMentionSuggestion(wrapper, {
+        userid: 'acct:ignored@example.com',
+        username: 'ignored',
+      });
+
+      wrapper.find('AnnotationPublishControl').props().onSave();
+
+      assert.calledWith(
+        fakeAnnotationsService.save,
+        annotation,
+        sinon.match({
+          mentionMode: 'display-name',
+          usersMap: new Map([
+            [
+              'Jane Doe',
+              {
+                userid: 'acct:jane_doe@example.com',
+                displayName: 'Jane Doe',
+                username: 'jane_doe',
+              },
+            ],
+            [
+              'John Doe',
+              {
+                userid: 'acct:johndoe@example.com',
+                displayName: 'John Doe',
+                username: 'johndoe',
+              },
+            ],
+          ]),
+        }),
+      );
+    });
+  });
+
+  context('when annotation author is a first party user', () => {
+    it('does not track user info for inserted suggestions', () => {
+      fakeStore.defaultAuthority.returns('hypothes.is');
+
+      const annotation = {
+        ...fixtures.defaultAnnotation(),
+        mentions: [],
+        user: 'acct:username@hypothes.is', // First party user
+      };
+      const wrapper = createComponent({ annotation });
+
+      insertMentionSuggestion(wrapper, {
+        userid: 'acct:jane_doe@example.com',
+        displayName: 'Jane Doe',
+        username: 'jane_doe',
+      });
+      insertMentionSuggestion(wrapper, {
+        userid: 'acct:johndoe@example.com',
+        displayName: 'John Doe',
+        username: 'johndoe',
+      });
+
+      wrapper.find('AnnotationPublishControl').props().onSave();
+
+      assert.calledWith(
+        fakeAnnotationsService.save,
+        annotation,
+        sinon.match({ mentionMode: 'username' }),
+      );
+    });
+  });
+
   it(
     'should pass a11y checks',
     checkAccessibility([
@@ -377,6 +680,6 @@ describe('AnnotationEditor', () => {
         // a11y should be more deeply checked on the leaf components
         content: () => createComponent(),
       },
-    ])
+    ]),
   );
 });

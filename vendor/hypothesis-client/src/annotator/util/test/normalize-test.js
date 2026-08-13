@@ -25,28 +25,47 @@ describe('annotator/util/normalize', () => {
         inMatch: 'bar',
         outMatch: 'b  ar',
       },
-    ].forEach(({ inStr, outStr, inMatch, outMatch }, index) => {
-      it(`returns translated offsets (${index})`, () => {
-        const start = inStr.indexOf(inMatch);
-        assert.notEqual(start, -1, 'Input substring not found');
-        const end = start + inMatch.length;
+      // Strings where positions need to be adjusted between the input and
+      // output to account for differences in Unicode normalization.
+      {
+        inStr: 'a field of gold', // "fi" as latin chars
+        outStr: 'a ﬁeld of gold', // "fi" as a ligature
+        inMatch: 'gold',
+        outMatch: 'gold',
+        normalize: true,
+      },
+      {
+        inStr: 'a ﬁeld of gold', // "fi" as a ligature
+        outStr: 'a field of gold', // "fi" as latin chars
+        inMatch: 'gold',
+        outMatch: 'gold',
+        normalize: true,
+      },
+    ].forEach(
+      ({ inStr, outStr, inMatch, outMatch, normalize = false }, index) => {
+        it(`returns translated offsets (${index})`, () => {
+          const start = inStr.indexOf(inMatch);
+          assert.notEqual(start, -1, 'Input substring not found');
+          const end = start + inMatch.length;
 
-        const expectedStart = outStr.indexOf(outMatch);
-        assert.notEqual(expectedStart, -1, 'Output substring not found');
-        const expectedEnd = expectedStart + outMatch.length;
+          const expectedStart = outStr.indexOf(outMatch);
+          assert.notEqual(expectedStart, -1, 'Output substring not found');
+          const expectedEnd = expectedStart + outMatch.length;
 
-        const [outStart, outEnd] = translateOffsets(
-          inStr,
-          outStr,
-          start,
-          end,
-          isNotSpace
-        );
+          const [outStart, outEnd] = translateOffsets(
+            inStr,
+            outStr,
+            start,
+            end,
+            isNotSpace,
+            { normalize },
+          );
 
-        assert.equal(outStart, expectedStart, 'Incorrect start offset');
-        assert.equal(outEnd, expectedEnd, 'Incorrect end offset');
-      });
-    });
+          assert.equal(outStart, expectedStart, 'Incorrect start offset');
+          assert.equal(outEnd, expectedEnd, 'Incorrect end offset');
+        });
+      },
+    );
 
     it('returns offsets at end of string if input contains only ignored chars', () => {
       const inStr = '     ';
@@ -56,7 +75,7 @@ describe('annotator/util/normalize', () => {
         outStr,
         0,
         5,
-        isNotSpace
+        isNotSpace,
       );
       assert.equal(outStart, 5);
       assert.equal(outEnd, 5);
@@ -72,7 +91,7 @@ describe('annotator/util/normalize', () => {
         outStr,
         start,
         end,
-        isNotSpace
+        isNotSpace,
       );
       assert.equal(outStart, outStr.indexOf('a'));
       assert.equal(outEnd, outStr.indexOf('d') + 1);
@@ -88,7 +107,7 @@ describe('annotator/util/normalize', () => {
         outStr,
         start,
         end,
-        isNotSpace
+        isNotSpace,
       );
       assert.equal(outStart, outStr.indexOf('c'));
       assert.equal(outEnd, outStr.indexOf('d') + 1);
@@ -104,7 +123,7 @@ describe('annotator/util/normalize', () => {
         outStr,
         start,
         start,
-        isNotSpace
+        isNotSpace,
       );
 
       assert.equal(outStart, outStr.indexOf('c'));
@@ -117,13 +136,13 @@ describe('annotator/util/normalize', () => {
       const end = start + 'bar'.length;
 
       const outStrs = ['', 'foo   b', 'fooba'];
-      for (let outStr of outStrs) {
+      for (const outStr of outStrs) {
         const [outStart, outEnd] = translateOffsets(
           inStr,
           outStr,
           start,
           end,
-          isNotSpace
+          isNotSpace,
         );
         const outSubStr = outStr.slice(outStart, outEnd);
         assert.equal(outSubStr, inStr.slice(start, start + outSubStr.length));

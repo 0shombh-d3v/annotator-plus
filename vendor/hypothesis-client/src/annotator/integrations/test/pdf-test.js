@@ -1,7 +1,9 @@
-import { delay } from '../../../test-util/wait';
-import { FakePDFViewerApplication } from '../../anchoring/test/fake-pdf-viewer-application';
+import { delay } from '@hypothesis/frontend-testing';
+
 import { RenderingStates } from '../../anchoring/pdf';
 import { createPlaceholder } from '../../anchoring/placeholder';
+import { FakePDFViewerApplication } from '../../anchoring/test/fake-pdf-viewer-application';
+import { FeatureFlags } from '../../features';
 import { PDFIntegration, isPDF, $imports } from '../pdf';
 
 function awaitEvent(target, eventName) {
@@ -10,6 +12,12 @@ function awaitEvent(target, eventName) {
       once: true,
     });
   });
+}
+
+class FakeTextRange {
+  static trimmedRange(range) {
+    return range;
+  }
 }
 
 describe('annotator/integrations/pdf', () => {
@@ -36,6 +44,7 @@ describe('annotator/integrations/pdf', () => {
     let viewerContainer;
 
     let fakeAnnotator;
+    let fakeHighlighter;
     let fakePDFAnchoring;
     let fakePDFMetadata;
     let fakePDFViewerApplication;
@@ -43,7 +52,11 @@ describe('annotator/integrations/pdf', () => {
     let pdfIntegration;
 
     function createPDFIntegration(options = {}) {
-      return new PDFIntegration(fakeAnnotator, options);
+      return new PDFIntegration({
+        annotator: fakeAnnotator,
+        features: new FeatureFlags(['pdf_image_annotation']),
+        ...options,
+      });
     }
 
     beforeEach(() => {
@@ -68,11 +81,16 @@ describe('annotator/integrations/pdf', () => {
         anchoring: null,
       };
 
+      fakeHighlighter = {
+        getHighlightsFromPoint: sinon.stub().returns([]),
+      };
+
       fakePDFAnchoring = {
         RenderingStates,
         anchor: sinon.stub(),
         canDescribe: sinon.stub().returns(true),
         describe: sinon.stub(),
+        describeShape: sinon.stub(),
         documentHasText: sinon.stub().resolves(true),
       };
 
@@ -84,7 +102,7 @@ describe('annotator/integrations/pdf', () => {
       };
 
       fakeScrollUtils = {
-        offsetRelativeTo: sinon.stub().returns(0),
+        computeScrollOffset: sinon.stub().returns(0),
         scrollElement: sinon.stub().resolves(),
       };
 
@@ -93,6 +111,8 @@ describe('annotator/integrations/pdf', () => {
           PDFMetadata: sinon.stub().returns(fakePDFMetadata),
         },
         '../anchoring/pdf': fakePDFAnchoring,
+        '../anchoring/text-range': { TextRange: FakeTextRange },
+        '../highlighter': fakeHighlighter,
         '../util/scroll': fakeScrollUtils,
 
         // Disable debouncing of updates.
@@ -109,7 +129,7 @@ describe('annotator/integrations/pdf', () => {
 
     function pdfViewerHasClass(className) {
       return fakePDFViewerApplication.pdfViewer.viewer.classList.contains(
-        className
+        className,
       );
     }
 
@@ -173,33 +193,73 @@ describe('annotator/integrations/pdf', () => {
 
         const range = await pdfIntegration.anchor({}, selectors);
 
-        assert.calledWith(fakePDFAnchoring.anchor, sinon.match.any, selectors);
+        assert.calledWith(fakePDFAnchoring.anchor, selectors);
         assert.equal(range, fakePDFAnchoring.anchor());
       });
     });
 
-    describe('#canAnnotate', () => {
-      it('checks if range is in text layer of PDF', () => {
+    describe('#getAnnotatableRange', () => {
+      let fakeTrimmedRange;
+
+      beforeEach(() => {
+        fakeTrimmedRange = sinon.stub(FakeTextRange, 'trimmedRange');
+      });
+
+      afterEach(() => {
+        FakeTextRange.trimmedRange.restore();
+      });
+
+      it('verifies that range is in text layer of PDF', () => {
         const range = new Range();
-        assert.equal(pdfIntegration.canAnnotate(range), true);
+        fakeTrimmedRange.returns(range);
+        assert.equal(pdfIntegration.getAnnotatableRange(range), range);
         assert.calledWith(fakePDFAnchoring.canDescribe, range);
+      });
+
+      it('returns null if range-trimming encounters a RangeError', () => {
+        fakeTrimmedRange.throws(
+          new RangeError('Range contains no non-whitespace text'),
+        );
+        const range = new Range();
+        assert.isNull(pdfIntegration.getAnnotatableRange(range));
+      });
+
+      it('throws if range-trimming encounters non-RangeError errors', () => {
+        fakeTrimmedRange.throws(new Error('non-handled Error'));
+        const range = new Range();
+        assert.throws(() => pdfIntegration.getAnnotatableRange(range));
       });
     });
 
     describe('#describe', () => {
-      it('generates selectors for passed range', async () => {
+      it('generates selectors for DOM range', async () => {
         pdfIntegration = createPDFIntegration();
-        const range = {};
+        const range = document.createRange();
         fakePDFAnchoring.describe.returns([]);
 
         const selectors = await pdfIntegration.describe({}, range);
 
-        assert.calledWith(fakePDFAnchoring.describe, sinon.match.any, range);
+        assert.calledWith(fakePDFAnchoring.describe, range);
         assert.equal(selectors, fakePDFAnchoring.describe());
+      });
+
+      it('generates selectors for shape', async () => {
+        pdfIntegration = createPDFIntegration();
+        const shape = { type: 'point', x: 0, y: 0 };
+
+        const selectors = await pdfIntegration.describe({}, shape);
+
+        assert.calledWith(fakePDFAnchoring.describeShape, shape);
+        assert.equal(selectors, fakePDFAnchoring.describeShape());
       });
     });
 
     describe('#destroy', () => {
+      const sandbox = sinon.createSandbox();
+      afterEach(() => {
+        sandbox.restore();
+      });
+
       it('removes CSS classes to override PDF.js styles', () => {
         pdfIntegration = createPDFIntegration();
 
@@ -208,8 +268,30 @@ describe('annotator/integrations/pdf', () => {
 
         assert.isFalse(
           fakePDFViewerApplication.pdfViewer.viewer.classList.contains(
-            'has-transparent-text-layer'
-          )
+            'has-transparent-text-layer',
+          ),
+        );
+      });
+
+      it('undoes side-by-side layout changes', () => {
+        // Fix value to be a size at which side-by-side will activate.
+        sandbox.stub(window, 'innerWidth').value(800);
+
+        pdfIntegration = createPDFIntegration();
+        pdfIntegration.fitSideBySide({
+          expanded: true,
+          width: 100,
+        });
+        assert.isTrue(
+          pdfIntegration.sideBySideActive(),
+          'side-by-side was not activated',
+        );
+
+        pdfIntegration.destroy();
+
+        assert.isFalse(
+          pdfIntegration.sideBySideActive(),
+          'side-by-side was not deactivated',
         );
       });
     });
@@ -284,8 +366,34 @@ describe('annotator/integrations/pdf', () => {
       assert.isNotNull(banner);
       assert.include(
         banner.shadowRoot.textContent,
-        'This PDF does not contain selectable text'
+        'Text annotation tools are unavailable because this PDF does not contain selectable text',
       );
+    });
+
+    it('makes links in the PDF open in a new tab', () => {
+      const link = document.createElement('a');
+      fakePDFViewerApplication.pdfViewer.viewer.appendChild(link);
+      pdfIntegration = createPDFIntegration();
+
+      const event = new Event('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+
+      assert.equal(link.target, 'blank');
+      assert.isFalse(event.defaultPrevented);
+    });
+
+    it('prevents default behavior when a link is clicked that is part of a highlight', () => {
+      const link = document.createElement('a');
+      fakePDFViewerApplication.pdfViewer.viewer.appendChild(link);
+      fakeHighlighter.getHighlightsFromPoint.returns([
+        document.createElement('dummy-highlight'),
+      ]);
+      pdfIntegration = createPDFIntegration();
+
+      const event = new Event('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+
+      assert.isTrue(event.defaultPrevented);
     });
 
     context('when the PDF viewer content changes', () => {
@@ -301,7 +409,7 @@ describe('annotator/integrations/pdf', () => {
         const anchor = {
           anchor: {},
           highlights: [document.createElement('div')],
-          range: document.createRange(),
+          region: document.createRange(),
         };
         fakeAnnotator.anchors.push(anchor);
         return anchor;
@@ -314,7 +422,7 @@ describe('annotator/integrations/pdf', () => {
         await triggerUpdate();
 
         assert.equal(anchor.highlights.length, 0);
-        assert.isUndefined(anchor.range);
+        assert.isUndefined(anchor.region);
         assert.calledWith(fakeAnnotator.anchor, anchor.annotation);
       });
 
@@ -328,7 +436,7 @@ describe('annotator/integrations/pdf', () => {
           await triggerUpdate();
 
           assert.equal(anchor.highlights.length, 1);
-          assert.ok(anchor.range);
+          assert.ok(anchor.region);
           assert.notCalled(fakeAnnotator.anchor);
         } finally {
           anchor.highlights[0].remove();
@@ -366,6 +474,7 @@ describe('annotator/integrations/pdf', () => {
       it('resizes and activates side-by-side mode when sidebar expanded', () => {
         sandbox.stub(window, 'innerWidth').value(1350);
         pdfIntegration = createPDFIntegration();
+        assert.isFalse(pdfIntegration.sideBySideActive());
 
         const active = pdfIntegration.fitSideBySide({
           expanded: true,
@@ -374,6 +483,7 @@ describe('annotator/integrations/pdf', () => {
         });
 
         assert.isTrue(active);
+        assert.isTrue(pdfIntegration.sideBySideActive());
         assert.calledOnce(fakePDFViewerApplication.pdfViewer.update);
         assert.equal(pdfContainer().style.width, 'calc(100% - 428px)');
       });
@@ -398,6 +508,7 @@ describe('annotator/integrations/pdf', () => {
           });
 
           assert.isTrue(active);
+          assert.isTrue(pdfIntegration.sideBySideActive());
           assert.calledOnce(fakePDFViewerApplication.pdfViewer.update);
           assert.equal(pdfContainer().style.width, 'calc(100% - 428px)');
         });
@@ -415,6 +526,7 @@ describe('annotator/integrations/pdf', () => {
         });
 
         assert.isFalse(active);
+        assert.isFalse(pdfIntegration.sideBySideActive());
         assert.equal(pdfContainer().style.width, 'calc(100% - 115px)');
       });
 
@@ -430,6 +542,7 @@ describe('annotator/integrations/pdf', () => {
         });
 
         assert.isFalse(active);
+        assert.isFalse(pdfIntegration.sideBySideActive());
         assert.calledOnce(fakePDFViewerApplication.pdfViewer.update);
         assert.equal(pdfContainer().style.width, 'calc(100% - 115px)');
       });
@@ -440,8 +553,10 @@ describe('annotator/integrations/pdf', () => {
         const highlight = document.createElement('div');
         const offset = 42;
         const integration = createPDFIntegration();
-        fakeScrollUtils.offsetRelativeTo
-          .withArgs(highlight, integration.contentContainer())
+        fakeScrollUtils.computeScrollOffset
+          .withArgs(integration.contentContainer(), highlight, {
+            position: 'center',
+          })
           .returns(offset);
 
         const anchor = { highlights: [highlight] };
@@ -451,7 +566,7 @@ describe('annotator/integrations/pdf', () => {
         assert.calledWith(
           fakeScrollUtils.scrollElement,
           integration.contentContainer(),
-          offset
+          offset,
         );
       });
 
@@ -479,8 +594,8 @@ describe('annotator/integrations/pdf', () => {
       it('waits for anchors in placeholders to be re-anchored and scrolls to final highlight', async () => {
         const placeholderHighlight = createPlaceholderHighlight();
         const integration = createPDFIntegration();
-        fakeScrollUtils.offsetRelativeTo
-          .withArgs(placeholderHighlight, integration.contentContainer())
+        fakeScrollUtils.computeScrollOffset
+          .withArgs(integration.contentContainer(), placeholderHighlight)
           .returns(50);
         const annotation = { $tag: 'tag1' };
         const anchor = { annotation, highlights: [placeholderHighlight] };
@@ -491,7 +606,7 @@ describe('annotator/integrations/pdf', () => {
         assert.calledWith(
           fakeScrollUtils.scrollElement,
           integration.contentContainer(),
-          50
+          50,
         );
 
         // Simulate a delay while rendering of the text layer for the page happens
@@ -505,8 +620,8 @@ describe('annotator/integrations/pdf', () => {
           annotation,
           highlights: [finalHighlight],
         });
-        fakeScrollUtils.offsetRelativeTo
-          .withArgs(finalHighlight, integration.contentContainer())
+        fakeScrollUtils.computeScrollOffset
+          .withArgs(integration.contentContainer(), finalHighlight)
           .returns(150);
 
         await scrollDone;
@@ -515,7 +630,7 @@ describe('annotator/integrations/pdf', () => {
         assert.calledWith(
           fakeScrollUtils.scrollElement,
           integration.contentContainer(),
-          150
+          150,
         );
       });
 
@@ -552,6 +667,291 @@ describe('annotator/integrations/pdf', () => {
 
         assert.notCalled(fakeScrollUtils.scrollElement);
       });
+    });
+
+    describe('#supportedTools', () => {
+      it('returns "selection" if `pdf_image_annotation` flag is disabled', () => {
+        pdfIntegration = createPDFIntegration();
+        assert.deepEqual(pdfIntegration.supportedTools(), ['selection']);
+      });
+
+      it('returns "selection" and "rect" if `pdf_image_annotation` flag is enabled', () => {
+        const features = new FeatureFlags(['pdf_image_annotation']);
+        pdfIntegration = createPDFIntegration({ features });
+        features.update({ pdf_image_annotation: true });
+        assert.deepEqual(pdfIntegration.supportedTools(), [
+          'selection',
+          'rect',
+          'point',
+        ]);
+      });
+
+      it('emits "supportedToolsChanged" flag when tools change', () => {
+        const features = new FeatureFlags(['pdf_image_annotation']);
+        pdfIntegration = createPDFIntegration({ features });
+        const supportedToolsChanged = sinon.stub();
+        pdfIntegration.on('supportedToolsChanged', supportedToolsChanged);
+
+        features.update({ pdf_image_annotation: true });
+
+        assert.calledWith(supportedToolsChanged, [
+          'selection',
+          'rect',
+          'point',
+        ]);
+      });
+    });
+
+    describe('#renderToBitmap', () => {
+      const pageIndex = 1;
+
+      const rectShapeSelector = {
+        type: 'ShapeSelector',
+        shape: {
+          type: 'rect',
+          left: 0,
+          top: 100,
+          bottom: 0,
+          right: 100,
+        },
+      };
+
+      const pointShapeSelector = {
+        type: 'ShapeSelector',
+        shape: {
+          type: 'point',
+          x: 50,
+          y: 50,
+        },
+      };
+
+      const pageSelector = {
+        type: 'PageSelector',
+        index: pageIndex,
+      };
+
+      const createShapeSelector = (type, coords) => {
+        return {
+          type: 'ShapeSelector',
+          shape: {
+            type,
+            ...coords,
+          },
+        };
+      };
+
+      it('rejects if anchor has no shape selector', async () => {
+        pdfIntegration = createPDFIntegration();
+        const anchor = {
+          target: {
+            selector: [],
+          },
+        };
+        let err;
+        try {
+          await pdfIntegration.renderToBitmap(anchor, {});
+        } catch (e) {
+          err = e;
+        }
+        assert.instanceOf(err, Error);
+        assert.equal(
+          err.message,
+          'Can only render bitmaps for anchors with shapes',
+        );
+      });
+
+      it('rejects if shape type is unknown', async () => {
+        pdfIntegration = createPDFIntegration();
+        const anchor = {
+          target: {
+            selector: [
+              pageSelector,
+              {
+                type: 'ShapeSelector',
+                shape: {
+                  type: 'star',
+                },
+              },
+            ],
+          },
+        };
+        let err;
+        try {
+          await pdfIntegration.renderToBitmap(anchor, {});
+        } catch (e) {
+          err = e;
+        }
+        assert.instanceOf(err, Error);
+        assert.equal(err.message, 'Unsupported shape type');
+      });
+
+      it('rejects if page index is invalid', async () => {
+        pdfIntegration = createPDFIntegration();
+        fakePDFViewerApplication.pdfViewer.getPageView = () => undefined;
+        const invalidPageSelector = {
+          type: 'PageSelector',
+          index: 500,
+        };
+        const anchor = {
+          target: {
+            selector: [rectShapeSelector, invalidPageSelector],
+          },
+        };
+        let err;
+        try {
+          await pdfIntegration.renderToBitmap(anchor, {});
+        } catch (e) {
+          err = e;
+        }
+        assert.instanceOf(err, Error);
+        assert.equal(err.message, 'Failed to get page view');
+      });
+
+      [
+        // Rendering with no options
+        {
+          shapeSelector: rectShapeSelector,
+          renderOptions: {},
+          expectedViewport: {
+            rotation: 0,
+            scale: 96 / 72,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 100, 100],
+          },
+        },
+        {
+          shapeSelector: pointShapeSelector,
+          renderOptions: {},
+          expectedViewport: {
+            rotation: 0,
+            scale: 96 / 72,
+            userUnit: 1 / 72,
+            viewBox: [40, 40, 60, 60],
+          },
+        },
+        // Rendering on a HiDPI display
+        {
+          shapeSelector: rectShapeSelector,
+          renderOptions: {
+            devicePixelRatio: 2,
+          },
+          expectedViewport: {
+            rotation: 0,
+            scale: (96 / 72) * 2,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 100, 100],
+          },
+        },
+        // Rendering with max width that is half of the natural width
+        {
+          shapeSelector: rectShapeSelector,
+          renderOptions: {
+            maxWidth: 50,
+          },
+          expectedViewport: {
+            rotation: 0,
+            scale: 0.5,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 100, 100],
+          },
+        },
+        // Empty rectangle
+        {
+          shapeSelector: createShapeSelector('rect', {
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 0,
+          }),
+          expectedViewport: {
+            rotation: 0,
+            scale: 96 / 72,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 1, 1],
+          },
+        },
+        // Rectangle with negative width and height
+        {
+          shapeSelector: createShapeSelector('rect', {
+            left: 100,
+            right: 0,
+            top: 0,
+            bottom: 100,
+          }),
+          expectedViewport: {
+            rotation: 0,
+            scale: 96 / 72,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 100, 100],
+          },
+        },
+        // Rectangle with a very wide aspect ratio, such that after scaling
+        // the thumbnail to fit `maxWidth`, the height is zero.
+        {
+          shapeSelector: createShapeSelector('rect', {
+            left: 0,
+            right: 101,
+            top: 0,
+            bottom: 0,
+          }),
+          renderOptions: {
+            maxWidth: 100,
+          },
+          expectedViewport: {
+            rotation: 0,
+            scale: sinon.match.number,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 101, 1],
+          },
+        },
+        // Rotated page
+        {
+          shapeSelector: rectShapeSelector,
+          renderOptions: {},
+          pageRotation: 90,
+          expectedViewport: {
+            rotation: 90,
+            scale: 96 / 72,
+            userUnit: 1 / 72,
+            viewBox: [0, 0, 100, 100],
+          },
+        },
+      ].forEach(
+        ({
+          renderOptions = {},
+          shapeSelector,
+          expectedViewport,
+          pageRotation = 0,
+        }) => {
+          it('renders bitmap with given options', async () => {
+            pdfIntegration = createPDFIntegration();
+            const anchor = {
+              target: {
+                selector: [shapeSelector, pageSelector],
+              },
+            };
+            const pageView =
+              fakePDFViewerApplication.pdfViewer.getPageView(pageIndex);
+            pageView.pdfPage.rotate = pageRotation;
+
+            const renderSpy = sinon.spy(pageView.pdfPage, 'render');
+
+            const bitmap = await pdfIntegration.renderToBitmap(
+              anchor,
+              renderOptions,
+            );
+
+            assert.instanceOf(bitmap, ImageBitmap);
+            assert.calledOnce(renderSpy);
+            const renderArgs = renderSpy.lastCall.args[0];
+            assert.instanceOf(
+              renderArgs.canvasContext,
+              OffscreenCanvasRenderingContext2D,
+            );
+            assert.match(renderArgs.viewport, sinon.match(expectedViewport));
+          });
+        },
+      );
     });
   });
 });

@@ -1,13 +1,14 @@
-import { mount } from 'enzyme';
+import { Tab } from '@hypothesis/frontend-shared';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
 import HelpPanel, { $imports } from '../HelpPanel';
 
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
-
 describe('HelpPanel', () => {
-  let fakeAuth;
   let fakeSessionService;
   let fakeStore;
   let frames;
@@ -17,19 +18,26 @@ describe('HelpPanel', () => {
 
   function createComponent(props) {
     return mount(
-      <HelpPanel auth={fakeAuth} session={fakeSessionService} {...props} />
+      <div>
+        <HelpPanel session={fakeSessionService} settings={{}} {...props} />
+      </div>,
     );
   }
 
   beforeEach(() => {
     frames = [];
-    fakeAuth = {};
     fakeSessionService = { dismissSidebarTutorial: sinon.stub() };
     fakeStore = {
       frames: () => frames,
       mainFrame: () => frames.find(f => !f.id) ?? null,
       profile: sinon.stub().returns({
-        preferences: { show_sidebar_tutorial: true },
+        preferences: {
+          show_sidebar_tutorial: true,
+        },
+        userid: 'acct:delores@hypothes.is',
+        user_info: {
+          display_name: 'Delores',
+        },
       }),
     };
     fakeVersionData = {
@@ -42,49 +50,60 @@ describe('HelpPanel', () => {
       '../store': { useSidebarStore: () => fakeStore },
       '../helpers/version-data': { VersionData: FakeVersionData },
     });
+    $imports.$restore({
+      // Rendering TabHeader and TabPanel is needed for a11y tests
+      './tabs/TabHeader': true,
+      './tabs/TabPanel': true,
+    });
   });
 
   afterEach(() => {
     $imports.$restore();
   });
 
+  const getActivePanel = wrapper => wrapper.find('TabPanel[active=true]');
+  const clickTab = (wrapper, tabId) =>
+    wrapper.find(`button[data-testid="${tabId}"]`).simulate('click');
+
   context('when viewing tutorial sub-panel', () => {
     it('should show tutorial by default', () => {
       const wrapper = createComponent();
-      const subHeader = wrapper.find('[data-testid="subpanel-title"]');
+      const selectedTab = wrapper
+        .find(Tab)
+        .findWhere(tab => tab.prop('selected'));
+      const activePanel = getActivePanel(wrapper);
 
-      assert.include(subHeader.text(), 'Getting started');
-      assert.isTrue(wrapper.find('Tutorial').exists());
-      assert.isFalse(wrapper.find('VersionInfo').exists());
+      assert.include(selectedTab.text(), 'Help');
+      assert.isTrue(activePanel.find('Tutorial').exists());
+      assert.isFalse(activePanel.find('VersionInfo').exists());
     });
 
-    it('should show navigation link to versionInfo sub-panel', () => {
+    it('should switch to versionInfo sub-panel when second tab is clicked', async () => {
       const wrapper = createComponent();
-      const button = wrapper.find('HelpPanelNavigationButton');
+      clickTab(wrapper, 'version-info-tab');
 
-      assert.include(button.text(), 'About this version');
-    });
+      const activePanel = getActivePanel(wrapper);
 
-    it('should switch to versionInfo sub-panel when navigation button clicked', async () => {
-      const wrapper = createComponent();
-      act(() => {
-        wrapper
-          .find('LinkButton')
-          .getDOMNode()
-          .dispatchEvent(new Event('click'));
-      });
-      wrapper.update();
-
-      assert.isTrue(wrapper.find('VersionInfo').exists());
+      assert.isTrue(activePanel.find('VersionInfo').exists());
       assert.equal(
-        wrapper.find('VersionInfo').prop('versionData'),
-        fakeVersionData
+        activePanel.find('VersionInfo').prop('versionData'),
+        fakeVersionData,
       );
-      assert.isFalse(wrapper.find('Tutorial').exists());
+      assert.isFalse(activePanel.find('Tutorial').exists());
     });
   });
 
   context('when viewing versionInfo sub-panel', () => {
+    it('provides info about the current user', () => {
+      createComponent();
+
+      const userInfo = FakeVersionData.getCall(0).args[0];
+      assert.deepEqual(userInfo, {
+        userid: 'acct:delores@hypothes.is',
+        displayName: 'Delores',
+      });
+    });
+
     it('shows document info for current frames', () => {
       // Unsorted frames
       frames = [
@@ -124,46 +143,18 @@ describe('HelpPanel', () => {
       ]);
     });
 
-    it('should show navigation link back to tutorial sub-panel', () => {
-      const wrapper = createComponent();
-      act(() => {
-        wrapper
-          .find('LinkButton')
-          .getDOMNode()
-          .dispatchEvent(new Event('click'));
-      });
-      wrapper.update();
-
-      const link = wrapper.find('LinkButton');
-
-      assert.isTrue(wrapper.find('VersionInfo').exists());
-      assert.isFalse(wrapper.find('Tutorial').exists());
-      assert.include(link.text(), 'Getting started');
-    });
-
-    it('should switch to tutorial sub-panel when link clicked', () => {
+    it('should switch to tutorial sub-panel when first tab is clicked', () => {
       const wrapper = createComponent();
 
       // Click to get to VersionInfo sub-panel...
-      act(() => {
-        wrapper
-          .find('LinkButton')
-          .getDOMNode()
-          .dispatchEvent(new Event('click'));
-      });
-      wrapper.update();
-
+      clickTab(wrapper, 'version-info-tab');
       // Click again to get back to tutorial sub-panel
-      act(() => {
-        wrapper
-          .find('LinkButton')
-          .getDOMNode()
-          .dispatchEvent(new Event('click'));
-      });
-      wrapper.update();
+      clickTab(wrapper, 'tutorial-tab');
 
-      assert.isFalse(wrapper.find('VersionInfo').exists());
-      assert.isTrue(wrapper.find('Tutorial').exists());
+      const activePanel = getActivePanel(wrapper);
+
+      assert.isFalse(activePanel.find('VersionInfo').exists());
+      assert.isTrue(activePanel.find('Tutorial').exists());
     });
   });
 
@@ -175,7 +166,7 @@ describe('HelpPanel', () => {
         wrapper
           .find('HelpPanelTab')
           .filter({ linkText: 'Help topics' })
-          .exists()
+          .exists(),
       );
     });
 
@@ -256,10 +247,39 @@ describe('HelpPanel', () => {
     });
   });
 
+  context('when comments mode is enabled', () => {
+    it.each([
+      {
+        commentsMode: true,
+        shouldShowTutorialTab: false,
+      },
+      {
+        commentsMode: false,
+        shouldShowTutorialTab: true,
+      },
+    ])(
+      'renders only the version tab',
+      ({ commentsMode, shouldShowTutorialTab }) => {
+        const wrapper = createComponent({
+          settings: { commentsMode },
+        });
+
+        assert.equal(
+          wrapper.exists('[data-testid="tutorial-tab"]'),
+          shouldShowTutorialTab,
+        );
+        assert.equal(
+          wrapper.exists('[data-testid="tutorial-panel"]'),
+          shouldShowTutorialTab,
+        );
+      },
+    );
+  });
+
   it(
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponent(),
-    })
+    }),
   );
 });

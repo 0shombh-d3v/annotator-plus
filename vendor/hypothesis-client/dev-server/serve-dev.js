@@ -1,16 +1,15 @@
-'use strict';
 /* eslint-env node */
+import express from 'express';
+import log from 'fancy-log';
+import Mustache from 'mustache';
+import mustacheExpress from 'mustache-express';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const fs = require('fs');
-const path = require('path');
+import { createServer, useSsl } from './create-server.js';
 
-const express = require('express');
-const log = require('fancy-log');
-const mustacheExpress = require('mustache-express');
-const Mustache = require('mustache');
-
-const { createServer, useSsl } = require('./create-server');
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const HTML_PATH = `${__dirname}/documents/html/`;
 const PDF_PATH = `${__dirname}/documents/pdf/`;
 const TEMPLATE_PATH = `${__dirname}/templates/`;
@@ -72,7 +71,7 @@ function templateContext(config) {
   // combines this config with a <script> that adds the embed script
   const configTemplate = fs.readFileSync(
     `${TEMPLATE_PATH}client-config.js.mustache`,
-    'utf-8'
+    'utf-8',
   );
   const hypothesisConfig = Mustache.render(configTemplate, {
     exampleConfig: config.clientConfig
@@ -95,7 +94,7 @@ function templateContext(config) {
  * @param {number} port - The port that the test server should listen on.
  * @param {Config} config - Config for the server
  */
-function serveDev(port, config) {
+export function serveDev(port, config) {
   const app = express();
 
   app.engine('mustache', mustacheExpress());
@@ -131,7 +130,7 @@ function serveDev(port, config) {
     if (fs.existsSync(path)) {
       const content = fs.readFileSync(path, 'utf8');
       const headers = readCustomHeaderTags(content);
-      for (let [key, value] of headers) {
+      for (const [key, value] of headers) {
         res.set(key, value);
       }
       res.render(req.params.document, templateContext(config));
@@ -145,7 +144,7 @@ function serveDev(port, config) {
   // The optional suffix allows the same PDF to be accessed at different URLs.
   // This is helpful for testing that annotations/real-time updates etc. work
   // based on the document fingerprint as well as the URL.
-  app.get('/pdf/:pdf/:suffix?', (req, res, next) => {
+  app.get('/pdf/:pdf{/:suffix}', (req, res, next) => {
     const pdfPath = `${PDF_PATH}${req.params.pdf}.pdf`;
 
     if (fs.existsSync(pdfPath)) {
@@ -176,7 +175,7 @@ function serveDev(port, config) {
   });
 
   // Serve UI component playground
-  app.get('/ui-playground/:path?', (req, res) => {
+  app.get('/ui-playground{/:path}', (req, res) => {
     res.render('ui-playground', {
       resourceRoot:
         'http://localhost:3001/hypothesis/1.0.0-dummy-version/build',
@@ -197,5 +196,3 @@ function serveDev(port, config) {
     }
   });
 }
-
-module.exports = serveDev;

@@ -1,26 +1,26 @@
-import { mount } from 'enzyme';
+import { mockImportedComponents } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 import UserMenu, { $imports } from '../UserMenu';
 
 describe('UserMenu', () => {
-  let fakeAuth;
+  let fakeProfile;
   let fakeFrameSync;
   let fakeIsThirdPartyUser;
   let fakeOnLogout;
   let fakeServiceConfig;
   let fakeSettings;
   let fakeStore;
+  let fakeIsFeatureEnabled;
 
   const createUserMenu = () => {
     return mount(
       <UserMenu
-        auth={fakeAuth}
         frameSync={fakeFrameSync}
         onLogout={fakeOnLogout}
         settings={fakeSettings}
-      />
+      />,
     );
   };
 
@@ -31,21 +31,25 @@ describe('UserMenu', () => {
   };
 
   beforeEach(() => {
-    fakeAuth = {
-      displayName: 'Eleanor Fishtail',
-      status: 'logged-in',
+    fakeProfile = {
+      user_info: {
+        display_name: 'Eleanor Fishtail',
+      },
       userid: 'acct:eleanorFishtail@hypothes.is',
-      username: 'eleanorFishy',
     };
     fakeFrameSync = { notifyHost: sinon.stub() };
     fakeIsThirdPartyUser = sinon.stub();
     fakeOnLogout = sinon.stub();
     fakeServiceConfig = sinon.stub();
     fakeSettings = {};
+    fakeIsFeatureEnabled = sinon.stub().returns(false);
     fakeStore = {
       defaultAuthority: sinon.stub().returns('hypothes.is'),
       focusedGroupId: sinon.stub().returns('mygroup'),
       getLink: sinon.stub(),
+      profile: sinon.stub().returns(fakeProfile),
+      importsPending: sinon.stub().returns(0),
+      isFeatureEnabled: fakeIsFeatureEnabled,
     };
 
     $imports.$mock(mockImportedComponents());
@@ -62,6 +66,11 @@ describe('UserMenu', () => {
     $imports.$restore();
   });
 
+  const openMenu = wrapper => {
+    act(() => wrapper.find('Menu').props().onOpenChanged(true));
+    wrapper.update();
+  };
+
   describe('profile menu item', () => {
     context('first-party user', () => {
       beforeEach(() => {
@@ -72,21 +81,30 @@ describe('UserMenu', () => {
       it('should be enabled', () => {
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.notOk(profileMenuItem.prop('isDisabled'));
       });
 
       it('should have a link (href)', () => {
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.equal(profileMenuItem.prop('href'), 'profile-link');
       });
 
       it('should have a callback', () => {
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.isFunction(profileMenuItem.prop('onClick'));
       });
     });
@@ -101,7 +119,10 @@ describe('UserMenu', () => {
 
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.isTrue(profileMenuItem.prop('isDisabled'));
       });
 
@@ -110,7 +131,10 @@ describe('UserMenu', () => {
 
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.isTrue(profileMenuItem.prop('isDisabled'));
       });
 
@@ -119,7 +143,10 @@ describe('UserMenu', () => {
 
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.notOk(profileMenuItem.prop('isDisabled'));
       });
 
@@ -128,7 +155,10 @@ describe('UserMenu', () => {
 
         const wrapper = createUserMenu();
 
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         assert.isFunction(profileMenuItem.prop('onClick'));
       });
     });
@@ -138,7 +168,10 @@ describe('UserMenu', () => {
         fakeServiceConfig.returns({ onProfileRequestProvided: true });
         fakeIsThirdPartyUser.returns(true);
         const wrapper = createUserMenu();
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         const onProfileSelected = profileMenuItem.prop('onClick');
 
         onProfileSelected();
@@ -150,7 +183,10 @@ describe('UserMenu', () => {
       it('should not fire profile event for first-party user', () => {
         fakeIsThirdPartyUser.returns(false);
         const wrapper = createUserMenu();
-        const profileMenuItem = findMenuItem(wrapper, fakeAuth.displayName);
+        const profileMenuItem = findMenuItem(
+          wrapper,
+          fakeProfile.user_info.display_name,
+        );
         const onProfileSelected = profileMenuItem.prop('onClick');
 
         onProfileSelected();
@@ -181,6 +217,53 @@ describe('UserMenu', () => {
     });
   });
 
+  describe('open profile item', () => {
+    [{ isFeatureEnabled: true }, { isFeatureEnabled: false }].forEach(
+      ({ isFeatureEnabled }) => {
+        it('includes profile item only for users with the feature flag enabled', () => {
+          fakeIsFeatureEnabled.returns(isFeatureEnabled);
+
+          const wrapper = createUserMenu();
+          const openProfileItem = findMenuItem(wrapper, 'Your profile');
+
+          assert.equal(isFeatureEnabled, openProfileItem.exists());
+        });
+      },
+    );
+
+    it('opens the profile when clicked', () => {
+      fakeIsFeatureEnabled.returns(true);
+      fakeIsThirdPartyUser.returns(true);
+
+      const wrapper = createUserMenu();
+      const openProfileItem = findMenuItem(wrapper, 'Your profile');
+
+      openProfileItem.props().onClick();
+      assert.calledOnce(fakeFrameSync.notifyHost);
+      assert.calledWith(fakeFrameSync.notifyHost, 'openProfile');
+    });
+
+    [{ featureIsEnabled: true }, { featureIsEnabled: false }].forEach(
+      ({ featureIsEnabled }) => {
+        it('responds to `p` keypress only when feature is enabled', () => {
+          fakeIsFeatureEnabled.returns(featureIsEnabled);
+
+          const wrapper = createUserMenu();
+          // Make the menu "open"
+          openMenu(wrapper);
+          assert.isTrue(wrapper.find('Menu').props().open);
+
+          wrapper
+            .find('[data-testid="user-menu"]')
+            .simulate('keydown', { key: 'p' });
+
+          assert.equal(featureIsEnabled, fakeFrameSync.notifyHost.called);
+          assert.equal(!featureIsEnabled, wrapper.find('Menu').props().open);
+        });
+      },
+    );
+  });
+
   describe('open notebook item', () => {
     it('includes the open notebook item', () => {
       const wrapper = createUserMenu();
@@ -201,10 +284,7 @@ describe('UserMenu', () => {
     it('opens the notebook and closes itself when `n` is typed', () => {
       const wrapper = createUserMenu();
       // Make the menu "open"
-      act(() => {
-        wrapper.find('Menu').props().onOpenChanged(true);
-      });
-      wrapper.update();
+      openMenu(wrapper);
       assert.isTrue(wrapper.find('Menu').props().open);
 
       wrapper
@@ -217,7 +297,49 @@ describe('UserMenu', () => {
     });
   });
 
+  describe('keyboard shortcuts', () => {
+    it('opens the shortcuts modal when menu item clicked', () => {
+      const wrapper = createUserMenu();
+      openMenu(wrapper);
+
+      const shortcutsMenuItem = findMenuItem(wrapper, 'Keyboard shortcuts');
+      shortcutsMenuItem.props().onClick();
+      wrapper.update();
+
+      assert.isTrue(wrapper.find('KeyboardShortcutsModal').prop('open'));
+      assert.isFalse(wrapper.find('Menu').props().open);
+    });
+
+    it('closes the shortcuts modal when onClose is called', () => {
+      const wrapper = createUserMenu();
+      const shortcutsMenuItem = findMenuItem(wrapper, 'Keyboard shortcuts');
+
+      shortcutsMenuItem.props().onClick();
+      wrapper.update();
+      assert.isTrue(wrapper.find('KeyboardShortcutsModal').prop('open'));
+
+      wrapper.find('KeyboardShortcutsModal').props().onClose();
+      wrapper.update();
+
+      assert.isFalse(wrapper.find('KeyboardShortcutsModal').prop('open'));
+    });
+  });
+
   describe('log out menu item', () => {
+    it('is disabled if an import is in progress', () => {
+      fakeStore.importsPending.returns(1);
+      const wrapper = createUserMenu();
+
+      let logOutMenuItem = findMenuItem(wrapper, 'Log out');
+      assert.isTrue(logOutMenuItem.prop('isDisabled'));
+
+      fakeStore.importsPending.returns(0);
+      wrapper.setProps({});
+
+      logOutMenuItem = findMenuItem(wrapper, 'Log out');
+      assert.isFalse(logOutMenuItem.prop('isDisabled'));
+    });
+
     const tests = [
       {
         it: 'should be present for first-party user if no service configured',
@@ -270,6 +392,32 @@ describe('UserMenu', () => {
           assert.equal(logOutMenuItem.prop('onClick'), fakeOnLogout);
         }
       });
+    });
+  });
+
+  describe('open dashboard menu item', () => {
+    [
+      { dashboard: undefined, menuShouldExist: false },
+      { dashboard: { showEntryPoint: false }, menuShouldExist: false },
+      { dashboard: { showEntryPoint: true }, menuShouldExist: true },
+    ].forEach(({ dashboard, menuShouldExist }) => {
+      it('shows the menu item only if enabled in settings', () => {
+        fakeSettings.dashboard = dashboard;
+        const wrapper = createUserMenu();
+
+        assert.equal(wrapper.exists('OpenDashboardMenuItem'), menuShouldExist);
+      });
+    });
+
+    it('marks menu item as open when parent menu is open', () => {
+      fakeSettings.dashboard = { showEntryPoint: true };
+      const wrapper = createUserMenu();
+      const isMenuOpen = () =>
+        wrapper.find('OpenDashboardMenuItem').prop('isMenuOpen');
+
+      assert.isFalse(isMenuOpen());
+      openMenu(wrapper);
+      assert.isTrue(isMenuOpen());
     });
   });
 });

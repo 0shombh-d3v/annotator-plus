@@ -29,9 +29,19 @@ describe('annotator/config/settingsFrom', () => {
     it('calls urlFromLinkTag with appropriate params', () => {
       assert.equal(
         settingsFrom(window).notebookAppUrl,
-        'http://example.com/app.html'
+        'http://example.com/app.html',
       );
       assert.calledWith(fakeUrlFromLinkTag, window, 'notebook', 'html');
+    });
+  });
+
+  describe('#profileAppUrl', () => {
+    it('calls urlFromLinkTag with appropriate params', () => {
+      assert.equal(
+        settingsFrom(window).profileAppUrl,
+        'http://example.com/app.html',
+      );
+      assert.calledWith(fakeUrlFromLinkTag, window, 'profile', 'html');
     });
   });
 
@@ -39,7 +49,7 @@ describe('annotator/config/settingsFrom', () => {
     it('calls urlFromLinkTag with appropriate params', () => {
       assert.equal(
         settingsFrom(window).sidebarAppUrl,
-        'http://example.com/app.html'
+        'http://example.com/app.html',
       );
       assert.calledWith(fakeUrlFromLinkTag, window, 'sidebar', 'html');
     });
@@ -49,13 +59,13 @@ describe('annotator/config/settingsFrom', () => {
     it('calls urlFromLinkTag with appropriate params', () => {
       assert.equal(
         settingsFrom(window).clientUrl,
-        'http://example.com/app.html'
+        'http://example.com/app.html',
       );
       assert.calledWith(
         fakeUrlFromLinkTag,
         window,
         'hypothesis-client',
-        'javascript'
+        'javascript',
       );
     });
   });
@@ -75,7 +85,7 @@ describe('annotator/config/settingsFrom', () => {
     context(
       'when the host page has a js-hypothesis-config with an annotations setting',
       () => {
-        beforeEach('add a js-hypothesis-config annotations setting', () => {
+        beforeEach(() => {
           fakeParseJsonConfig.returns({
             annotations: 'annotationsFromJSON',
           });
@@ -84,29 +94,26 @@ describe('annotator/config/settingsFrom', () => {
         it('returns the annotations from the js-hypothesis-config script', () => {
           assert.equal(
             settingsFrom(fakeWindow()).annotations,
-            'annotationsFromJSON'
+            'annotationsFromJSON',
           );
         });
 
         context(
           "when there's also an `annotations` in the URL fragment",
           () => {
-            specify(
-              'js-hypothesis-config annotations override URL ones',
-              () => {
-                const window_ = fakeWindow(
-                  'http://localhost:3000#annotations:annotationsFromURL'
-                );
+            it('overrides URLs with js-hypothesis-config annotations', () => {
+              const window_ = fakeWindow(
+                'http://localhost:3000#annotations:annotationsFromURL',
+              );
 
-                assert.equal(
-                  settingsFrom(window_).annotations,
-                  'annotationsFromJSON'
-                );
-              }
-            );
-          }
+              assert.equal(
+                settingsFrom(window_).annotations,
+                'annotationsFromJSON',
+              );
+            });
+          },
         );
-      }
+      },
     );
 
     [
@@ -139,7 +146,7 @@ describe('annotator/config/settingsFrom', () => {
         it(test.it, () => {
           assert.deepEqual(
             settingsFrom(fakeWindow(test.url)).annotations,
-            test.returns
+            test.returns,
           );
         });
       });
@@ -173,7 +180,7 @@ describe('annotator/config/settingsFrom', () => {
     context(
       'when the host page has a js-hypothesis-config with a query setting',
       () => {
-        beforeEach('add a js-hypothesis-config query setting', () => {
+        beforeEach(() => {
           fakeParseJsonConfig.returns({
             query: 'queryFromJSON',
           });
@@ -184,15 +191,15 @@ describe('annotator/config/settingsFrom', () => {
         });
 
         context("when there's also a query in the URL fragment", () => {
-          specify('js-hypothesis-config queries override URL ones', () => {
+          it('overrides URL query with js-hypothesis-config ones', () => {
             const window_ = fakeWindow(
-              'http://localhost:3000#annotations:query:queryFromUrl'
+              'http://localhost:3000#annotations:query:queryFromUrl',
             );
 
             assert.equal(settingsFrom(window_).query, 'queryFromJSON');
           });
         });
-      }
+      },
     );
 
     [
@@ -243,7 +250,7 @@ describe('annotator/config/settingsFrom', () => {
         it(test.it, () => {
           assert.deepEqual(
             settingsFrom(fakeWindow(test.url)).query,
-            test.returns
+            test.returns,
           );
         });
       });
@@ -328,15 +335,15 @@ describe('annotator/config/settingsFrom', () => {
     [
       {
         when: 'the client is embedded in a web page',
-        specify: 'it returns setting values from window.hypothesisConfig()',
+        title: 'returns setting values from window.hypothesisConfig()',
         configFuncSettings: { foo: 'configFuncValue' },
         jsonSettings: { foo: 'ignored' }, // hypothesisConfig() overrides js-hypothesis-config
         expected: 'configFuncValue',
       },
       {
         when: 'the client is embedded in a web page',
-        specify:
-          'it ignores settings from js-hypothesis-config if `ignoreOtherConfiguration` is present',
+        title:
+          'ignores settings from js-hypothesis-config if `ignoreOtherConfiguration` is present',
         isBrowserExtension: false,
         configFuncSettings: { ignoreOtherConfiguration: '1' },
         jsonSettings: { foo: 'ignored' },
@@ -344,44 +351,97 @@ describe('annotator/config/settingsFrom', () => {
       },
       {
         when: 'the client is embedded in a web page',
-        specify: 'it returns setting values from js-hypothesis-config objects',
+        title: 'returns setting values from js-hypothesis-config objects',
         configFuncSettings: {},
         jsonSettings: { foo: 'jsonValue' },
         expected: 'jsonValue',
       },
       {
         when: 'the client is embedded in a web page',
-        specify:
-          'hypothesisConfig() settings override js-hypothesis-config ones',
+        title:
+          'overrides js-hypothesis-config with hypothesisConfig() settings',
         configFuncSettings: { foo: 'configFuncValue' },
         jsonSettings: { foo: 'jsonValue' },
         expected: 'configFuncValue',
       },
       {
         when: 'the client is embedded in a web page',
-        specify:
-          'even a null from hypothesisConfig() overrides js-hypothesis-config',
+        title:
+          'overrides js-hypothesis-config even with null from hypothesisConfig()',
         configFuncSettings: { foo: null },
         jsonSettings: { foo: 'jsonValue' },
         expected: null,
       },
       {
         when: 'the client is embedded in a web page',
-        specify:
-          'even an undefined from hypothesisConfig() overrides js-hypothesis-config',
+        title:
+          'overrides js-hypothesis-config even with undefined from hypothesisConfig()',
         configFuncSettings: { foo: undefined },
         jsonSettings: { foo: 'jsonValue' },
         expected: undefined,
       },
     ].forEach(test => {
       context(test.when, () => {
-        specify(test.specify, () => {
+        it(test.title, () => {
           fakeConfigFuncSettingsFrom.returns(test.configFuncSettings);
           fakeParseJsonConfig.returns(test.jsonSettings);
           const settings = settingsFrom(fakeWindow());
           const setting = settings.hostPageSetting('foo');
           assert.strictEqual(setting, test.expected);
         });
+      });
+    });
+  });
+
+  describe('#sideBySide', () => {
+    const fakeIsActive = () => true;
+
+    [
+      {
+        input: 'foo',
+        expectedResult: { mode: 'auto' },
+      },
+      {
+        input: {},
+        expectedResult: { mode: 'auto' },
+      },
+      {
+        input: { mode: 'invalid' },
+        expectedResult: { mode: 'auto' },
+      },
+      {
+        input: { mode: 'auto' },
+        expectedResult: { mode: 'auto' },
+      },
+      {
+        input: { mode: 'auto', isActive: fakeIsActive },
+        expectedResult: { mode: 'auto' },
+      },
+      {
+        input: { mode: 'manual', isActive: 42 },
+        expectedResult: { mode: 'manual', isActive: undefined },
+      },
+      {
+        input: { mode: 'manual', isActive: fakeIsActive },
+        expectedResult: { mode: 'manual', isActive: fakeIsActive },
+      },
+    ].forEach(({ input, expectedResult }) => {
+      it('parses config from script', () => {
+        fakeParseJsonConfig.returns({
+          sideBySide: input,
+        });
+        const settings = settingsFrom(fakeWindow());
+
+        assert.deepEqual(settings.sideBySide, expectedResult);
+      });
+
+      it('parses config from window', () => {
+        fakeConfigFuncSettingsFrom.returns({
+          sideBySide: input,
+        });
+        const settings = settingsFrom(fakeWindow());
+
+        assert.deepEqual(settings.sideBySide, expectedResult);
       });
     });
   });

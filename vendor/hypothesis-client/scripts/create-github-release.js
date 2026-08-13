@@ -1,26 +1,30 @@
 #!/usr/bin/env node
-
-'use strict';
-
 /**
  * Creates a GitHub release for the repository.
  *
  * This should be run just after a released is tagged with the tag name
  * `v<VERSION>` where <VERSION> is the `version` field in package.json.
  */
+import { Octokit } from '@octokit/rest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const { Octokit } = require('@octokit/rest');
+import { changelistSinceTag } from './generate-change-list.js';
 
-const pkg = require('../package.json');
-const { changelistSinceTag } = require('./generate-change-list');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(fs.readFileSync(`${__dirname}/../package.json`));
 
 async function createGitHubRelease({ previousVersion }) {
   // See https://github.com/docker/docker/issues/679
-  const GITHUB_ORG_REPO_PAT = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+  const GITHUB_ORG_REPO_PAT =
+    /github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\.git$/;
+  const repoUrl = pkg.repository?.url;
+  const match = repoUrl?.match(GITHUB_ORG_REPO_PAT);
 
-  if (!pkg.repository || !pkg.repository.match(GITHUB_ORG_REPO_PAT)) {
+  if (!match || !match[1]) {
     throw new Error(
-      'package.json is missing a "repository" field of the form :owner/:repo'
+      'package.json is missing a "repository"."url" field of the form git+https://github.com/:owner/:repo',
     );
   }
 
@@ -33,7 +37,7 @@ async function createGitHubRelease({ previousVersion }) {
   });
 
   const changes = await changelistSinceTag(octokit, previousVersion);
-  const [owner, repo] = pkg.repository.split('/');
+  const [owner, repo] = match[1].split('/');
   const releaseName = `v${pkg.version}`;
 
   console.log(
@@ -41,7 +45,7 @@ async function createGitHubRelease({ previousVersion }) {
 Changes since previous release ${previousVersion}:
 
 ${changes}
-`
+`,
   );
 
   await octokit.repos.createRelease({

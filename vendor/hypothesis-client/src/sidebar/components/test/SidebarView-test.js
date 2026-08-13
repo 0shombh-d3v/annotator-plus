@@ -1,14 +1,14 @@
-import { mount } from 'enzyme';
-import { act } from 'preact/test-utils';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 import SidebarView, { $imports } from '../SidebarView';
 
 describe('SidebarView', () => {
   let fakeFrameSync;
   let fakeLoadAnnotationsService;
-  let fakeUseRootThread;
   let fakeStore;
   let fakeStreamer;
   let fakeTabsUtil;
@@ -22,20 +22,17 @@ describe('SidebarView', () => {
         loadAnnotationsService={fakeLoadAnnotationsService}
         streamer={fakeStreamer}
         {...props}
-      />
+      />,
     );
 
   beforeEach(() => {
     fakeFrameSync = {
-      focusAnnotations: sinon.stub(),
+      hoverAnnotation: sinon.stub(),
       scrollToAnnotation: sinon.stub(),
     };
     fakeLoadAnnotationsService = {
       load: sinon.stub(),
     };
-    fakeUseRootThread = sinon.stub().returns({
-      children: [],
-    });
     fakeStreamer = {
       connect: sinon.stub(),
     };
@@ -58,9 +55,9 @@ describe('SidebarView', () => {
       hasSidebarOpened: sinon.stub(),
       isLoading: sinon.stub().returns(false),
       isLoggedIn: sinon.stub(),
+      isSidebarPanelOpen: sinon.stub().returns(false),
       profile: sinon.stub().returns({ userid: null }),
       searchUris: sinon.stub().returns([]),
-      selectedTab: sinon.stub().returns('annotation'),
       toggleFocusMode: sinon.stub(),
     };
 
@@ -70,7 +67,6 @@ describe('SidebarView', () => {
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
-      './hooks/use-root-thread': { useRootThread: fakeUseRootThread },
       '../store': { useSidebarStore: () => fakeStore },
       '../helpers/tabs': fakeTabsUtil,
     });
@@ -113,7 +109,7 @@ describe('SidebarView', () => {
       wrapper.setProps({});
 
       assert.calledOnce(fakeStore.clearSelection);
-      assert.calledWith(fakeStore.toggleFocusMode, true);
+      assert.calledWith(fakeStore.toggleFocusMode, { active: true });
     });
 
     it('does not clear selected annotations when group ID is first set on startup', () => {
@@ -136,24 +132,22 @@ describe('SidebarView', () => {
 
   context('when viewing a direct-linked annotation', () => {
     context('successful direct-linked annotation', () => {
+      let fakeAnnotation;
+
       beforeEach(() => {
+        fakeAnnotation = { $orphan: false, $tag: 'myTag' };
         fakeStore.isLoading.returns(false);
         fakeStore.annotationExists.withArgs('someId').returns(true);
         fakeStore.directLinkedAnnotationId.returns('someId');
-        fakeStore.findAnnotationByID
-          .withArgs('someId')
-          .returns({ $orphan: false, $tag: 'myTag' });
+        fakeStore.findAnnotationByID.withArgs('someId').returns(fakeAnnotation);
       });
 
       it('focuses and scrolls to direct-linked annotations once anchored', () => {
         createComponent();
         assert.calledOnce(fakeFrameSync.scrollToAnnotation);
-        assert.calledWith(fakeFrameSync.scrollToAnnotation, 'myTag');
-        assert.calledOnce(fakeFrameSync.focusAnnotations);
-        assert.calledWith(
-          fakeFrameSync.focusAnnotations,
-          sinon.match(['myTag'])
-        );
+        assert.calledWith(fakeFrameSync.scrollToAnnotation, fakeAnnotation);
+        assert.calledOnce(fakeFrameSync.hoverAnnotation);
+        assert.calledWith(fakeFrameSync.hoverAnnotation, fakeAnnotation);
       });
 
       it('selects the correct tab for direct-linked annotations once anchored', () => {
@@ -197,18 +191,18 @@ describe('SidebarView', () => {
           wrapper
             .find('SidebarContentError')
             .filter({ errorType: 'annotation' })
-            .exists()
+            .exists(),
         );
       });
 
       it('does not render tabs', () => {
         const wrapper = createComponent();
-        assert.isFalse(wrapper.find('SelectionTabs').exists());
+        assert.isFalse(wrapper.find('SidebarTabs').exists());
       });
 
       it('does not render filter status', () => {
         const wrapper = createComponent();
-        assert.isFalse(wrapper.find('FilterStatus').exists());
+        assert.isFalse(wrapper.find('FilterControls').exists());
       });
     });
   });
@@ -226,25 +220,41 @@ describe('SidebarView', () => {
         wrapper
           .find('SidebarContentError')
           .filter({ errorType: 'group' })
-          .exists()
+          .exists(),
       );
     });
 
     it('does not render tabs', () => {
       const wrapper = createComponent();
-      assert.isFalse(wrapper.find('SelectionTabs').exists());
+      assert.isFalse(wrapper.find('SidebarTabs').exists());
     });
 
     it('does not render filter status', () => {
       const wrapper = createComponent();
-      assert.isFalse(wrapper.find('FilterStatus').exists());
+      assert.isFalse(wrapper.find('FilterControls').exists());
     });
   });
 
-  context('user-focus mode', () => {
-    it('shows filter status when focus mode configured', () => {
-      const wrapper = createComponent();
-      assert.isTrue(wrapper.find('FilterStatus').exists());
+  describe('filter controls', () => {
+    [
+      {
+        searchPanelOpen: false,
+        showControls: true,
+      },
+      {
+        searchPanelOpen: true,
+        showControls: false,
+      },
+    ].forEach(({ searchPanelOpen, showControls }) => {
+      it(`renders filter controls when search panel is not open`, () => {
+        fakeStore.isSidebarPanelOpen
+          .withArgs('searchAnnotations')
+          .returns(searchPanelOpen);
+
+        const wrapper = createComponent();
+
+        assert.equal(wrapper.exists('FilterControls'), showControls);
+      });
     });
   });
 
@@ -266,88 +276,10 @@ describe('SidebarView', () => {
     });
   });
 
-  it('renders the filter status', () => {
-    const wrapper = createComponent();
-    assert.isTrue(wrapper.find('FilterStatus').exists());
-  });
-
-  describe('selection tabs', () => {
-    it('renders tabs', () => {
-      const wrapper = createComponent();
-
-      assert.isTrue(wrapper.find('SelectionTabs').exists());
-    });
-
-    it('does not render tabs if there is an applied filter', () => {
-      fakeStore.hasAppliedFilter.returns(true);
-
-      const wrapper = createComponent();
-
-      assert.isFalse(wrapper.find('SelectionTabs').exists());
-    });
-
-    it('does not render tabs if there are selected annotations', () => {
-      fakeStore.hasSelectedAnnotations.returns(true);
-
-      const wrapper = createComponent();
-
-      assert.isFalse(wrapper.find('SelectionTabs').exists());
-    });
-
-    it('filters the thread list to annotations with written notes', () => {
-      const withNote = {
-        annotation: {
-          id: 'with-note',
-          target: [{ selector: [] }],
-          text: 'A written note',
-        },
-      };
-      const highlight = {
-        annotation: {
-          id: 'highlight',
-          target: [{ selector: [] }],
-          text: '',
-        },
-      };
-      const whitespaceOnly = {
-        annotation: {
-          id: 'whitespace',
-          target: [{ selector: [] }],
-          text: '   ',
-        },
-      };
-      const unsavedAnnotation = {
-        annotation: {
-          target: [{ selector: [] }],
-          text: '',
-        },
-      };
-      fakeUseRootThread.returns({
-        children: [withNote, highlight, whitespaceOnly, unsavedAnnotation],
-      });
-
-      const wrapper = createComponent();
-      assert.equal(
-        wrapper.find('SelectionTabs').prop('annotationNoteCount'),
-        1
-      );
-
-      act(() => {
-        wrapper.find('SelectionTabs').prop('onShowOnlyWithNotesChange')(true);
-      });
-      wrapper.update();
-
-      assert.deepEqual(wrapper.find('ThreadList').prop('threads'), [
-        withNote,
-        unsavedAnnotation,
-      ]);
-    });
-  });
-
   it(
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponent(),
-    })
+    }),
   );
 });

@@ -64,7 +64,7 @@ describe('markdown commands', () => {
       const output = toggle(
         parseState('make <sel>math</sel> mathy'),
         '\\(',
-        '\\)'
+        '\\)',
       );
       assert.equal(formatState(output), 'make \\(<sel>math</sel>\\) mathy');
     });
@@ -74,7 +74,7 @@ describe('markdown commands', () => {
         parseState('make <sel></sel> bold'),
         '**',
         undefined,
-        'Bold'
+        'Bold',
       );
       assert.equal(formatState(output), 'make **<sel>Bold</sel>** bold');
     });
@@ -106,10 +106,21 @@ describe('markdown commands', () => {
       it(fixture.tag, () => {
         const output = commands.toggleBlockStyle(
           parseState(fixture.input),
-          '> '
+          '> ',
         );
         assert.equal(formatState(output), fixture.output);
       });
+    });
+
+    it('adds formatting to multi-line blocks', () => {
+      const output = commands.toggleBlockStyle(
+        parseState('one\n<sel>two\nthree\nfour</sel>\nfive'),
+        lineIndex => `::${lineIndex * 2}:: `,
+      );
+      assert.equal(
+        formatState(output),
+        'one\n::0:: <sel>two\n::2:: three\n::4:: four</sel>\nfive',
+      );
     });
   });
 
@@ -124,7 +135,9 @@ describe('markdown commands', () => {
         const output = linkify('one <sel>' + sel + '</sel> three');
         assert.equal(
           formatState(output),
-          'one [' + sel + '](<sel>http://insert-your-link-here.com</sel>) three'
+          'one [' +
+            sel +
+            '](<sel>http://example.com/insert-your-link-here</sel>) three',
         );
       });
     });
@@ -139,7 +152,7 @@ describe('markdown commands', () => {
         const output = linkify('one <sel>' + sel + '</sel> three');
         assert.equal(
           formatState(output),
-          'one [<sel>Description</sel>](' + sel + ') three'
+          'one [<sel>Description</sel>](' + sel + ') three',
         );
       });
     });
@@ -147,11 +160,11 @@ describe('markdown commands', () => {
     it('converts URLs to image links', () => {
       const output = linkify(
         'one <sel>http://foobar.com</sel> three',
-        commands.LinkType.IMAGE_LINK
+        commands.LinkType.IMAGE_LINK,
       );
       assert.equal(
         formatState(output),
-        'one ![<sel>Description</sel>](http://foobar.com) three'
+        'one ![<sel>Description</sel>](http://foobar.com) three',
       );
     });
   });

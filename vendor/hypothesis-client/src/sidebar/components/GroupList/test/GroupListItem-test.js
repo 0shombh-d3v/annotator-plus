@@ -1,12 +1,12 @@
-import { mount } from 'enzyme';
+import { delay } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
-import { delay } from '../../../../test-util/wait';
 import GroupListItem, { $imports } from '../GroupListItem';
 
 describe('GroupListItem', () => {
   let fakeConfirm;
-  let fakeCopyText;
+  let fakeCopyPlainText;
   let fakeToastMessenger;
   let fakeGroupsService;
   let fakeStore;
@@ -47,7 +47,7 @@ describe('GroupListItem', () => {
       leave: sinon.stub(),
     };
 
-    fakeCopyText = sinon.stub();
+    fakeCopyPlainText = sinon.stub();
 
     function FakeMenuItem() {
       return null;
@@ -62,13 +62,13 @@ describe('GroupListItem', () => {
     fakeConfirm = sinon.stub().resolves(false);
 
     $imports.$mock({
+      '@hypothesis/frontend-shared': { confirm: fakeConfirm },
       '../MenuItem': FakeMenuItem,
       '../../util/copy-to-clipboard': {
-        copyText: fakeCopyText,
+        copyPlainText: fakeCopyPlainText,
       },
       '../../helpers/group-list-item-common': fakeGroupListItemCommon,
       '../../store': { useSidebarStore: () => fakeStore },
-      '../../../shared/prompts': { confirm: fakeConfirm },
     });
   });
 
@@ -83,14 +83,14 @@ describe('GroupListItem', () => {
         group={fakeGroup}
         groups={fakeGroupsService}
         {...props}
-      />
+      />,
     );
   };
 
-  function clickMenuItem(wrapper, label) {
-    act(() => {
-      wrapper.find(`MenuItem[label="${label}"]`).props().onClick();
-    });
+  async function clickMenuItem(wrapper, label) {
+    await act(() =>
+      wrapper.find(`MenuItem[label="${label}"]`).props().onClick(),
+    );
     wrapper.update();
   }
 
@@ -127,9 +127,9 @@ describe('GroupListItem', () => {
       .returns(group.organization.name);
 
     const wrapper = createGroupListItem(group);
-    const altText = wrapper.find('MenuItem').prop('iconAlt');
+    const leftContent = wrapper.find('MenuItem').prop('leftChannelContent');
 
-    assert.equal(altText, group.organization.name);
+    assert.equal(leftContent.props.alt, group.organization.name);
   });
 
   describe('selected state', () => {
@@ -152,7 +152,7 @@ describe('GroupListItem', () => {
 
         assert.equal(
           wrapper.find('MenuItem').prop('isSelected'),
-          expectedIsSelected
+          expectedIsSelected,
         );
       });
     });
@@ -199,7 +199,7 @@ describe('GroupListItem', () => {
       const wrapper = createGroupListItem(fakeGroup, { isExpanded });
       assert.equal(
         wrapper.find('MenuItem').prop('isSubmenuVisible'),
-        undefined
+        undefined,
       );
     });
   });
@@ -297,13 +297,13 @@ describe('GroupListItem', () => {
       });
       assert.equal(
         wrapper.find('MenuItem').first().prop('isDisabled'),
-        expectDisabled
+        expectDisabled,
       );
 
       const submenu = getSubmenu(wrapper);
       assert.equal(
         submenu.exists('[data-testid="unselectable-group-note"]'),
-        expectDisabled
+        expectDisabled,
       );
     });
   });
@@ -359,22 +359,72 @@ describe('GroupListItem', () => {
     });
   });
 
-  it('copies activity URL if "Copy link" action is clicked', () => {
+  it('copies activity URL if "Copy link" action is clicked', async () => {
     const wrapper = createGroupListItem(fakeGroup, {
       isExpanded: true,
     });
-    clickMenuItem(getSubmenu(wrapper), 'Copy invite link');
-    assert.calledWith(fakeCopyText, 'https://annotate.com/groups/groupid');
+    await clickMenuItem(getSubmenu(wrapper), 'Copy invite link');
+    assert.calledWith(fakeCopyPlainText, 'https://annotate.com/groups/groupid');
     assert.calledWith(fakeToastMessenger.success, 'Copied link for "Test"');
   });
 
   it('reports an error if "Copy link" action fails', () => {
-    fakeCopyText.throws(new Error('Something went wrong'));
+    fakeCopyPlainText.throws(new Error('Something went wrong'));
     const wrapper = createGroupListItem(fakeGroup, {
       isExpanded: true,
     });
     clickMenuItem(getSubmenu(wrapper), 'Copy invite link');
-    assert.calledWith(fakeCopyText, 'https://annotate.com/groups/groupid');
+    assert.calledWith(fakeCopyPlainText, 'https://annotate.com/groups/groupid');
     assert.calledWith(fakeToastMessenger.error, 'Unable to copy link');
+  });
+
+  const getIcon = label => {
+    return label.find('[data-testid="group-icon"]');
+  };
+
+  [
+    {
+      type: 'private',
+      expectedIcon: 'LockFilledIcon',
+      expectedTitle: 'Private group',
+    },
+    {
+      type: 'restricted',
+      expectedIcon: 'GlobeLockIcon',
+      expectedTitle: 'Restricted group',
+    },
+    {
+      type: 'open',
+      expectedIcon: 'GlobeIcon',
+      expectedTitle: 'Public group',
+    },
+  ].forEach(({ type, expectedIcon, expectedTitle }) => {
+    it('shows the right icon for the group type', () => {
+      const wrapper = createGroupListItem({ ...fakeGroup, type });
+      const label = mount(wrapper.find('MenuItem').prop('label'));
+      const groupIcon = getIcon(label);
+
+      try {
+        assert.equal(groupIcon.prop('title'), expectedTitle);
+        assert.isTrue(groupIcon.exists(expectedIcon));
+      } finally {
+        label.unmount();
+      }
+    });
+  });
+
+  it('does not render group type icon if `showIcon` is false', () => {
+    const wrapper = createGroupListItem(
+      {
+        ...fakeGroup,
+        type: 'private',
+      },
+      {
+        showIcon: false,
+      },
+    );
+    const label = mount(wrapper.find('MenuItem').prop('label'));
+    const groupIcon = getIcon(label);
+    assert.isFalse(groupIcon.exists());
   });
 });

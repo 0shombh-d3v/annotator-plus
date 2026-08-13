@@ -1,16 +1,16 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
 import AutocompleteList from '../AutocompleteList';
 import TagEditor from '../TagEditor';
 import { $imports } from '../TagEditor';
 
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
-
 describe('TagEditor', () => {
-  let containers = [];
-  let fakeTags = ['tag1', 'tag2'];
+  const fakeTags = ['tag1', 'tag2'];
   let fakeTagsService;
   let fakeServiceUrl;
   let fakeOnAddTag;
@@ -18,11 +18,6 @@ describe('TagEditor', () => {
   let fakeOnTagInput;
 
   function createComponent(props) {
-    // Use an array of containers so we can test more
-    // than one component at a time.
-    let newContainer = document.createElement('div');
-    containers.push(newContainer);
-    document.body.appendChild(newContainer);
     return mount(
       <TagEditor
         // props
@@ -35,7 +30,7 @@ describe('TagEditor', () => {
         tags={fakeTagsService}
         {...props}
       />,
-      { attachTo: newContainer }
+      { connected: true },
     );
   }
 
@@ -51,10 +46,6 @@ describe('TagEditor', () => {
   });
 
   afterEach(() => {
-    containers.forEach(container => {
-      container.remove();
-    });
-    containers = [];
     $imports.$restore();
   });
 
@@ -223,7 +214,10 @@ describe('TagEditor', () => {
       wrapper.find('input').instance().value = 'non-empty';
       typeInput(wrapper);
       assert.equal(wrapper.find('AutocompleteList').prop('open'), true);
-      document.body.dispatchEvent(new Event('focus'));
+      wrapper
+        .find('[data-testid="combobox-container"]')
+        .getDOMNode()
+        .dispatchEvent(new Event('focusout'));
       wrapper.update();
       assert.equal(wrapper.find('AutocompleteList').prop('open'), false);
     });
@@ -396,7 +390,7 @@ describe('TagEditor', () => {
         assert.equal(tagListItems.length, 2);
         assert.equal(
           tagListItems.first().props().onRemoveTag,
-          wrapper.props().onRemoveTag
+          wrapper.props().onRemoveTag,
         );
       });
     });
@@ -453,23 +447,13 @@ describe('TagEditor', () => {
   });
 
   describe('accessibility attributes and ids', () => {
-    const comboboxSelector = '[data-testid="combobox-container"]';
+    const comboboxSelector = 'input[role="combobox"]';
     it('creates multiple <TagEditor> components with unique AutocompleteList `id` props', () => {
       const wrapper1 = createComponent();
       const wrapper2 = createComponent();
       assert.notEqual(
         wrapper1.find('AutocompleteList').prop('id'),
-        wrapper2.find('AutocompleteList').prop('id')
-      );
-    });
-
-    it('sets the <AutocompleteList> `id` prop to the same value as the `aria-owns` attribute', () => {
-      const wrapper = createComponent();
-      wrapper.find('AutocompleteList');
-
-      assert.equal(
-        wrapper.find(comboboxSelector).prop('aria-owns'),
-        wrapper.find('AutocompleteList').prop('id')
+        wrapper2.find('AutocompleteList').prop('id'),
       );
     });
 
@@ -477,16 +461,10 @@ describe('TagEditor', () => {
       const wrapper = createComponent();
       wrapper.find('input').instance().value = 'non-empty'; // to open list
       typeInput(wrapper);
-      assert.equal(
-        wrapper.find(comboboxSelector).prop('aria-expanded'),
-        'true'
-      );
+      assert.equal(wrapper.find(comboboxSelector).prop('aria-expanded'), true);
       selectOption(wrapper, 'tag4');
       wrapper.update();
-      assert.equal(
-        wrapper.find(comboboxSelector).prop('aria-expanded'),
-        'false'
-      );
+      assert.equal(wrapper.find(comboboxSelector).prop('aria-expanded'), false);
     });
 
     it('sets the <AutocompleteList> `activeItem` prop to match the selected item index', () => {
@@ -500,7 +478,7 @@ describe('TagEditor', () => {
         const activeDescendantIndex = activeDescendant.split(itemPrefixId);
         assert.equal(
           activeDescendantIndex[1],
-          wrapper.find('AutocompleteList').prop('activeItem')
+          wrapper.find('AutocompleteList').prop('activeItem'),
         );
       }
 
@@ -553,7 +531,7 @@ describe('TagEditor', () => {
             return createComponent();
           },
         },
-      ])
+      ]),
     );
   });
 });

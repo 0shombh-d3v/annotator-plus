@@ -1,20 +1,12 @@
 import * as sharingUtil from '../annotation-sharing';
 
 describe('sidebar/helpers/annotation-sharing', () => {
-  let fakeAnnotation;
   let fakeServiceConfig;
   let fakeServiceSettings;
 
   beforeEach(() => {
     fakeServiceSettings = {};
     fakeServiceConfig = sinon.stub().returns(fakeServiceSettings);
-    fakeAnnotation = {
-      links: {
-        incontext: 'https://www.example.com',
-        html: 'https://www.example2.com',
-      },
-      uri: 'https://www.example3.com',
-    };
 
     sharingUtil.$imports.$mock({
       '../config/service-config': { serviceConfig: fakeServiceConfig },
@@ -25,75 +17,17 @@ describe('sidebar/helpers/annotation-sharing', () => {
     sharingUtil.$imports.$restore();
   });
 
-  describe('annotationSharingLink', () => {
-    context('sharing an annotation whose document is on the web', () => {
-      it('returns `incontext` link if set on annotation', () => {
-        assert.equal(
-          sharingUtil.annotationSharingLink(fakeAnnotation),
-          'https://www.example.com'
-        );
-      });
-
-      it('returns `html` link if `incontext` link not set on annotation', () => {
-        delete fakeAnnotation.links.incontext;
-
-        assert.equal(
-          sharingUtil.annotationSharingLink(fakeAnnotation),
-          'https://www.example2.com'
-        );
-      });
-
-      it('returns null if links empty', () => {
-        delete fakeAnnotation.links.incontext;
-        delete fakeAnnotation.links.html;
-
-        assert.isNull(sharingUtil.annotationSharingLink(fakeAnnotation));
-      });
-
-      it('returns null if no links on annotation', () => {
-        delete fakeAnnotation.links;
-
-        assert.isNull(sharingUtil.annotationSharingLink(fakeAnnotation));
-      });
-    });
-
-    context('sharing an annotation whose document is not on the web', () => {
-      beforeEach(() => {
-        fakeAnnotation.uri = 'file://not-on-web';
-      });
-
-      it('returns `html` link if set on annotation', () => {
-        assert.equal(
-          sharingUtil.annotationSharingLink(fakeAnnotation),
-          'https://www.example2.com'
-        );
-      });
-
-      it('returns null if no `html` link', () => {
-        delete fakeAnnotation.links.html;
-
-        assert.isNull(sharingUtil.annotationSharingLink(fakeAnnotation));
-      });
-
-      it('returns null if no links on annotation', () => {
-        delete fakeAnnotation.links;
-
-        assert.isNull(sharingUtil.annotationSharingLink(fakeAnnotation));
-      });
-    });
-  });
-
   describe('pageSharingLink', () => {
     it('generates a bouncer link based on the document URI and group id', () => {
       assert.equal(
         sharingUtil.pageSharingLink('https://www.example.com', 'testprivate'),
-        'https://hyp.is/go?url=https%3A%2F%2Fwww.example.com&group=testprivate'
+        'https://hyp.is/go?url=https%3A%2F%2Fwww.example.com&group=testprivate',
       );
     });
 
     it('returns null if the `documentURI` is not a shareable URI', () => {
       assert.isNull(
-        sharingUtil.pageSharingLink('file://on-my-computer.pdf', 'testprivate')
+        sharingUtil.pageSharingLink('file://on-my-computer.pdf', 'testprivate'),
       );
     });
   });
@@ -144,7 +78,7 @@ describe('sidebar/helpers/annotation-sharing', () => {
       assert.isTrue(sharingUtil.sharingEnabled({}));
     });
 
-    it('returns false if service settings really sets it to nope', () => {
+    it('returns false if service settings really sets it to `false`', () => {
       fakeServiceConfig.returns({ enableShareLinks: false });
       assert.isFalse(sharingUtil.sharingEnabled({}));
     });

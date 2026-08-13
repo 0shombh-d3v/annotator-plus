@@ -1,5 +1,4 @@
-import EventEmitter from 'tiny-emitter';
-
+import { EventEmitter } from '../../../shared/event-emitter';
 import { call, notify, $imports } from '../postmessage-json-rpc';
 
 class FakeWindow {
@@ -162,7 +161,7 @@ describe('sidebar/util/postmessage-json-rpc', () => {
     it('rejects with an error if the timeout is exceeded', async () => {
       await assert.rejects(
         doCall(),
-        'Request to https://embedder.com timed out'
+        'Request to https://embedder.com timed out',
       );
     });
 

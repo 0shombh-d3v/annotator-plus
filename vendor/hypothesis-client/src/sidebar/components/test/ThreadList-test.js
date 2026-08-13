@@ -1,11 +1,13 @@
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
 import { mount } from 'enzyme';
 import { act } from 'preact/test-utils';
+import sinon from 'sinon';
 
 import ThreadList from '../ThreadList';
 import { $imports } from '../ThreadList';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('ThreadList', () => {
   let fakeDomUtil;
@@ -13,6 +15,7 @@ describe('ThreadList', () => {
   let fakeScrollContainer;
   let fakeStore;
   let fakeVisibleThreadsUtil;
+  let fakeMostRelevantAnnotation;
   let wrappers;
 
   function createComponent(props) {
@@ -20,10 +23,23 @@ describe('ThreadList', () => {
       <ThreadList threads={fakeTopThread.children} {...props} />,
       {
         attachTo: fakeScrollContainer,
-      }
+      },
     );
     wrappers.push(wrapper);
     return wrapper;
+  }
+
+  function createThread(tag, target) {
+    const defaultTarget = [
+      {
+        source: 'https://example.com',
+      },
+    ];
+    return {
+      id: tag,
+      children: [],
+      annotation: { $tag: tag, target: target ?? defaultTarget },
+    };
   }
 
   beforeEach(() => {
@@ -40,35 +56,49 @@ describe('ThreadList', () => {
     fakeStore = {
       setForcedVisible: sinon.stub(),
       unsavedAnnotations: sinon.stub().returns([]),
+      countDrafts: sinon.stub().returns(0),
+      highlightedAnnotations: sinon.stub().returns([]),
+      allAnnotations: sinon.stub().returns([]),
+      profile: sinon.stub().returns({ userid: 'current_user_id' }),
     };
 
     fakeTopThread = {
       id: 't0',
-      annotation: { $tag: 'myTag0' },
       children: [
-        { id: 't1', children: [], annotation: { $tag: 't1' } },
-        { id: 't2', children: [], annotation: { $tag: 't2' } },
-        { id: 't3', children: [], annotation: { $tag: 't3' } },
-        { id: 't4', children: [], annotation: { $tag: 't4' } },
+        createThread('t1'),
+        createThread('t2'),
+        createThread('t3'),
+
+        // Add an annotation with an empty target. This matches how new
+        // (but not saved) page notes are currently created.
+        createThread('t4', []),
       ],
     };
 
     fakeVisibleThreadsUtil = {
-      calculateVisibleThreads: sinon.stub().returns({
+      // nb. Use `callsFake` here rather than `returns` to always use
+      // latest `fakeTopThread.children` reference.
+      calculateVisibleThreads: sinon.stub().callsFake(() => ({
         visibleThreads: fakeTopThread.children,
         offscreenUpperHeight: 400,
         offscreenLowerHeight: 600,
-      }),
+        offscreenThreadsAbove: 0,
+      })),
       THREAD_DIMENSION_DEFAULTS: {
         defaultHeight: 200,
       },
     };
+
+    fakeMostRelevantAnnotation = sinon.stub();
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
       '../store': { useSidebarStore: () => fakeStore },
       '../util/dom': fakeDomUtil,
       '../helpers/visible-threads': fakeVisibleThreadsUtil,
+      '../helpers/highlighted-annotations': {
+        mostRelevantAnnotation: fakeMostRelevantAnnotation,
+      },
     });
     sinon.stub(console, 'warn');
   });
@@ -89,7 +119,7 @@ describe('ThreadList', () => {
       fakeTopThread.children,
       sinon.match({}),
       0,
-      sinon.match.number
+      sinon.match.number,
     );
   });
 
@@ -126,6 +156,9 @@ describe('ThreadList', () => {
     beforeEach(() => {
       fakeScrollTop = sinon.stub();
       sinon.stub(fakeScrollContainer, 'scrollTop').set(fakeScrollTop);
+      // We've interfered with the setter, so we need to ensure that
+      // `scrollTop`'s getter provides a valid number
+      sinon.stub(fakeScrollContainer, 'scrollTop').get(() => 0);
       sinon
         .stub(document, 'querySelector')
         .withArgs('.js-thread-list-scroll-root')
@@ -156,9 +189,40 @@ describe('ThreadList', () => {
       addNewAnnotation(wrapper, fakeTopThread.children[3].annotation);
 
       // The third thread in a collection of threads at default height (200)
-      // should be at 600px. This setting of `scrollTop` is the only externally-
-      // observable thing that happens here...
+      // should be at 600px. This setting of `scrollTop` is the only
+      // externally-observable thing that happens here...
       assert.calledWith(fakeScrollTop, 600);
+    });
+
+    it('should do nothing for highlighted annotations while creating/editing', () => {
+      fakeStore.highlightedAnnotations.returns(['t2', 't3']);
+      fakeStore.countDrafts.returns(10);
+      createComponent();
+
+      assert.notCalled(fakeScrollTop);
+    });
+
+    [
+      { mostRelevantAnno: 0, expectedScrollTop: 0 },
+      { mostRelevantAnno: 1, expectedScrollTop: 200 },
+      { mostRelevantAnno: 2, expectedScrollTop: 400 },
+      { mostRelevantAnno: 3, expectedScrollTop: 600 },
+    ].forEach(({ mostRelevantAnno, expectedScrollTop }) => {
+      it('should set the scroll container `scrollTop` to the most relevant annotation', () => {
+        const allAnnotations = [
+          { id: 't1', updated: '2024-01-01T10:42:00' },
+          { id: 't2', updated: '2024-01-02T10:42:00' },
+          { id: 't3', updated: '2024-01-03T10:42:00' },
+          { id: 't4', updated: '2024-01-04T10:42:00' },
+        ];
+
+        fakeMostRelevantAnnotation.returns(allAnnotations[mostRelevantAnno]);
+        fakeStore.allAnnotations.returns(allAnnotations);
+
+        createComponent();
+
+        assert.calledWith(fakeScrollTop, expectedScrollTop);
+      });
     });
   });
 
@@ -261,7 +325,7 @@ describe('ThreadList', () => {
         getRect(cards.at(1)).top - getRect(cards.at(0)).bottom;
       const totalThreadHeight = fakeTopThread.children.reduce(
         (totalHeight, thread) => totalHeight + threadHeights[thread.id],
-        0
+        0,
       );
       const expectedScrollHeight =
         totalThreadHeight + spaceBelowEachCard * fakeTopThread.children.length;
@@ -274,7 +338,7 @@ describe('ThreadList', () => {
       const defaultThreadHeight = 200;
       assert.equal(
         lowerSpacer.getBoundingClientRect().height % defaultThreadHeight,
-        0
+        0,
       );
 
       // Scroll through the list "slowly", such that we render every thread at
@@ -302,6 +366,100 @@ describe('ThreadList', () => {
     assert.equal(cards.length, fakeTopThread.children.length);
   });
 
+  it('calculates aria list attributes', () => {
+    const wrapper = createComponent();
+    const items = wrapper.find('[role="listitem"]');
+
+    assert.lengthOf(items, 4);
+    items.forEach((item, index) => {
+      // All items should have `aria-setsize` with the total amount of threads
+      // (visible and hidden)
+      assert.equal('4', item.prop('aria-setsize'));
+      assert.equal(`${index + 1}`, item.prop('aria-posinset'));
+    });
+  });
+
+  describe('chapter headings', () => {
+    const addThreadInChapter = (cfi, title) => {
+      const id = `t${fakeTopThread.children.length + 1}`;
+      const thread = createThread(id);
+      thread.annotation.target[0].selector = [
+        {
+          type: 'EPUBContentSelector',
+          cfi,
+          title,
+        },
+      ];
+      fakeTopThread.children.push(thread);
+    };
+
+    const getHeading = container => {
+      const heading = container.find('h3');
+      return heading.exists() ? heading.text() : null;
+    };
+
+    beforeEach(() => {
+      fakeTopThread.children = [];
+    });
+
+    it('renders section headings above first annotation from each section', () => {
+      // Add two groups of annotations.
+      addThreadInChapter('/2/4', 'Chapter One');
+      addThreadInChapter('/2/4', 'Chapter One');
+      addThreadInChapter('/2/6', 'Chapter Two');
+      addThreadInChapter('/2/6', 'Chapter Two');
+
+      // When annotations are sorted by date, rather than location, headings
+      // may be repeated.
+      addThreadInChapter('/2/4', 'Chapter One');
+      addThreadInChapter('/2/4', 'Chapter One');
+
+      const wrapper = createComponent();
+
+      const containers = wrapper.find('[data-testid="thread-card-container"]');
+      assert.equal(containers.length, fakeTopThread.children.length);
+      assert.equal(getHeading(containers.at(0)), 'Chapter One');
+      assert.equal(getHeading(containers.at(1)), null);
+      assert.equal(getHeading(containers.at(2)), 'Chapter Two');
+      assert.equal(getHeading(containers.at(3)), null);
+      assert.equal(getHeading(containers.at(4)), 'Chapter One');
+      assert.equal(getHeading(containers.at(5)), null);
+    });
+
+    it('uses last non-empty heading for each chapter', () => {
+      // Add annotations for same chapter but with different captured headings.
+      addThreadInChapter('/2/4', 'Chapter 1');
+      addThreadInChapter('/2/4', 'Chapter One');
+      addThreadInChapter('/2/4', undefined);
+
+      // Add an annotation for a different chapter with no associated heading.
+      addThreadInChapter('/2/8', undefined);
+
+      const wrapper = createComponent();
+
+      const containers = wrapper.find('[data-testid="thread-card-container"]');
+      assert.equal(containers.length, fakeTopThread.children.length);
+      assert.equal(getHeading(containers.at(0)), 'Chapter One');
+      assert.equal(getHeading(containers.at(1)), null);
+      assert.equal(getHeading(containers.at(2)), null);
+      assert.equal(getHeading(containers.at(3)), 'Untitled chapter');
+    });
+
+    it('does not render heading if same as previous chapter', () => {
+      // Add two annotations from different chapters/document segments, but
+      // with the same heading.
+      addThreadInChapter('/4', 'Chapter One');
+      addThreadInChapter('/6', 'Chapter One');
+
+      const wrapper = createComponent();
+
+      const containers = wrapper.find('[data-testid="thread-card-container"]');
+      assert.equal(containers.length, fakeTopThread.children.length);
+      assert.equal(getHeading(containers.at(0)), 'Chapter One');
+      assert.equal(getHeading(containers.at(1)), null);
+    });
+  });
+
   it('does not error if thread heights cannot be measured', () => {
     // Render the `ThreadList` unconnected to a document. This will prevent
     // it from being able to measure the height of rendered threads.
@@ -309,17 +467,14 @@ describe('ThreadList', () => {
     wrappers.push(wrapper);
     assert.calledWith(
       console.warn,
-      'ThreadList could not measure thread. Element not found.'
+      'ThreadList could not measure thread. Element not found.',
     );
   });
 
   it(
     'should pass a11y checks',
     checkAccessibility({
-      content: () => {
-        const wrapper = createComponent();
-        return wrapper;
-      },
-    })
+      content: () => createComponent(),
+    }),
   );
 });

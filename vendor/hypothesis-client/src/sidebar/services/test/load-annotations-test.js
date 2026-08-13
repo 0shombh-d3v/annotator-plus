@@ -1,5 +1,4 @@
-import EventEmitter from 'tiny-emitter';
-
+import { EventEmitter } from '../../../shared/event-emitter';
 import { LoadAnnotationsService, $imports } from '../load-annotations';
 
 let searchClients;
@@ -13,7 +12,7 @@ class FakeSearchClient extends EventEmitter {
       sortBy = 'created',
       sortOrder = 'asc',
       maxResults = null,
-    }
+    },
   ) {
     super();
 
@@ -110,13 +109,13 @@ describe('LoadAnnotationsService', () => {
     fakeStore.frames.returns(
       fakeUris.map(uri => {
         return { uri };
-      })
+      }),
     );
     return new LoadAnnotationsService(
       fakeApi,
       fakeStore,
       fakeStreamer,
-      fakeStreamFilter
+      fakeStreamFilter,
     );
   }
 
@@ -231,12 +230,12 @@ describe('LoadAnnotationsService', () => {
       assert.calledWith(
         fakeStore.updateFrameAnnotationFetchStatus,
         fakeUris[0],
-        true
+        true,
       );
       assert.calledWith(
         fakeStore.updateFrameAnnotationFetchStatus,
         fakeUris[1],
-        true
+        true,
       );
     });
 
@@ -383,7 +382,7 @@ describe('LoadAnnotationsService', () => {
   });
 
   describe('#loadThread', () => {
-    let threadAnnotations = [
+    const threadAnnotations = [
       { id: 'parent_annotation_1' },
       { id: 'parent_annotation_2', references: ['parent_annotation_1'] },
       {
@@ -417,7 +416,7 @@ describe('LoadAnnotationsService', () => {
 
         assert.calledWith(
           fakeApi.annotation.get,
-          sinon.match({ id: 'target_annotation' })
+          sinon.match({ id: 'target_annotation' }),
         );
       });
 
@@ -435,7 +434,7 @@ describe('LoadAnnotationsService', () => {
         const svc = createService();
         try {
           await svc.loadThread('target_annotation');
-        } catch (e) {
+        } catch {
           assert.calledOnce(fakeStore.annotationFetchStarted);
           assert.calledOnce(fakeStore.annotationFetchFinished);
         }
@@ -460,7 +459,7 @@ describe('LoadAnnotationsService', () => {
 
         assert.calledWith(
           fakeApi.annotation.get,
-          sinon.match({ id: 'parent_annotation_1' })
+          sinon.match({ id: 'parent_annotation_1' }),
         );
       });
     });
@@ -486,7 +485,7 @@ describe('LoadAnnotationsService', () => {
 
         assert.calledWith(
           fakeApi.search,
-          sinon.match({ references: 'parent_annotation_1' })
+          sinon.match({ references: 'parent_annotation_1' }),
         );
       });
 
@@ -552,19 +551,19 @@ describe('LoadAnnotationsService', () => {
           '/references',
           'one_of',
           'parent_annotation_1',
-          true
+          true,
         );
         assert.calledWith(
           fakeAddClause,
           '/id',
           'equals',
           'parent_annotation_1',
-          true
+          true,
         );
         assert.calledWith(
           fakeStreamer.setConfig,
           'filter',
-          sinon.match({ filter: 'filter' })
+          sinon.match({ filter: 'filter' }),
         );
         assert.calledOnce(fakeStreamer.connect);
       });

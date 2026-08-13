@@ -1,5 +1,5 @@
-import { buildThread } from '../build-thread';
 import * as metadata from '../../helpers/annotation-metadata';
+import { buildThread } from '../build-thread';
 
 // Fixture with two top level annotations, one note and one reply
 const SIMPLE_FIXTURE = [
@@ -64,7 +64,7 @@ function createThread(fixture, options, keys) {
 
   const rootThread = filter(
     buildThread(fixture, opts),
-    keys.concat(['annotation', 'children'])
+    keys.concat(['annotation', 'children']),
   );
   return rootThread.children;
 }
@@ -361,7 +361,7 @@ describe('sidebar/helpers/build-thread', () => {
           {
             filterFn: annot => annot.text.match(/first/),
           },
-          ['visible']
+          ['visible'],
         );
         assert.deepEqual(threads, [
           {
@@ -393,7 +393,7 @@ describe('sidebar/helpers/build-thread', () => {
           {
             filterFn: annot => annot.text.match(/third/),
           },
-          ['visible']
+          ['visible'],
         );
         assert.deepEqual(threads, [
           {
@@ -413,16 +413,27 @@ describe('sidebar/helpers/build-thread', () => {
 
     context('when there is a selection', () => {
       it('shows only selected annotations', () => {
-        const thread = createThread(SIMPLE_FIXTURE, {
-          selected: ['1'],
-        });
+        const thread = createThread(
+          SIMPLE_FIXTURE,
+          {
+            selected: ['1'],
+
+            // Other thread and annotation-level filters should be ignored
+            // when there is a selection.
+            threadFilterFn: () => false,
+            filterFn: () => false,
+          },
+          ['visible'],
+        );
         assert.deepEqual(thread, [
           {
             annotation: SIMPLE_FIXTURE[0],
+            visible: true,
             children: [
               {
                 annotation: SIMPLE_FIXTURE[2],
                 children: [],
+                visible: true,
               },
             ],
           },
@@ -464,16 +475,26 @@ describe('sidebar/helpers/build-thread', () => {
           text: 'note',
           target: [{ selector: undefined }],
         },
+        {
+          id: '3',
+          text: 'annotation',
+          target: [{ selector: undefined }],
+        },
       ];
 
-      it('shows only annotations matching the thread filter', () => {
+      it('shows only annotations matching the thread filter and forced-visible threads', () => {
         const thread = createThread(fixture, {
           threadFilterFn: thread => metadata.isPageNote(thread.annotation),
+          forcedVisible: ['3'],
         });
 
         assert.deepEqual(thread, [
           {
             annotation: fixture[1],
+            children: [],
+          },
+          {
+            annotation: fixture[2],
             children: [],
           },
         ]);

@@ -1,7 +1,6 @@
-import { mount } from 'enzyme';
+import { mockImportedComponents, waitFor } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
-import { waitFor } from '../../../test-util/wait';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 import AnnotationView, { $imports } from '../AnnotationView';
 
 describe('AnnotationView', () => {
@@ -26,7 +25,9 @@ describe('AnnotationView', () => {
     fakeOnLogin = sinon.stub();
 
     fakeUseRootThread = sinon.stub().returns({
-      children: [],
+      rootThread: {
+        children: [],
+      },
     });
 
     $imports.$mock(mockImportedComponents());
@@ -46,7 +47,7 @@ describe('AnnotationView', () => {
         loadAnnotationsService={fakeLoadAnnotationsService}
         onLogin={fakeOnLogin}
         {...props}
-      />
+      />,
     );
   }
 
@@ -126,7 +127,7 @@ describe('AnnotationView', () => {
       await new Promise(resolve => setTimeout(resolve, 0));
       assert.calledWith(
         fakeStore.highlightAnnotations,
-        sinon.match(['test_annotation_id'])
+        sinon.match(['test_annotation_id']),
       );
     });
   });

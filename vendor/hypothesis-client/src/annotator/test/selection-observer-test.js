@@ -11,7 +11,7 @@ describe('SelectionObserver', () => {
     return testDocument.getSelection().getRangeAt(0);
   }
 
-  before(() => {
+  beforeAll(() => {
     frame = document.createElement('iframe');
     document.body.append(frame);
     testDocument = frame.contentDocument;
@@ -21,7 +21,7 @@ describe('SelectionObserver', () => {
     assert.isNotNull(getSelectedRange());
   });
 
-  after(() => {
+  afterAll(() => {
     frame.remove();
   });
 
@@ -77,6 +77,42 @@ describe('SelectionObserver', () => {
       assert.notCalled(onSelectionChanged);
       clock.tick(20);
       assert.called(onSelectionChanged);
+    });
+
+    it('uses longer delay for selectionchange (keyboard) than for mouseup', () => {
+      testDocument.dispatchEvent(new Event('selectionchange'));
+      clock.tick(50);
+      assert.notCalled(onSelectionChanged);
+      clock.tick(60);
+      assert.calledWith(onSelectionChanged, getSelectedRange());
+    });
+
+    it('handles multiple rapid selectionchange events correctly', () => {
+      // Dispatch multiple selectionchange events rapidly
+      testDocument.dispatchEvent(new Event('selectionchange'));
+      clock.tick(50);
+      testDocument.dispatchEvent(new Event('selectionchange'));
+      clock.tick(50);
+      testDocument.dispatchEvent(new Event('selectionchange'));
+      clock.tick(50);
+      // Should not have called yet
+      assert.notCalled(onSelectionChanged);
+      // After the delay period, should call once
+      clock.tick(60);
+      assert.calledOnce(onSelectionChanged);
+    });
+
+    it('cancels pending callback when new event arrives', () => {
+      testDocument.dispatchEvent(new Event('selectionchange'));
+      clock.tick(50);
+      // Dispatch another event before the first callback fires
+      testDocument.dispatchEvent(new Event('selectionchange'));
+      clock.tick(50);
+      // Should not have called yet (callback was cancelled and rescheduled)
+      assert.notCalled(onSelectionChanged);
+      // After the delay period, should call once
+      clock.tick(60);
+      assert.calledOnce(onSelectionChanged);
     });
   });
 });

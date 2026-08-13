@@ -1,4 +1,4 @@
-import { mount } from 'enzyme';
+import { mount } from '@hypothesis/frontend-testing';
 import { render } from 'preact';
 
 import { ServiceContext, withServices, useService } from '../service-context';
@@ -27,7 +27,7 @@ describe('sidebar/service-context', () => {
         <ServiceContext.Provider value={injector}>
           <WrappedComponent />
         </ServiceContext.Provider>,
-        container
+        container,
       );
       assert.deepEqual(lastProps, { aService: testService });
       assert.calledWith(injector.get, 'aService');
@@ -42,7 +42,7 @@ describe('sidebar/service-context', () => {
         <ServiceContext.Provider value={injector}>
           <WrappedComponent aService={testService} />
         </ServiceContext.Provider>,
-        container
+        container,
       );
       assert.notCalled(injector.get);
     });
@@ -66,7 +66,7 @@ describe('sidebar/service-context', () => {
       const wrapper = mount(
         <ServiceContext.Provider value={injector}>
           <TestComponent />
-        </ServiceContext.Provider>
+        </ServiceContext.Provider>,
       );
       assert.equal(wrapper.text(), 'aValue');
     });

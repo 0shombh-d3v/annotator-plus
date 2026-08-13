@@ -1,4 +1,5 @@
-import { delay } from '../../../test-util/wait';
+import { delay } from '@hypothesis/frontend-testing';
+
 import { ImageTextLayer } from '../image-text-layer';
 
 // Sizes and spacing between character bounding boxes in these tests, expressed
@@ -10,13 +11,22 @@ const lineSpacing = 0.1;
 
 /**
  * Create character bounding box data for text in an image.
+ *
+ * Lines are broken after new-line chars and also before any indicies in
+ * `breakPositions`.
  */
-function createCharBoxes(text) {
+function createCharBoxes(text, breakPositions = []) {
   const charBoxes = [];
   let lineIndex = 0;
   let charIndex = 0;
 
-  for (let char of text) {
+  for (let i = 0; i < text.length; i++) {
+    if (breakPositions.includes(i)) {
+      charIndex = 0;
+      ++lineIndex;
+    }
+
+    const char = text[i];
     charBoxes.push({
       left: charIndex * charSpacing,
       right: charIndex * charSpacing + charWidth,
@@ -62,7 +72,7 @@ function expectedBoxOffsetAndSize(
   imageHeight,
   lineIndex,
   charIndex,
-  text
+  text,
 ) {
   const width =
     (text.length - 1) * charSpacing * imageWidth + charWidth * imageWidth;
@@ -166,7 +176,7 @@ describe('ImageTextLayer', () => {
     const textLayer = createTextLayer(
       image,
       createCharBoxes(imageText),
-      imageText
+      imageText,
     );
 
     assert.equal(textLayer.container.textContent, 'first line second line');
@@ -174,7 +184,7 @@ describe('ImageTextLayer', () => {
     assert.equal(wordBoxes.length, imageText.split(/\s+/).length);
     assert.deepEqual(
       wordBoxes.map(ws => ws.textContent),
-      ['first ', 'line ', 'second ', 'line']
+      ['first ', 'line ', 'second ', 'line'],
     );
 
     const imageBox = image.getBoundingClientRect();
@@ -200,6 +210,23 @@ describe('ImageTextLayer', () => {
     assert.deepEqual(wordBoxPositions, expectedPositions);
   });
 
+  it('breaks words when characters do not overlap vertically', () => {
+    const { image } = createPageImage();
+    const imageText = 'first linesecond line';
+    const textLayer = createTextLayer(
+      image,
+      createCharBoxes(imageText, [imageText.indexOf('second')]),
+      imageText,
+    );
+
+    assert.equal(textLayer.container.textContent, 'first linesecond line');
+    const wordBoxes = getWordBoxes(textLayer);
+    assert.deepEqual(
+      wordBoxes.map(ws => ws.textContent),
+      ['first ', 'line', 'second ', 'line'],
+    );
+  });
+
   it('creates lines and columns in the text layer', () => {
     const { image } = createPageImage();
     const textLayer = createTextLayer(
@@ -210,11 +237,11 @@ describe('ImageTextLayer', () => {
         ...createCharBoxes('first line\nsecond line\n'),
         ...createCharBoxes('third line\nfourth line'),
       ],
-      'first line\nsecond line\nthird line\nfourth line'
+      'first line\nsecond line\nthird line\nfourth line',
     );
 
     const columns = textLayer.container.querySelectorAll(
-      'hypothesis-text-column'
+      'hypothesis-text-column',
     );
     assert.equal(columns.length, 2);
     assert.equal(columns[0].textContent, 'first line second line ');
@@ -240,12 +267,12 @@ describe('ImageTextLayer', () => {
       const textLayer = createTextLayer(
         image,
         createCharBoxes(imageText),
-        imageText
+        imageText,
       );
       const textLayerEl = container.querySelector('hypothesis-text-layer');
 
       const originalBoxes = getWordBoxes(textLayer).map(box =>
-        untransformedBoundingRect(box)
+        untransformedBoundingRect(box),
       );
 
       // Rescale image to 3/5 of original size.
@@ -267,12 +294,12 @@ describe('ImageTextLayer', () => {
       // reflect the new scale of the image.
       const ratio = 3 / 5;
       const newBoxes = getWordBoxes(textLayer).map(box =>
-        untransformedBoundingRect(box)
+        untransformedBoundingRect(box),
       );
 
       const tolerance = 0.01;
       assert.equal(originalBoxes.length, newBoxes.length);
-      for (let [i, originalBox] of originalBoxes.entries()) {
+      for (const [i, originalBox] of originalBoxes.entries()) {
         const newBox = newBoxes[i];
 
         const leftGap = originalBox.left - imageBox.left;
@@ -286,12 +313,12 @@ describe('ImageTextLayer', () => {
         assert.approximately(
           newBox.width,
           originalBox.width * ratio,
-          tolerance
+          tolerance,
         );
         assert.approximately(
           newBox.height,
           originalBox.height * ratio,
-          tolerance
+          tolerance,
         );
       }
     } finally {
@@ -335,7 +362,7 @@ describe('ImageTextLayer', () => {
       const textLayer = createTextLayer(
         image,
         createCharBoxes(imageText),
-        imageText
+        imageText,
       );
 
       // Spy on logic that is invoked each time a resize event is handled.
@@ -356,7 +383,7 @@ describe('ImageTextLayer', () => {
       const textLayer = createTextLayer(
         image,
         createCharBoxes(imageText),
-        imageText
+        imageText,
       );
 
       textLayer.destroy();
@@ -371,7 +398,7 @@ describe('ImageTextLayer', () => {
       const textLayer = createTextLayer(
         image,
         createCharBoxes(imageText),
-        imageText
+        imageText,
       );
 
       // Trigger an error if ImageTextLayer's resize logic is run.

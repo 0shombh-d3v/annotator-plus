@@ -1,36 +1,19 @@
-import { Icon, Link, LinkButton } from '@hypothesis/frontend-shared';
-import type { ComponentChildren as Children } from 'preact';
-import { useCallback, useMemo, useState } from 'preact/hooks';
+import { Card, Link, Tab } from '@hypothesis/frontend-shared';
+import { ExternalIcon } from '@hypothesis/frontend-shared';
+import classnames from 'classnames';
+import { useCallback, useId, useMemo, useState } from 'preact/hooks';
 
-import type { AuthState } from '../helpers/version-data';
-import { useSidebarStore } from '../store';
-import type { SessionService } from '../services/session';
-import { withServices } from '../service-context';
+import type { SidebarSettings } from '../../types/config';
+import { username } from '../helpers/account-id';
 import { VersionData } from '../helpers/version-data';
-
+import { withServices } from '../service-context';
+import type { SessionService } from '../services/session';
+import { useSidebarStore } from '../store';
 import SidebarPanel from './SidebarPanel';
 import Tutorial from './Tutorial';
 import VersionInfo from './VersionInfo';
-
-type HelpPanelNavigationButtonProps = {
-  children: Children;
-  onClick: (e: Event) => void;
-};
-
-/**
- * Navigation link-button to swap between sub-panels in the help panel
- */
-function HelpPanelNavigationButton({
-  children,
-  onClick,
-}: HelpPanelNavigationButtonProps) {
-  return (
-    <LinkButton classes="leading-none text-brand" onClick={onClick}>
-      {children}
-      <Icon classes="ml-1" name="arrow-right" />
-    </LinkButton>
-  );
-}
+import TabHeader from './tabs/TabHeader';
+import TabPanel from './tabs/TabPanel';
 
 type HelpPanelTabProps = {
   /** What the tab's link should say. */
@@ -40,34 +23,45 @@ type HelpPanelTabProps = {
 };
 
 /**
- * External link "tabs" inside of the help panel.
+ * External link "tabs" at the bottom of the help panel.
  */
 function HelpPanelTab({ linkText, url }: HelpPanelTabProps) {
   return (
-    <div className="flex-1 border-r last-of-type:border-r-0">
-      <Link
-        href={url}
-        classes="flex items-center justify-center space-x-2 text-color-text-light text-lg font-medium"
-        target="_blank"
-      >
-        <span>{linkText}</span> <Icon name="external" classes="w-3 h-3" />
+    <div
+      // Set this element's flex-basis and also establish
+      // a flex container (centered on both axes)
+      className="flex-1 flex items-center justify-center border-r last-of-type:border-r-0 text-md font-medium"
+    >
+      <Link variant="text-light" href={url} target="_blank" underline="none">
+        <div className="flex items-center gap-x-2">
+          <span>{linkText}</span> <ExternalIcon className="w-3 h-3" />
+        </div>
       </Link>
     </div>
   );
 }
 
 type HelpPanelProps = {
-  auth: AuthState;
   session: SessionService;
+  settings: SidebarSettings;
 };
+
+type PanelKey = 'tutorial' | 'versionInfo';
 
 /**
  * A help sidebar panel with two sub-panels: tutorial and version info.
  */
-function HelpPanel({ auth, session }: HelpPanelProps) {
+function HelpPanel({ session, settings }: HelpPanelProps) {
   const store = useSidebarStore();
   const frames = store.frames();
   const mainFrame = store.mainFrame();
+  const profile = store.profile();
+  const displayName =
+    profile.user_info?.display_name ?? username(profile.userid);
+  const tutorialTabId = useId();
+  const tutorialPanelId = useId();
+  const versionTabId = useId();
+  const versionPanelId = useId();
 
   // Should this panel be auto-opened at app launch? Note that the actual
   // auto-open triggering of this panel is owned by the `HypothesisApp` component.
@@ -76,22 +70,16 @@ function HelpPanel({ auth, session }: HelpPanelProps) {
   const hasAutoDisplayPreference =
     !!store.profile().preferences.show_sidebar_tutorial;
 
-  const subPanelTitles = {
-    tutorial: 'Getting started',
-    versionInfo: 'About this version',
-  };
-  type PanelKey = keyof typeof subPanelTitles;
-
   // The "Tutorial" (getting started) subpanel is the default panel shown
-  const [activeSubPanel, setActiveSubPanel] = useState<PanelKey>('tutorial');
+  const [activeSubPanel, setActiveSubPanel] = useState<PanelKey>(
+    settings.commentsMode ? 'versionInfo' : 'tutorial',
+  );
 
   // Build version details about this session/app
   const versionData = useMemo(() => {
-    const userInfo = auth || { status: 'logged-out' };
-
     // Sort frames so the main frame is listed first. Other frames will retain
     // their original order, assuming a stable sort.
-    const documentInfo = [...frames].sort((a, b) => {
+    const documentFrames = [...frames].sort((a, b) => {
       if (a === mainFrame) {
         return -1;
       } else if (b === mainFrame) {
@@ -101,17 +89,15 @@ function HelpPanel({ auth, session }: HelpPanelProps) {
       }
     });
 
-    return new VersionData(userInfo, documentInfo);
-  }, [auth, frames, mainFrame]);
+    return new VersionData(
+      { userid: profile.userid, displayName },
+      documentFrames,
+    );
+  }, [profile, displayName, frames, mainFrame]);
 
   // The support ticket URL encodes some version info in it to pre-fill in the
   // create-new-ticket form
   const supportTicketURL = `https://web.hypothes.is/get-help/?sys_info=${versionData.asEncodedURLString()}`;
-
-  const openSubPanel = (e: Event, panelName: PanelKey) => {
-    e.preventDefault();
-    setActiveSubPanel(panelName);
-  };
 
   const onActiveChanged = useCallback(
     (active: boolean) => {
@@ -122,51 +108,78 @@ function HelpPanel({ auth, session }: HelpPanelProps) {
         session.dismissSidebarTutorial();
       }
     },
-    [session, hasAutoDisplayPreference]
+    [session, hasAutoDisplayPreference],
   );
 
   return (
     <SidebarPanel
-      title="Help"
+      label="Help panel"
       panelName="help"
       onActiveChanged={onActiveChanged}
     >
-      <div className="space-y-4">
-        <div className="flex items-center">
-          <h3 className="grow text-lg font-medium" data-testid="subpanel-title">
-            {subPanelTitles[activeSubPanel]}
-          </h3>
-          {activeSubPanel === 'versionInfo' && (
-            <HelpPanelNavigationButton
-              onClick={e => openSubPanel(e, 'tutorial')}
+      <TabHeader closeTitle="Close help panel">
+        {!settings.commentsMode && (
+          <Tab
+            id={tutorialTabId}
+            aria-controls={tutorialPanelId}
+            variant="tab"
+            textContent="Help"
+            selected={activeSubPanel === 'tutorial'}
+            onClick={() => setActiveSubPanel('tutorial')}
+            data-testid="tutorial-tab"
+          >
+            Help
+          </Tab>
+        )}
+        <Tab
+          id={versionTabId}
+          aria-controls={versionPanelId}
+          variant="tab"
+          textContent="Version"
+          selected={activeSubPanel === 'versionInfo'}
+          onClick={() => setActiveSubPanel('versionInfo')}
+          data-testid="version-info-tab"
+        >
+          Version
+        </Tab>
+      </TabHeader>
+      <Card
+        classes={classnames({
+          'rounded-tl-none':
+            activeSubPanel === 'tutorial' || settings.commentsMode,
+        })}
+      >
+        <div className="border-b">
+          {!settings.commentsMode && (
+            <TabPanel
+              id={tutorialPanelId}
+              aria-labelledby={tutorialTabId}
+              active={activeSubPanel === 'tutorial'}
+              title="Getting started"
+              data-testid="tutorial-panel"
             >
-              Getting started
-            </HelpPanelNavigationButton>
+              <Tutorial />
+            </TabPanel>
           )}
-          {activeSubPanel === 'tutorial' && (
-            <HelpPanelNavigationButton
-              onClick={e => openSubPanel(e, 'versionInfo')}
-            >
-              About this version
-            </HelpPanelNavigationButton>
-          )}
-        </div>
-        <div className="border-y py-4">
-          {activeSubPanel === 'tutorial' && <Tutorial />}
-          {activeSubPanel === 'versionInfo' && (
+          <TabPanel
+            id={versionPanelId}
+            aria-labelledby={versionTabId}
+            active={activeSubPanel === 'versionInfo'}
+            title="Version details"
+          >
             <VersionInfo versionData={versionData} />
-          )}
+          </TabPanel>
         </div>
-        <div className="flex items-center">
+        <div className="flex items-center p-3">
           <HelpPanelTab
             linkText="Help topics"
             url="https://web.hypothes.is/help/"
           />
           <HelpPanelTab linkText="New support ticket" url={supportTicketURL} />
         </div>
-      </div>
+      </Card>
     </SidebarPanel>
   );
 }
 
-export default withServices(HelpPanel, ['session']);
+export default withServices(HelpPanel, ['session', 'settings']);

@@ -42,7 +42,23 @@ export function nodeToString(node) {
 export function assertNodesEqual(actual, expected) {
   if (actual !== expected) {
     throw new Error(
-      `Expected ${nodeToString(actual)} to equal ${nodeToString(expected)}`
+      `Expected ${nodeToString(actual)} to equal ${nodeToString(expected)}`,
     );
   }
+}
+
+/**
+ * Return all the `Text` descendants of `node`
+ *
+ * @param {Node} node
+ * @return {Text[]}
+ */
+export function textNodes(node) {
+  const nodes = [];
+  const iter = document.createNodeIterator(node, NodeFilter.SHOW_TEXT);
+  let current;
+  while ((current = iter.nextNode())) {
+    nodes.push(current);
+  }
+  return nodes;
 }

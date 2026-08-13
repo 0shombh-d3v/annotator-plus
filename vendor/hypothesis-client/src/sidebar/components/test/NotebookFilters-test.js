@@ -1,9 +1,9 @@
-import { mount } from 'enzyme';
+import { ProfileIcon } from '@hypothesis/frontend-shared';
+import { mockImportedComponents } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import NotebookFilters from '../NotebookFilters';
 import { $imports } from '../NotebookFilters';
-
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('NotebookFilters', () => {
   let fakeStore;
@@ -47,7 +47,7 @@ describe('NotebookFilters', () => {
       value: 'oneuser',
     });
     assert.deepEqual(props.defaultOption, { value: '', display: 'Everybody' });
-    assert.equal(props.icon, 'profile');
+    assert.equal(props.icon, ProfileIcon);
     assert.equal(props.title, 'Filter by user');
     assert.equal(props.options.length, 1);
     assert.isUndefined(props.selectedOption);
@@ -85,7 +85,7 @@ describe('NotebookFilters', () => {
     assert.calledWith(
       fakeStore.setFilter,
       'user',
-      sinon.match({ display: 'One User', value: 'oneuser' })
+      sinon.match({ display: 'One User', value: 'oneuser' }),
     );
   });
 });

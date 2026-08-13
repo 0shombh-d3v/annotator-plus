@@ -9,7 +9,6 @@
  ** Dual licensed under the MIT and GPLv3 licenses.
  ** https://github.com/openannotation/annotator/blob/master/LICENSE
  */
-
 import { HTMLMetadata } from '../html-metadata';
 
 describe('HTMLMetadata', () => {
@@ -83,7 +82,7 @@ describe('HTMLMetadata', () => {
         },
       ];
 
-      for (let source of sources) {
+      for (const source of sources) {
         const metadata = testDocument.getDocumentMetadata();
         assert.equal(metadata.title, source.value);
 
@@ -212,7 +211,7 @@ describe('HTMLMetadata', () => {
         assert.equal(metadata.link[4].rel, 'shortlink');
         assert.equal(
           metadata.link[4].href,
-          'http://example.com/bookmark/short'
+          'http://example.com/bookmark/short',
         );
         assert.equal(metadata.link[5].rel, 'canonical');
         assert.equal(metadata.link[5].href, 'http://example.com/canonical');
@@ -226,7 +225,7 @@ describe('HTMLMetadata', () => {
         // and <identifier> is the percent-encoded value of the last dc.identifier meta element.
         assert.equal(
           metadata.link[9].href,
-          'urn:x-dc:isbn%3A123456789/foobar-abcxyz'
+          'urn:x-dc:isbn%3A123456789/foobar-abcxyz',
         );
       });
 
@@ -290,6 +289,132 @@ describe('HTMLMetadata', () => {
     });
   });
 
+  describe('#_getVersion', () => {
+    function setVersionMeta(id, publicUrl, canonicalHref) {
+      let html = '';
+      if (id) {
+        html += `<meta name="citation_id" content="${id}">`;
+      }
+      if (publicUrl) {
+        html += `<meta name="citation_public_url" content="${publicUrl}">`;
+      }
+      if (canonicalHref) {
+        html += `<link rel="canonical" href="${canonicalHref}">`;
+      }
+      tempDocumentHead.innerHTML = html;
+    }
+
+    it('returns version when all three sources agree', () => {
+      setVersionMeta(
+        'doc-v3',
+        'https://example.com/doc-v3',
+        'https://example.com/doc-v3',
+      );
+      const metadata = testDocument.getDocumentMetadata();
+      assert.equal(metadata.version, 3);
+    });
+
+    it('returns null when sources have different versions', () => {
+      setVersionMeta(
+        'doc-v3',
+        'https://example.com/doc-v5',
+        'https://example.com/doc-v3',
+      );
+      const metadata = testDocument.getDocumentMetadata();
+      assert.isUndefined(metadata.version);
+    });
+
+    it('returns null when one source is missing a version', () => {
+      setVersionMeta(
+        'doc-v3',
+        'https://example.com/doc',
+        'https://example.com/doc-v3',
+      );
+      const metadata = testDocument.getDocumentMetadata();
+      assert.isUndefined(metadata.version);
+    });
+
+    it('returns null when no sources have a version', () => {
+      setVersionMeta(
+        'doc-abc',
+        'https://example.com/doc',
+        'https://example.com/doc',
+      );
+      const metadata = testDocument.getDocumentMetadata();
+      assert.isUndefined(metadata.version);
+    });
+
+    it('returns null when canonical link is missing', () => {
+      tempDocumentHead.innerHTML = `
+        <meta name="citation_id" content="doc-v3">
+        <meta name="citation_public_url" content="https://example.com/doc-v3">
+      `;
+      const metadata = testDocument.getDocumentMetadata();
+      assert.isUndefined(metadata.version);
+    });
+
+    it('returns null when citation_id is missing', () => {
+      tempDocumentHead.innerHTML = `
+        <meta name="citation_public_url" content="https://example.com/doc-v3">
+        <link rel="canonical" href="https://example.com/doc-v3">
+      `;
+      const metadata = testDocument.getDocumentMetadata();
+      assert.isUndefined(metadata.version);
+    });
+
+    it('accepts versions from v1 to v25', () => {
+      setVersionMeta(
+        'doc-v1',
+        'https://example.com/doc-v1',
+        'https://example.com/doc-v1',
+      );
+      assert.equal(testDocument.getDocumentMetadata().version, 1);
+
+      setVersionMeta(
+        'doc-v25',
+        'https://example.com/doc-v25',
+        'https://example.com/doc-v25',
+      );
+      assert.equal(testDocument.getDocumentMetadata().version, 25);
+    });
+
+    it('rejects versions above 25', () => {
+      setVersionMeta(
+        'doc-v26',
+        'https://example.com/doc-v26',
+        'https://example.com/doc-v26',
+      );
+      assert.isUndefined(testDocument.getDocumentMetadata().version);
+    });
+
+    it('rejects version 0', () => {
+      setVersionMeta(
+        'doc-v0',
+        'https://example.com/doc-v0',
+        'https://example.com/doc-v0',
+      );
+      assert.isUndefined(testDocument.getDocumentMetadata().version);
+    });
+
+    it('is case insensitive for version suffix', () => {
+      setVersionMeta(
+        'doc-V3',
+        'https://example.com/doc-V3',
+        'https://example.com/doc-V3',
+      );
+      assert.equal(testDocument.getDocumentMetadata().version, 3);
+    });
+
+    it('does not match version embedded in a word', () => {
+      setVersionMeta(
+        'docrev3',
+        'https://example.com/docrev3',
+        'https://example.com/docrev3',
+      );
+      assert.isUndefined(testDocument.getDocumentMetadata().version);
+    });
+  });
+
   describe('#_absoluteUrl', () => {
     it('should add the protocol when the url starts with two slashes', () => {
       const result = testDocument._absoluteUrl('//example.com/');
@@ -343,9 +468,9 @@ describe('HTMLMetadata', () => {
       // location in tests, create a proxy object in front of our blank HTML
       // document.
       const fakeDocument = {
-        createElement: htmlDoc.createElement.bind(htmlDoc), // eslint-disable-line no-restricted-properties
+        createElement: htmlDoc.createElement.bind(htmlDoc),
         baseURI: baseURI ?? href,
-        querySelectorAll: htmlDoc.querySelectorAll.bind(htmlDoc), // eslint-disable-line no-restricted-properties
+        querySelectorAll: htmlDoc.querySelectorAll.bind(htmlDoc),
         location: {
           href,
         },
@@ -365,7 +490,7 @@ describe('HTMLMetadata', () => {
         const baseURI = 'https://publisher.org/';
         const doc = createDoc(href, baseURI);
         assert.equal(doc.uri(), href);
-      })
+      }),
     );
 
     it("should return the baseURI if the document's URL does not have an allowed scheme", () => {
@@ -401,10 +526,29 @@ describe('HTMLMetadata', () => {
       const doc = createDoc(
         'https://publisher.org/not-canonical',
         null,
-        htmlDoc
+        htmlDoc,
       );
 
       assert.equal(doc.uri(), canonicalLink.href);
+    });
+
+    it('should log an error if URI is not decodable', () => {
+      // '%%CUST_ID%%' is an invalid escape sequence, so it will throw a URIError when decoded
+      const badURI = 'https://example.com/?foo=%%CUST_ID%%';
+      const doc = createDoc(badURI);
+      const consoleErrorSpy = sinon.stub(console, 'error');
+
+      try {
+        assert.equal(badURI, doc.uri());
+        assert.calledOnce(consoleErrorSpy);
+        assert.calledWith(
+          consoleErrorSpy,
+          'Error decoding URI:',
+          sinon.match.instanceOf(URIError),
+        );
+      } finally {
+        console.error.restore();
+      }
     });
   });
 });

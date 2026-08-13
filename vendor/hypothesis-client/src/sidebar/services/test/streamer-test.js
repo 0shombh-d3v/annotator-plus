@@ -1,6 +1,7 @@
-import EventEmitter from 'tiny-emitter';
+import { delay } from '@hypothesis/frontend-testing';
+import sinon from 'sinon';
 
-import { delay } from '../../../test-util/wait';
+import { EventEmitter } from '../../../shared/event-emitter';
 import { fakeReduxStore } from '../../test/fake-redux-store';
 import { StreamerService, $imports } from '../streamer';
 
@@ -81,6 +82,7 @@ describe('StreamerService', () => {
   let fakeSession;
   let fakeWarnOnce;
   let activeStreamer;
+  let fakeSetTimeout;
 
   function createDefaultStreamer() {
     activeStreamer = new StreamerService(
@@ -88,8 +90,21 @@ describe('StreamerService', () => {
       fakeAPIRoutes,
       fakeAuth,
       fakeGroups,
-      fakeSession
+      fakeSession,
+      { setTimeout: fakeSetTimeout },
     );
+  }
+
+  function timeoutAsPromise() {
+    const { resolve, promise } = Promise.withResolvers();
+    fakeSetTimeout.callsFake(callback =>
+      setTimeout(() => {
+        callback();
+        resolve();
+      }, 0),
+    );
+
+    return promise;
   }
 
   beforeEach(() => {
@@ -114,7 +129,10 @@ describe('StreamerService', () => {
         }),
         receiveRealTimeUpdates: sinon.stub(),
         removeAnnotations: sinon.stub(),
-      }
+        highlightAnnotations: sinon.stub(),
+        selectTab: sinon.stub(),
+        setAnnotationFocusRequest: sinon.stub(),
+      },
     );
 
     fakeGroups = {
@@ -127,6 +145,7 @@ describe('StreamerService', () => {
     };
 
     fakeWarnOnce = sinon.stub();
+    fakeSetTimeout = sinon.stub();
 
     $imports.$mock({
       '../../shared/warn-once': { warnOnce: fakeWarnOnce },
@@ -164,7 +183,7 @@ describe('StreamerService', () => {
     createDefaultStreamer();
     return activeStreamer.connect().then(() => {
       const clientIdMsg = fakeWebSocket.messages.find(
-        msg => msg.messageType === 'client_id'
+        msg => msg.messageType === 'client_id',
       );
       assert.ok(clientIdMsg);
       assert.equal(clientIdMsg.value, activeStreamer.clientId);
@@ -175,7 +194,7 @@ describe('StreamerService', () => {
     createDefaultStreamer();
     return activeStreamer.connect().then(() => {
       const whoamiMsg = fakeWebSocket.messages.find(
-        msg => msg.type === 'whoami'
+        msg => msg.type === 'whoami',
       );
       assert.ok(whoamiMsg);
     });
@@ -202,7 +221,7 @@ describe('StreamerService', () => {
       return activeStreamer.connect().then(() => {
         assert.equal(
           fakeWebSocket.url,
-          'ws://example.com/ws?access_token=dummy-access-token'
+          'ws://example.com/ws?access_token=dummy-access-token',
         );
       });
     });
@@ -215,7 +234,7 @@ describe('StreamerService', () => {
       return activeStreamer.connect().then(() => {
         assert.equal(
           fakeWebSocket.url,
-          'ws://example.com/ws?foo=bar&access_token=dummy-access-token'
+          'ws://example.com/ws?foo=bar&access_token=dummy-access-token',
         );
       });
     });
@@ -317,7 +336,7 @@ describe('StreamerService', () => {
       assert.lengthOf(fakeWebSockets, 10);
       assert.calledWith(
         console.error,
-        'Gave up trying to reconnect to Hypothesis real time update service'
+        'Gave up trying to reconnect to Hypothesis real time update service',
       );
     });
 
@@ -350,7 +369,7 @@ describe('StreamerService', () => {
     assert.calledWith(
       fakeWarnOnce,
       'Error connecting to H push notification service:',
-      event
+      event,
     );
   });
 
@@ -374,7 +393,7 @@ describe('StreamerService', () => {
     assert.calledWith(
       fakeWarnOnce,
       'Received unsupported notification',
-      'unknown-event'
+      'unknown-event',
     );
   });
 
@@ -388,7 +407,8 @@ describe('StreamerService', () => {
         return activeStreamer.connect();
       });
 
-      it('applies updates immediately', () => {
+      it('applies updates immediately and highlights annotations', async () => {
+        const timeoutPromise = timeoutAsPromise();
         const [ann] = fixtures.createNotification.payload;
         fakeStore.pendingUpdates.returns({
           [ann.id]: ann,
@@ -401,8 +421,37 @@ describe('StreamerService', () => {
         });
         assert.calledWith(
           fakeStore.addAnnotations,
-          fixtures.createNotification.payload
+          fixtures.createNotification.payload,
         );
+        assert.calledWith(
+          fakeStore.highlightAnnotations,
+          fixtures.createNotification.payload.map(({ id }) => id),
+        );
+        assert.calledWith(fakeSetTimeout, sinon.match.func, 5000);
+
+        await timeoutPromise;
+        assert.calledWith(fakeStore.highlightAnnotations, []);
+      });
+
+      it('handles "past" notifications', () => {
+        const pastNotification = {
+          type: 'annotation-notification',
+          options: { action: 'past' },
+          payload: [{ id: 'past-id' }],
+        };
+        fakeWebSocket.notify(pastNotification);
+        assert.calledWith(fakeStore.receiveRealTimeUpdates, {
+          updatedAnnotations: pastNotification.payload,
+        });
+      });
+
+      it('ignores unknown actions', () => {
+        fakeWebSocket.notify({
+          type: 'annotation-notification',
+          options: { action: 'unknown' },
+          payload: [],
+        });
+        assert.notCalled(fakeStore.receiveRealTimeUpdates);
       });
     });
 
@@ -457,7 +506,7 @@ describe('StreamerService', () => {
 
       assert.calledWithMatch(
         fakeStore.removeAnnotations,
-        sinon.match([{ id: 'an-id' }])
+        sinon.match([{ id: 'an-id' }]),
       );
     });
 
@@ -465,6 +514,44 @@ describe('StreamerService', () => {
       fakeWebSocket.notify(fixtures.createNotification);
       activeStreamer.applyPendingUpdates();
       assert.calledWith(fakeStore.clearPendingUpdates);
+    });
+
+    it('focuses the oldest updated annotation and selects the correct tab', () => {
+      const updates = {
+        newest: {
+          id: 'newest',
+          updated: '2024-01-02T00:00:00Z',
+          target: [{ selector: [{ type: 'TextQuoteSelector' }] }],
+        },
+        oldest: {
+          id: 'oldest',
+          updated: '2024-01-01T00:00:00Z',
+          target: [],
+        },
+      };
+      fakeStore.pendingUpdates.returns(updates);
+
+      activeStreamer.applyPendingUpdates();
+
+      assert.calledWith(fakeStore.selectTab, 'note');
+      assert.calledWith(fakeStore.setAnnotationFocusRequest, 'oldest');
+    });
+
+    it('does not focus if no updates have IDs', () => {
+      fakeStore.pendingUpdates.returns({
+        'no-id': { updated: '2024-01-01T00:00:00Z' },
+      });
+      activeStreamer.applyPendingUpdates();
+      assert.notCalled(fakeStore.setAnnotationFocusRequest);
+    });
+
+    it('does nothing if there are no pending updates or deletions', () => {
+      fakeStore.pendingUpdates.returns({});
+      fakeStore.pendingDeletions.returns({});
+      activeStreamer.applyPendingUpdates();
+      assert.notCalled(fakeStore.addAnnotations);
+      assert.notCalled(fakeStore.removeAnnotations);
+      assert.called(fakeStore.clearPendingUpdates);
     });
   });
 
@@ -546,6 +633,30 @@ describe('StreamerService', () => {
           assert.called(console.warn);
         });
       });
+    });
+  });
+
+  describe('#setConfig', () => {
+    it('sends configuration messages immediately if connected', async () => {
+      createDefaultStreamer();
+      await activeStreamer.connect();
+      fakeWebSocket.messages = [];
+
+      activeStreamer.setConfig('test', { foo: 'bar' });
+      assert.deepEqual(fakeWebSocket.messages, [{ foo: 'bar' }]);
+    });
+
+    it('does not send null configuration messages on reconnect', async () => {
+      createDefaultStreamer();
+      activeStreamer.setConfig('test', null);
+      await activeStreamer.connect();
+
+      // Reconnect to trigger _sendClientConfig
+      fakeWebSocket.messages = [];
+      fakeWebSocket.emit('open');
+
+      const testMsg = fakeWebSocket.messages.find(msg => msg === null);
+      assert.isUndefined(testMsg);
     });
   });
 

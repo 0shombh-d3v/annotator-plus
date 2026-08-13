@@ -1,14 +1,12 @@
-import { mount } from 'enzyme';
-
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
-import { waitFor } from '../../../test-util/wait';
+import { mockImportedComponents, waitFor } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import StreamView, { $imports } from '../StreamView';
 
 describe('StreamView', () => {
   let fakeApi;
   let fakeUseRootThread;
-  let fakeSearchFilter;
+  let fakeQueryParser;
   let fakeStore;
   let fakeToastMessenger;
 
@@ -18,11 +16,13 @@ describe('StreamView', () => {
     };
 
     fakeUseRootThread = sinon.stub().returns({
-      children: [],
+      rootThread: {
+        children: [],
+      },
     });
 
-    fakeSearchFilter = {
-      toObject: sinon.stub().returns({}),
+    fakeQueryParser = {
+      parseHypothesisSearchQuery: sinon.stub().returns({}),
     };
 
     fakeStore = {
@@ -42,7 +42,7 @@ describe('StreamView', () => {
     $imports.$mock({
       './hooks/use-root-thread': { useRootThread: fakeUseRootThread },
       '../store': { useSidebarStore: () => fakeStore },
-      '../util/search-filter': fakeSearchFilter,
+      '../helpers/query-parser': fakeQueryParser,
     });
   });
 
@@ -52,7 +52,7 @@ describe('StreamView', () => {
 
   function createComponent() {
     return mount(
-      <StreamView api={fakeApi} toastMessenger={fakeToastMessenger} />
+      <StreamView api={fakeApi} toastMessenger={fakeToastMessenger} />,
     );
   }
 
@@ -98,6 +98,9 @@ describe('StreamView', () => {
       'reply_2',
       'reply_3',
     ]);
+
+    // Assert that we use an empty string as query, when the `q` param is not set
+    assert.calledWith(fakeQueryParser.parseHypothesisSearchQuery, '');
   });
 
   it('displays an error if fetching annotations fails', async () => {
@@ -108,7 +111,7 @@ describe('StreamView', () => {
 
     assert.calledWith(
       fakeToastMessenger.error,
-      'Unable to fetch annotations: Server error'
+      'Unable to fetch annotations: Server error',
     );
   });
 

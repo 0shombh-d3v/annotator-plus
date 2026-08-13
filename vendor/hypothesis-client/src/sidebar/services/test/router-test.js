@@ -1,4 +1,4 @@
-import EventEmitter from 'tiny-emitter';
+import { EventEmitter } from '../../../shared/event-emitter';
 import { RouterService } from '../router';
 
 const fixtures = [
@@ -13,6 +13,11 @@ const fixtures = [
   {
     path: '/notebook',
     route: 'notebook',
+    params: {},
+  },
+  {
+    path: '/user-profile',
+    route: 'profile',
     params: {},
   },
   {

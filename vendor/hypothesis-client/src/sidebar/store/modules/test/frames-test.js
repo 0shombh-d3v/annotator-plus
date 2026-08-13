@@ -108,6 +108,39 @@ describe('sidebar/store/modules/frames', () => {
     });
   });
 
+  describe('#defaultContentFrame', () => {
+    it('returns `null` if no frames are connected', () => {
+      assert.isNull(store.defaultContentFrame());
+    });
+
+    [
+      {
+        frames: [{ id: null, uri: 'https://example.org' }],
+        expectedFrame: 0,
+      },
+      {
+        frames: [
+          { id: 'iframe1', uri: 'https://foo.com/' },
+          { id: 'iframe2', uri: 'https://foo.com/' },
+          { id: null, uri: 'https://example.org' },
+        ],
+        expectedFrame: 2,
+      },
+      {
+        frames: [
+          { id: 'iframe1', uri: 'https://foo.com/' },
+          { id: 'iframe2', uri: 'https://example.org' },
+        ],
+        expectedFrame: 0,
+      },
+    ].forEach(({ frames, expectedFrame }) => {
+      it('returns the main frame or first connected frame', () => {
+        frames.forEach(frame => store.connectFrame(frame));
+        assert.equal(store.defaultContentFrame(), frames[expectedFrame]);
+      });
+    });
+  });
+
   describe('#searchUris', () => {
     [
       {
@@ -179,6 +212,81 @@ describe('sidebar/store/modules/frames', () => {
           },
         ],
         searchUris: ['https://publisher.org/article.html', 'doi:10.1.1/1234'],
+      },
+      {
+        when: 'version 1 includes v0 annotations',
+        frames: [
+          {
+            uri: 'https://publisher.org/article.html',
+            metadata: {
+              version: 1,
+              link: [],
+            },
+          },
+        ],
+        searchUris: ['https://publisher.org/article.html:v0:v1'],
+      },
+      {
+        when: 'version > 1 only searches its own version',
+        frames: [
+          {
+            uri: 'https://publisher.org/article.html',
+            metadata: {
+              version: 3,
+              link: [],
+            },
+          },
+        ],
+        searchUris: ['https://publisher.org/article.html:v3'],
+      },
+      {
+        when: 'a PDF frame with version > 1 only searches its own version',
+        frames: [
+          {
+            uri: 'https://publisher.org/article.pdf',
+            metadata: {
+              documentFingerprint: '1234',
+              version: 5,
+              link: [
+                {
+                  href: 'urn:x-pdf:1234',
+                },
+                {
+                  href: 'https://publisher.org/article.pdf?from_meta_link=1',
+                },
+              ],
+            },
+          },
+        ],
+        searchUris: [
+          'urn:x-pdf:1234:v5',
+          'https://publisher.org/article.pdf?from_meta_link=1:v5',
+        ],
+      },
+      {
+        when: 'the document metadata has no version',
+        frames: [
+          {
+            uri: 'https://publisher.org/article.html',
+            metadata: {
+              link: [],
+            },
+          },
+        ],
+        searchUris: ['https://publisher.org/article.html'],
+      },
+      {
+        when: 'the document metadata has version 0 (base version)',
+        frames: [
+          {
+            uri: 'https://publisher.org/article.html',
+            metadata: {
+              version: 0,
+              link: [],
+            },
+          },
+        ],
+        searchUris: ['https://publisher.org/article.html'],
       },
     ].forEach(testCase => {
       it(testCase.when, () => {

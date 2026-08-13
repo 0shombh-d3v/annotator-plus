@@ -1,14 +1,15 @@
-import classnames from 'classnames';
 import {
   AnnotateIcon,
-  ButtonBase,
+  Button,
   HighlightIcon,
   PointerDownIcon,
   PointerUpIcon,
-} from '@hypothesis/frontend-shared/lib/next';
-import type { IconComponent } from '@hypothesis/frontend-shared/lib/types';
+} from '@hypothesis/frontend-shared';
+import type { IconComponent } from '@hypothesis/frontend-shared';
+import classnames from 'classnames';
 
 import { useShortcut } from '../../shared/shortcut';
+import { useShortcutsConfig } from '../../shared/shortcut-config';
 
 /**
  * Render an inverted light-on-dark "pill" with the given `badgeCount`
@@ -22,7 +23,7 @@ function NumberIcon({ badgeCount }: { badgeCount: number }) {
         'rounded px-1 py-0.5',
         // The background color is inherited from the current text color in
         // the containing button and will vary depending on hover state.
-        'bg-current'
+        'bg-current',
       )}
     >
       <span className="font-bold text-color-text-inverted">{badgeCount}</span>
@@ -48,7 +49,7 @@ function AdderToolbarArrow({
         {
           // Move the pointer to the top of the AdderToolbar
           'top-0 -translate-y-full': arrowDirection === 'up',
-        }
+        },
       )}
     >
       {arrowDirection === 'up' ? <PointerUpIcon /> : <PointerDownIcon />}
@@ -76,10 +77,8 @@ function ToolbarButton({
   const title = shortcut ? `${label} (${shortcut})` : label;
 
   return (
-    <ButtonBase
+    <Button
       classes={classnames(
-        'flex-col gap-y-1 py-2.5 px-2',
-        'text-annotator-sm leading-none',
         // Default color when the toolbar is not hovered
         'text-grey-7',
         // When the parent .group element is hovered (but this element itself is
@@ -89,15 +88,66 @@ function ToolbarButton({
         // When the parent .group element is hovered AND this element is
         // hovered, this is the "active" button. Intensify the text color, which
         // will also darken any descendant Icon
-        'hover:group-hover:text-grey-9'
+        'hover:group-hover:text-grey-9',
       )}
       onClick={onClick}
       title={title}
+      size="custom"
+      variant="custom"
     >
-      {Icon && <Icon className="text-annotator-lg" title={title} />}
-      {typeof badgeCount === 'number' && <NumberIcon badgeCount={badgeCount} />}
-      <span>{label}</span>
-    </ButtonBase>
+      <div
+        className={classnames(
+          'flex flex-col items-center gap-y-1 py-2.5 px-2',
+          'text-annotator-sm leading-none',
+        )}
+      >
+        {Icon && <Icon className="text-annotator-lg" title={title} />}
+        {typeof badgeCount === 'number' && (
+          <NumberIcon badgeCount={badgeCount} />
+        )}
+        <span data-testid="adder-button-label">{label}</span>
+      </div>
+    </Button>
+  );
+}
+
+/**
+ * Render non-visible content for screen readers to announce adder keyboard
+ * shortcuts and count of annotations associated with the current selection.
+ */
+function AdderToolbarShortcuts({
+  annotationCount,
+  isVisible,
+}: {
+  annotationCount: number;
+  isVisible: boolean;
+}) {
+  return (
+    <div className="sr-only">
+      <span
+        aria-live="polite"
+        aria-atomic="true"
+        role="status"
+        data-testid="annotation-count-announce"
+      >
+        {annotationCount > 0 && (
+          <span>
+            {annotationCount}{' '}
+            {annotationCount === 1 ? 'annotation' : 'annotations'} for this
+            selection.
+          </span>
+        )}
+      </span>
+      <ul aria-live="polite" data-testid="annotate-shortcuts-announce">
+        {isVisible && (
+          <>
+            {annotationCount > 0 && <li>Press {"'S'"} to show annotations.</li>}
+            <li>Press {"'A'"} to annotate.</li>
+            <li>Press {"'H'"} to highlight.</li>
+          </>
+        )}
+      </ul>
+    </div>
   );
 }
 
@@ -126,9 +176,7 @@ type AdderToolbarProps = {
  * The toolbar that is displayed above or below selected text in the document,
  * providing options to create annotations or highlights.
  *
-<<<<<<< HEAD:src/annotator/components/AdderToolbar.js
  * @param {AdderToolbarProps} props
-=======
  * The toolbar has nuanced styling for hover. The component structure is:
  *
  * <AdderToolbar>
@@ -159,7 +207,6 @@ type AdderToolbarProps = {
  *   badge will darken when its parent button is hovered, even if it is not
  *   hovered directly.
  *
->>>>>>> 544c8e5c6 (Convert `AdderToolbar` to TypeScript):src/annotator/components/AdderToolbar.tsx
  */
 export default function AdderToolbar({
   arrowDirection,
@@ -167,13 +214,15 @@ export default function AdderToolbar({
   onCommand,
   annotationCount = 0,
 }: AdderToolbarProps) {
+  const shortcuts = useShortcutsConfig();
+
   // Since the selection toolbar is only shown when there is a selection
   // of static text, we can use a plain key without any modifier as
   // the shortcut. This avoids conflicts with browser/OS shortcuts.
-  const annotateShortcut = isVisible ? 'a' : null;
-  const highlightShortcut = isVisible ? 'h' : null;
-  const showShortcut = isVisible ? 's' : null;
-  const hideShortcut = isVisible ? 'Escape' : null;
+  const annotateShortcut = isVisible ? shortcuts.annotateSelection : null;
+  const highlightShortcut = isVisible ? shortcuts.highlightSelection : null;
+  const showShortcut = isVisible ? shortcuts.showSelection : null;
+  const hideShortcut = isVisible ? shortcuts.hideAdder : null;
 
   // Add a shortcut to close the adder. Note, there is no button associated with this
   // shortcut because any outside click will also hide the adder.
@@ -192,13 +241,13 @@ export default function AdderToolbar({
         // default border values from Tailwind and have to be explicit about all
         // border attributes.
         'border border-solid border-grey-3',
-        'absolute select-none bg-white rounded shadow-adder-toolbar',
-        // Start at a very low opacity as we're going to fade in in the animation
+        'absolute select-none bg-white rounded shadow-intense',
+        // Start at a very low opacity as we're going to fade-in in the animation
         'opacity-5',
         {
           'animate-adder-pop-up': arrowDirection === 'up' && isVisible,
           'animate-adder-pop-down': arrowDirection === 'down' && isVisible,
-        }
+        },
       )}
       data-component="AdderToolbar"
       dir="ltr"
@@ -210,7 +259,7 @@ export default function AdderToolbar({
         className={classnames(
           // This group is used to manage hover state styling for descendant
           // buttons
-          'flex group'
+          'flex group',
         )}
       >
         <ToolbarButton
@@ -230,7 +279,7 @@ export default function AdderToolbar({
             <div
               className={classnames(
                 // Style a vertical separator line
-                'm-1.5 border-r border-grey-4 border-solid'
+                'm-1.5 border-r border-grey-4 border-solid',
               )}
             />
             <ToolbarButton
@@ -243,6 +292,10 @@ export default function AdderToolbar({
         )}
       </div>
       <AdderToolbarArrow arrowDirection={arrowDirection} />
+      <AdderToolbarShortcuts
+        annotationCount={annotationCount}
+        isVisible={isVisible}
+      />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 /* global process */
-
-import { createStore, createStoreModule } from '../create-store';
+import { createStore, createStoreModule, makeAction } from '../create-store';
 
 function initialState(value = 0) {
   return { count: value };
@@ -102,7 +101,7 @@ const groupsModule = createStoreModule(
         return state.groups.find(g => g.id === state.currentGroup);
       },
     },
-  }
+  },
 );
 
 function counterStore(initArgs = [], middleware = []) {
@@ -248,7 +247,7 @@ describe('createStore', () => {
         reducers: {},
         actionCreators: {},
         selectors: { testSelector() {} },
-      }
+      },
     );
     const moduleB = createStoreModule(
       {},
@@ -257,11 +256,11 @@ describe('createStore', () => {
         reducers: {},
         actionCreators: {},
         selectors: { testSelector() {} },
-      }
+      },
     );
     assert.throws(
       () => createStore([moduleA, moduleB]),
-      "Cannot add duplicate 'testSelector' property to object"
+      "Cannot add duplicate 'testSelector' property to object",
     );
   });
 
@@ -273,7 +272,7 @@ describe('createStore', () => {
         reducers: {},
         actionCreators: { testAction() {} },
         selectors: {},
-      }
+      },
     );
     const moduleB = createStoreModule(
       {},
@@ -282,11 +281,11 @@ describe('createStore', () => {
         reducers: {},
         actionCreators: { testAction() {} },
         selectors: {},
-      }
+      },
     );
     assert.throws(
       () => createStore([moduleA, moduleB]),
-      "Cannot add duplicate 'testAction' property to object"
+      "Cannot add duplicate 'testAction' property to object",
     );
   });
 
@@ -298,4 +297,20 @@ describe('createStore', () => {
       }, /Cannot assign to read only property/);
     });
   }
+});
+
+describe('makeAction', () => {
+  // Dummy reducers map.
+  const reducers = {};
+
+  it('merges type and payload', () => {
+    const action = makeAction(reducers, 'SET_SEARCH', { query: 'foo' });
+    assert.deepEqual(action, { type: 'SET_SEARCH', query: 'foo' });
+  });
+
+  it('does not allow payload to contain a `type` field', () => {
+    assert.throws(() => {
+      makeAction(reducers, 'SET_SEARCH', { query: 'foo', type: 'bar' });
+    }, 'Payload cannot contain a `type` field');
+  });
 });

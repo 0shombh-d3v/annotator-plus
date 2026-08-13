@@ -1,10 +1,11 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import VersionInfo from '../VersionInfo';
 import { $imports } from '../VersionInfo';
-
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
-import { checkAccessibility } from '../../../test-util/accessibility';
 
 describe('VersionInfo', () => {
   let fakeVersionData;
@@ -24,13 +25,13 @@ describe('VersionInfo', () => {
         toastMessenger={fakeToastMessenger}
         versionData={fakeVersionData}
         {...props}
-      />
+      />,
     );
   }
 
   beforeEach(() => {
     fakeCopyToClipboard = {
-      copyText: sinon.stub(),
+      copyPlainText: sinon.stub(),
     };
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
@@ -61,36 +62,49 @@ describe('VersionInfo', () => {
     assert.include(componentText, 'fakeFingerprint');
     assert.include(componentText, 'fakeAccount');
     assert.include(componentText, 'fakeTimestamp');
+
+    // No `segment` property is set on the `versionData` prop by default, so
+    // the "Segment" field should not be displayed.
+    assert.notInclude(componentText, 'Segment');
   });
+
+  it('renders segment info if `versionData.segment` is set', () => {
+    fakeVersionData.segment = 'CFI: /2, URL: /chapters/foo.xhtml';
+    const wrapper = createComponent();
+    const componentText = wrapper.text();
+    assert.include(componentText, 'Segment');
+    assert.include(componentText, 'CFI: /2, URL: /chapters/foo.xhtml');
+  });
+
   describe('copy version info to clipboard', () => {
     it('copies version info to clipboard when copy button clicked', () => {
       const wrapper = createComponent();
 
-      wrapper.find('LabeledButton').props().onClick();
+      wrapper.find('Button').props().onClick();
 
-      assert.calledWith(fakeCopyToClipboard.copyText, 'fakeString');
+      assert.calledWith(fakeCopyToClipboard.copyPlainText, 'fakeString');
     });
 
-    it('confirms info copy when successful', () => {
+    it('confirms info copy when successful', async () => {
       const wrapper = createComponent();
 
-      wrapper.find('LabeledButton').props().onClick();
+      await wrapper.find('Button').props().onClick();
 
       assert.calledWith(
         fakeToastMessenger.success,
-        'Copied version info to clipboard'
+        'Copied version info to clipboard',
       );
     });
 
     it('flashes an error if info copying unsuccessful', () => {
-      fakeCopyToClipboard.copyText.throws();
+      fakeCopyToClipboard.copyPlainText.throws();
       const wrapper = createComponent();
 
-      wrapper.find('LabeledButton').props().onClick();
+      wrapper.find('Button').props().onClick();
 
       assert.calledWith(
         fakeToastMessenger.error,
-        'Unable to copy version info'
+        'Unable to copy version info',
       );
     });
   });
@@ -99,6 +113,6 @@ describe('VersionInfo', () => {
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponent(),
-    })
+    }),
   );
 });

@@ -1,7 +1,6 @@
-import { mount } from 'enzyme';
+import { checkAccessibility } from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
 
 import AnnotationReplyToggle from '../AnnotationReplyToggle';
 
@@ -15,7 +14,7 @@ describe('AnnotationReplyToggle', () => {
         replyCount={5}
         threadIsCollapsed={true}
         {...props}
-      />
+      />,
     );
   }
 
@@ -44,7 +43,7 @@ describe('AnnotationReplyToggle', () => {
 
   it('invokes the toggle callback when clicked', () => {
     const wrapper = createComponent();
-    const button = wrapper.find('LinkButton');
+    const button = wrapper.find('button');
 
     act(() => {
       button.props().onClick();
@@ -57,6 +56,6 @@ describe('AnnotationReplyToggle', () => {
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponent(),
-    })
+    }),
   );
 });
