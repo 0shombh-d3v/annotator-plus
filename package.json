@@ -1,6 +1,6 @@
 {
   "name": "annotator-plus",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Private, local-first PDF and EPUB annotation for Obsidian.",
   "main": "main.js",
   "scripts": {

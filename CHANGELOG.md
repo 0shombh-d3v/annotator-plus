@@ -1,8 +1,13 @@
 # Changelog
 
+## 0.4.2 — 2026-08-14
+
+- Made published bundles use the committed, reviewed reader assets so platform-specific Tailwind output cannot change release bytes.
+- Kept full clean reader rebuilds and upstream browser tests in CI.
+
 ## 0.4.1 — 2026-08-14
 
-- Made Hypothesis asset manifests and complete release bundles deterministic across local and GitHub CI builds.
+- Made Hypothesis asset manifest generation deterministic.
 - Cleaned the vendored build directory before production builds and made release verification reject test/playground assets.
 
 ## 0.4.0 — 2026-08-14

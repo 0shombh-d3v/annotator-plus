@@ -1,7 +1,7 @@
 {
 	"id": "annotator-plus",
 	"name": "Annotator++",
-	"version": "0.4.1",
+	"version": "0.4.2",
 	"minAppVersion": "1.12.3",
 	"description": "Private, local-first PDF and EPUB annotation with visible note indicators.",
 	"author": "0shombh-d3v",
