@@ -58,7 +58,12 @@ for (const path of [
   'hypothes.is/embed.js',
   'hypothes.is/notebook.html',
   'via.hypothes.is/https.html',
-  'cdn.hypothes.is/hypothesis/build/boot-template.js'
+  'cdn.hypothes.is/hypothesis/build/boot-template.js',
+  'cdn.hypothes.is/hypothesis/build/scripts/test-inputs.js',
+  'cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js',
+  'cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js.map',
+  'cdn.hypothes.is/hypothesis/build/scripts/ui-playground.bundle.js',
+  'cdn.hypothes.is/hypothesis/build/styles/ui-playground.css'
 ]) {
   if (resources.file(path)) throw new Error(`Release contains obsolete reader resource ${path}`);
 }
@@ -108,6 +113,14 @@ for (const marker of [
   'renderObsidianMarkdown'
 ]) {
   if (!sidebar.includes(marker)) throw new Error(`Hypothesis sidebar is missing ${marker}`);
+}
+
+const hypothesisManifest = JSON.parse(
+  await resources.file('cdn.hypothes.is/hypothesis/build/manifest.json').async('string')
+);
+const manifestKeys = Object.keys(hypothesisManifest);
+if (manifestKeys.join('\n') !== [...manifestKeys].sort().join('\n')) {
+  throw new Error('Hypothesis asset manifest is not deterministic');
 }
 
 console.log(`Verified Annotator++ ${manifest.version} with PDF.js 6.2.108, current Hypothesis, and Dark Reader 4.9.128`);

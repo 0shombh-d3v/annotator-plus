@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 — 2026-08-14
+
+- Made Hypothesis asset manifests and complete release bundles deterministic across local and GitHub CI builds.
+- Cleaned the vendored build directory before production builds and made release verification reject test/playground assets.
+
 ## 0.4.0 — 2026-08-14
 
 - Rebuilt the PDF and annotation stack from pinned current sources: PDF.js 6.2.108 and Hypothesis client commit `b4d085a`.

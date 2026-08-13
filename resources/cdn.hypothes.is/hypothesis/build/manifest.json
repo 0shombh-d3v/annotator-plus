@@ -1,20 +1,20 @@
 {
   "scripts/annotator.bundle.js": "scripts/annotator.bundle.js?77b6af",
+  "scripts/annotator.bundle.js.map": "scripts/annotator.bundle.js.map?b4e150",
+  "scripts/sidebar.bundle.js": "scripts/sidebar.bundle.js?73ad7c",
+  "scripts/sidebar.bundle.js.map": "scripts/sidebar.bundle.js.map?3b281f",
   "scripts/ui-playground.bundle.js": "scripts/ui-playground.bundle.js?bf10cf",
+  "scripts/ui-playground.bundle.js.map": "scripts/ui-playground.bundle.js.map?659eb2",
   "styles/annotator.css": "styles/annotator.css?3cfc6a",
+  "styles/annotator.css.map": "styles/annotator.css.map?a3718d",
   "styles/highlights.css": "styles/highlights.css?ef86d1",
   "styles/highlights.css.map": "styles/highlights.css.map?103b2d",
-  "styles/annotator.css.map": "styles/annotator.css.map?a3718d",
-  "styles/pdfjs-overrides.css": "styles/pdfjs-overrides.css?d58df4",
   "styles/katex.min.css": "styles/katex.min.css?027dee",
   "styles/katex.min.css.map": "styles/katex.min.css.map?f4f041",
+  "styles/pdfjs-overrides.css": "styles/pdfjs-overrides.css?d58df4",
   "styles/pdfjs-overrides.css.map": "styles/pdfjs-overrides.css.map?5a12c5",
   "styles/sidebar.css": "styles/sidebar.css?6beb5d",
   "styles/sidebar.css.map": "styles/sidebar.css.map?7537bb",
   "styles/ui-playground.css": "styles/ui-playground.css?035c69",
-  "styles/ui-playground.css.map": "styles/ui-playground.css.map?0e2c94",
-  "scripts/annotator.bundle.js.map": "scripts/annotator.bundle.js.map?b4e150",
-  "scripts/sidebar.bundle.js": "scripts/sidebar.bundle.js?73ad7c",
-  "scripts/ui-playground.bundle.js.map": "scripts/ui-playground.bundle.js.map?659eb2",
-  "scripts/sidebar.bundle.js.map": "scripts/sidebar.bundle.js.map?3b281f"
+  "styles/ui-playground.css.map": "styles/ui-playground.css.map?0e2c94"
 }

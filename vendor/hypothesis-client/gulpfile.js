@@ -7,6 +7,7 @@ import {
 } from '@hypothesis/frontend-build';
 import gulp from 'gulp';
 import changed from 'gulp-changed';
+import { readFile, writeFile } from 'node:fs/promises';
 
 import { serveDev } from './dev-server/serve-dev.js';
 import { servePackage } from './dev-server/serve-package.js';
@@ -90,6 +91,15 @@ const manifestSourceFiles = 'build/{scripts,styles}/*.{css,js,map}';
 gulp.task('build-boot-script', async () => {
   // Generate the manifest containing cache-busted asset URLs
   await generateManifest({ pattern: manifestSourceFiles });
+  const manifest = JSON.parse(await readFile('build/manifest.json', 'utf8'));
+  await writeFile(
+    'build/manifest.json',
+    JSON.stringify(
+      Object.fromEntries(Object.entries(manifest).sort()),
+      null,
+      2,
+    ),
+  );
   // Generate the boot script template
   await buildJS('./rollup-boot.config.js');
   // Replace variables in the template with real URLs
