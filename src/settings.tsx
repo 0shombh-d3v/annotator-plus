@@ -1,9 +1,9 @@
 import AnnotatorPlugin from 'main';
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import { callDelayer } from 'utils';
+import { DarkModePreference } from './darkMode';
 
 export interface AnnotatorSettings {
-    deafultDarkMode: boolean;
+    darkMode: DarkModePreference;
     darkReaderSettings: {
         brightness: number;
         contrast: number;
@@ -20,12 +20,11 @@ export interface AnnotatorSettings {
         highlightHighlightedText: boolean;
         includePostfix: boolean;
     };
-    annotateTvUrl?: string;
     debugLogging: boolean;
 }
 
 export const DEFAULT_SETTINGS: AnnotatorSettings = {
-    deafultDarkMode: false,
+    darkMode: 'follow-obsidian',
     darkReaderSettings: {
         brightness: 150,
         contrast: 85,
@@ -62,7 +61,7 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Annotator Settings' });
+        containerEl.createEl('h2', { text: 'Annotator+ Settings' });
 
         containerEl.createEl('h3', { text: 'Annotation Target Settings' });
 
@@ -171,13 +170,18 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
         containerEl.createEl('h3', { text: 'Dark Mode Settings' });
 
         new Setting(containerEl)
-            .setName('Use Dark Mode By Default')
-            .setDesc('Whether to use dark mode by default when opening pdfs/epubs.')
-            .addToggle(toggle =>
-                toggle.setValue(this.plugin.settings.deafultDarkMode).onChange(async value => {
-                    this.plugin.settings.deafultDarkMode = value;
-                    await this.plugin.saveSettings();
-                })
+            .setName('Annotator appearance')
+            .setDesc('Follow Obsidian or keep Annotator in dark or light mode.')
+            .addDropdown(dropdown =>
+                dropdown
+                    .addOption('follow-obsidian', 'Follow Obsidian')
+                    .addOption('dark', 'Always dark')
+                    .addOption('light', 'Always light')
+                    .setValue(this.plugin.settings.darkMode)
+                    .onChange(async value => {
+                        this.plugin.settings.darkMode = value as DarkModePreference;
+                        await this.plugin.saveSettings();
+                    })
             );
 
         new Setting(containerEl)
@@ -217,24 +221,6 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
                         this.plugin.settings.darkReaderSettings.brightness = value;
                         await this.plugin.saveSettings();
                     })
-            );
-
-        containerEl.createEl('h3', { text: 'Annotate.TV settings' });
-
-        const resourceUrlUpdateDelayer = callDelayer();
-
-        new Setting(containerEl)
-            .setName('Annotate.tv resource URL')
-            .setDesc('Not bundled with the plugin due to potential copyright issues.')
-            .addText(text =>
-                text.setValue(this.plugin.settings.annotateTvUrl).onChange(async value => {
-                    this.plugin.settings.annotateTvUrl = value;
-                    resourceUrlUpdateDelayer(async () => {
-                        await this.plugin.unloadResources();
-                        await this.plugin.loadResources();
-                    }, 2000);
-                    await this.plugin.saveSettings();
-                })
             );
 
         containerEl.createEl('h3', { text: 'Developer Settings' });

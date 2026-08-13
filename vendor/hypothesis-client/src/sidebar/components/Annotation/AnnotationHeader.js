@@ -108,14 +108,26 @@ function AnnotationHeader({
   const onReplyCountClick = () =>
     // If an annotation has replies it must have been saved and therefore have
     // an ID.
-    store.setExpanded(/** @type {string} */(annotation.id), true);
+    store.setExpanded(/** @type {string} */ (annotation.id), true);
 
   const group = store.getGroup(annotation.group);
 
   return (
     <header>
       <HeaderRow>
-
+        {isPrivate(annotation.permissions) && !isEditing && (
+          <Icon
+            classes="text-tiny"
+            name="lock"
+            title="This annotation is visible only to you"
+          />
+        )}
+        <AnnotationUser authorLink={authorLink} displayName={authorName} />
+        {replyCount > 0 && isCollapsedReply && (
+          <LinkButton onClick={onReplyCountClick} title="Expand replies">
+            {`${replyCount} ${replyCount > 1 ? 'replies' : 'reply'}`}
+          </LinkButton>
+        )}
         {!isEditing && annotation.created && (
           <div className="flex justify-end grow">
             <AnnotationTimestamps
@@ -130,6 +142,12 @@ function AnnotationHeader({
 
       {!isReply(annotation) && (
         <HeaderRow>
+          {group && (
+            <AnnotationShareInfo
+              group={group}
+              isPrivate={isPrivate(annotation.permissions)}
+            />
+          )}
           {!isEditing && isHighlight(annotation) && (
             <Icon
               name="highlight"

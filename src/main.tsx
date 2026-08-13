@@ -8,30 +8,24 @@ import {
     TFile,
     MarkdownPostProcessorContext,
     parseLinktext,
-    Notice,
-    Platform,
     MenuItem
 } from 'obsidian';
 
 import StyleObserver from 'styleObserver';
-import { getAPI as getDataviewApi } from 'obsidian-dataview';
-
 import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
 import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from './constants';
 import defineEpubAnnotation from './defineEpubAnnotation';
-import defineVideoAnnotation from './defineVideoAnnotation';
-import { Annotation, PdfAnnotationProps, EpubAnnotationProps, VideoAnnotationProps, WebAnnotationProps } from './types';
+import { Annotation, PdfAnnotationProps, EpubAnnotationProps } from './types';
 import * as codeMirror from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
-import { fetchUrl, wait } from 'utils';
-import defineWebAnnotation from 'defineWebAnnotation';
 import { awaitResourceLoading, loadResourcesZip, unloadResources } from 'resourcesFolder';
 import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
 import SourceViewObserver from 'sourceViewObserver';
+import { migrateDarkModeSettings } from './darkMode';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     static instance: AnnotatorPlugin = null;
@@ -47,11 +41,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     PdfAnnotation: (props: PdfAnnotationProps) => JSX.Element;
     // @ts-ignore
     EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
-    // @ts-ignore
-    VideoAnnotation: (props: VideoAnnotationProps) => JSX.Element;
-    // @ts-ignore
-    WebAnnotation: (props: WebAnnotationProps) => JSX.Element;
-
     // Used to store text of hypothesis highlight during drag-and-drop event
     dragData: null | { annotationFilePath: string; annotationId: string; annotationText: string } = null;
 
@@ -70,18 +59,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async loadResources() {
         await loadResourcesZip(jszip.loadAsync(stringEncodedResourcesFolder));
-        if (this.settings.annotateTvUrl && Platform.isDesktop) {
-            try {
-                const response = await fetchUrl(this.settings.annotateTvUrl);
-                if (response.ok) {
-                    await loadResourcesZip(jszip.loadAsync(await response.arrayBuffer()));
-                } else {
-                    new Notice('Annotator: Could not fetch Annotate.TV resource zip');
-                }
-            } catch (e) {
-                new Notice('Annotator: Could not fetch Annotate.TV resource zip');
-            }
-        }
         await awaitResourceLoading();
     }
 
@@ -97,8 +74,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         await this.loadResources();
         this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
         this.EpubAnnotation = defineEpubAnnotation(this.app.vault, this);
-        this.VideoAnnotation = defineVideoAnnotation(this.app.vault, this);
-        this.WebAnnotation = defineWebAnnotation(this.app.vault, this);
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
@@ -162,6 +137,14 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                         this.sourceViewObserver.initObserver();
                     }
                     this.sourceViewObserver.watch();
+                }
+            })
+        );
+
+        this.registerEvent(
+            this.app.workspace.on('css-change', () => {
+                if (this.settings.darkMode === 'follow-obsidian') {
+                    this.views.forEach(view => void view.onDarkReadersUpdated());
                 }
             })
         );
@@ -235,7 +218,19 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        const { settings, migrated } = migrateDarkModeSettings((await this.loadData()) || {});
+        const saved = settings as Partial<AnnotatorSettings>;
+        this.settings = {
+            ...DEFAULT_SETTINGS,
+            ...saved,
+            darkReaderSettings: { ...DEFAULT_SETTINGS.darkReaderSettings, ...saved.darkReaderSettings },
+            epubSettings: { ...DEFAULT_SETTINGS.epubSettings, ...saved.epubSettings },
+            annotationMarkdownSettings: {
+                ...DEFAULT_SETTINGS.annotationMarkdownSettings,
+                ...saved.annotationMarkdownSettings
+            }
+        };
+        if (migrated) await this.saveData(this.settings);
     }
 
     async saveSettings() {
@@ -280,13 +275,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
     }
 
-    async awaitDataViewPage(filePath: string) {
-        const dataview = (this.app as any)?.plugins?.getPlugin('dataview'); // eslint-disable-line
-        while (dataview && (!dataview.api || !dataview.api.page(filePath))) {
-            await wait(50);
-        }
-    }
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getPropertyValue(propertyName: string, file: TFile | null): any | null {
         if (!file) {
@@ -294,7 +282,9 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         }
 
         // eslint-disable-next-line
-        const dataViewPropertyValue: any | undefined = getDataviewApi()?.page(file.path)?.[propertyName];
+        const dataViewPropertyValue: any | undefined = (this.app as any)?.plugins // eslint-disable-line
+            ?.getPlugin('dataview')
+            ?.api?.page(file.path)?.[propertyName];
 
         if (dataViewPropertyValue) {
             if (dataViewPropertyValue.path) {
@@ -334,7 +324,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                         if (
                             self._loaded &&
                             state.type === 'markdown' &&
-                            state.state?.file &&
+                            typeof state.state?.file === 'string' &&
                             self.pdfAnnotatorFileModes[this.id || state.state.file] !== 'markdown' &&
                             self.settings.annotationMarkdownSettings.annotationModeByDefault === true
                         ) {

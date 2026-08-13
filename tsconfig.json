@@ -4,11 +4,11 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
-    "target": "es6",
-    "allowJs": true,
+    "target": "ES2021",
+    "allowJs": false,
     "noImplicitAny": false,
     "moduleResolution": "node",
-    "esModuleInterop":true,
+    "esModuleInterop": true,
     "importHelpers": true,
     "noEmit": true,
     "allowSyntheticDefaultImports": true,
@@ -21,8 +21,15 @@
       "ESNext"
     ],
     "jsx": "react",
+    "skipLibCheck": true
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx"]
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "vendor",
+    "submodules"
+  ]
 }

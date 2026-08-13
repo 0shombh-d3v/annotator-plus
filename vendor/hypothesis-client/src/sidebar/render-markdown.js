@@ -3,7 +3,6 @@ import escapeHtml from 'escape-html';
 import katex from 'katex';
 import showdown from 'showdown';
 
-
 const DOMPurify = createDOMPurify(window);
 
 // Ensure that any links generated either by Showdown or in the markdown/HTML
@@ -158,6 +157,13 @@ function insertMath(html, mathBlocks) {
  * @param {string} markdown
  */
 export function renderMathAndMarkdown(markdown) {
-  // @ts-ignore
-  return window['renderObsidianMarkdown'](markdown);
+  // Annotator+ supplies Obsidian's renderer at runtime. Keep the upstream
+  // sanitized renderer as a fallback for tests and non-Obsidian contexts.
+  // @ts-ignore - Runtime bridge supplied by Annotator+.
+  if (window.renderObsidianMarkdown) {
+    // @ts-ignore - Runtime bridge supplied by Annotator+.
+    return window.renderObsidianMarkdown(markdown);
+  }
+  const { content, mathBlocks } = extractMath(markdown);
+  return insertMath(DOMPurify.sanitize(renderMarkdown(content)), mathBlocks);
 }

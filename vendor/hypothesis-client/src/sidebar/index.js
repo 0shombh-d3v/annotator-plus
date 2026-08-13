@@ -174,18 +174,20 @@ function startApp(settings, appEl) {
   container.run(startRPCServer);
   container.run(setupFrameSync);
 
-  // @ts-ignore
-  top?.window.app.plugins.getPlugin("obsidian-annotator").styleObserver.listen(style=> {
-    if (document.getElementById("obsidianStyles")) {
-      // @ts-ignore
-      document.getElementById("obsidianStyles").innerHTML = style;
-    } else {
-      let styleElement = document.createElement("style");
-      styleElement.id = "obsidianStyles";
-      styleElement.textContent = style; // 'style' being the CSS you want to insert
-      document.head.appendChild(styleElement);
+  // @ts-ignore - Obsidian host API.
+  top?.window.app.plugins.getPlugin('annotator-plus')?.styleObserver.listen(
+    /** @param {string} style */ style => {
+      const existingStyle = document.getElementById('obsidianStyles');
+      if (existingStyle) {
+        existingStyle.textContent = style;
+      } else {
+        const styleElement = document.createElement('style');
+        styleElement.id = 'obsidianStyles';
+        styleElement.textContent = style;
+        document.head.appendChild(styleElement);
+      }
     }
-  });
+  );
 
   // Render the UI.
   render(

@@ -91,7 +91,7 @@ class EpubReader {
             ignoreClass: 'annotator-hl',
             width: '100%',
             height: '100%',
-            allowScriptedContent: true
+            allowScriptedContent: false
         });
 
         book.rendition.themes.fontSize(`${this.settings.fontSize}%`);

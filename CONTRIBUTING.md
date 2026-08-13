@@ -1,77 +1,44 @@
-# Contributing to obsidian-annotator
+# Contributing to Annotator+
 
-Thinks for contributing to `obsidian-annotator` and helping make it better!
+Thank you for improving Annotator+. Bug reports, accessibility fixes, documentation corrections, and focused pull requests are welcome.
 
-## Issues
+## Before opening an issue
 
-Feel free to pick up any existing issue that looks interesting to you, or fix a bug you encountered while using `obsidian-annotator`. No matter the size, we welcome all improvements.
+Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator+ version, operating system, target type, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
 
-## Building
+## Development setup
 
-### Setting up dev environment
-
-You'll want to install the following on your machine:
-- [NodeJS](https://nodejs.org/en/download/)
-- [Yarn](https://yarnpkg.com/) *required by submodule*
-- It also possible to use [pnpm](https://pnpm.js.org) instead of `npm`
-
-### Clone with SUBMODULE
+Requirements: Node.js 24, npm, Yarn 1.x, and Google Chrome for the vendored Hypothesis test suite.
 
 ```bash
-git clone git@github.com:elias-sundqvist/obsidian-annotator.git
-git submodule init
-git submodule update
+git clone https://github.com/0shombh-d3v/annotator-plus.git
+cd annotator-plus
+npm ci --ignore-scripts
+PUPPETEER_SKIP_DOWNLOAD=true yarn --cwd vendor/hypothesis-client install --frozen-lockfile --ignore-scripts
 ```
 
-### Download dependencies
+The Hypothesis client is ordinary source under `vendor/hypothesis-client`; there is no submodule or second repository.
 
-Run `npm install` to download all necessary dependencies.
+## Checks and builds
 
-### Building on Windows requires additional changes
+```bash
+npm run check
+CHROME_BIN="/path/to/google-chrome" npm run check:vendor
+npm audit --audit-level=high
+npm run build:all
+npm run release:verify
+```
 
-1. Go to `.\submodules\hypothesis-client-annotator-fork\node_modules\@hypothesis\frontend-build\lib\rollup.js`
-2. Add `import { pathToFileURL } from 'url'` to the top of the file
-3. Replace `import(resolve(path))` with `import(pathToFileURL(resolve(path)))`
-4. Go to `.\submodules\hypothesis-client-annotator-fork\node_modules\@hypothesis\frontend-build\lib\manifest.js`
-5. modify line 46 to say. `const relativePath = path.relative(manifestDir, file).replace("\\","/");`
+`npm run build` uses the reviewed, committed Hypothesis browser bundles. Use `npm run build:all` when vendored client source changed, then commit the regenerated files under `resources/cdn.hypothes.is/hypothesis/build`. Keeping the legacy vendored build toolchain out of release CI prevents it from becoming part of the release trust boundary.
 
-### Building
+For local development, put the absolute destination plugin directory in `.vault_plugin_dir`, run `npm run dev`, and reload the plugin after a build.
 
-1. `npm run build` – builds `hypothesis` submodule and `obsidian-annotator`
-2. `npm run quick-build` – builds only `obsidian-annotator`
-3. `npm run build-hypothesis` - build only `hypothesis` submodule
+## Pull requests
 
-`npm run dev` recommended for active development. It builds `obsidian-annotator` on every change of code.
+- Branch from `main` and keep the change focused.
+- Add the smallest regression test that would fail without a non-trivial fix.
+- Preserve local-first behavior, input validation, keyboard access, and upstream copyright notices.
+- Run all applicable checks above and describe manual PDF/EPUB testing.
+- Do not commit `node_modules`, `main.js`, local settings, vault data, or private documents.
 
-## Developing
-
-### Liters and types
-
-Project use `betterer` to improve code step by step. Please run `npm run betterer` from time to time to see if your changes made code better or worse.
-
-When you made an improvement, run `npm run betterer -- --update` to update betterer results.
-
-**Known problem**: Sometime betterer makes warnings about code you didn't change. In this case, run `npm run betterer -- --update` to ignore this warnings.
-
-### Hot Reload
-
-There are two ways to hot reload the plugin during development: automatically and semi-automatically.
-
-#### Automatically
-
-How to build, install and reload plugin in your test vault on every change:
-1. Install [Hot reload plugin](https://github.com/pjeby/hot-reload) manually and *enable it*
-2. Link repository as plugin into your test vault. `<test vault path>/.obsidian/plugins/obsidian-annotator` should refer to directory with repository
-3. Run `npm run dev`
-
-#### Semi-automatically
-
-How to build and install plugin on every change with manual reload:
-1. Create plugin's directory in your test vault. Exmaple: `<test vault path>/.obsidian/plugins/obsidian-annotator`
-2. Write absolute path to plugin's directory `.vault_plugin_dir` file
-3. Run `npm run dev` to build and copy plugin into you test vault on every change
-4. Reopen your test vault or disable/enable plugin to see changes
-
-## Submiting a Pull Request
-
-Fork this repository, create a topic branch, and when ready, open a pull request from your fork.
+By contributing, you agree that your contribution is licensed under [AGPL-3.0](LICENSE.TXT). Code derived from bundled projects remains subject to the notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

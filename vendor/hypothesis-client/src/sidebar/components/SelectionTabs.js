@@ -80,7 +80,10 @@ function Tab({
 
 /**
  * @typedef SelectionTabsProps
+ * @prop {number} annotationNoteCount - Number of annotations with written notes
  * @prop {boolean} isLoading - Are we waiting on any annotations from the server?
+ * @prop {(showOnlyWithNotes: boolean) => void} onShowOnlyWithNotesChange
+ * @prop {boolean} showOnlyWithNotes - Whether to show only annotations with notes
  * @prop {SidebarSettings} settings - Injected service.
  * @prop {import('../services/annotations').AnnotationsService} annotationsService
  */
@@ -90,7 +93,14 @@ function Tab({
  *
  * @param {SelectionTabsProps} props
  */
-function SelectionTabs({ annotationsService, isLoading, settings }) {
+function SelectionTabs({
+  annotationNoteCount,
+  annotationsService,
+  isLoading,
+  onShowOnlyWithNotesChange,
+  settings,
+  showOnlyWithNotes,
+}) {
   const store = useSidebarStore();
   const selectedTab = store.selectedTab();
   const noteCount = store.noteCount();
@@ -151,6 +161,36 @@ function SelectionTabs({ annotationsService, isLoading, settings }) {
           </Tab>
         )}
       </div>
+      {selectedTab === 'annotation' && annotationCount > 0 && (
+        <div
+          aria-label="Filter annotations"
+          className="flex items-center gap-x-2 text-sm theme-clean:ml-[15px]"
+          data-testid="annotation-note-filter"
+          role="group"
+        >
+          <LinkButton
+            classes={classnames('text-color-text hover:!no-underline', {
+              'font-bold': !showOnlyWithNotes,
+            })}
+            data-testid="show-all-annotations"
+            onClick={() => onShowOnlyWithNotesChange(false)}
+            pressed={!showOnlyWithNotes}
+          >
+            All ({annotationCount})
+          </LinkButton>
+          <span aria-hidden="true">|</span>
+          <LinkButton
+            classes={classnames('text-color-text hover:!no-underline', {
+              'font-bold': showOnlyWithNotes,
+            })}
+            data-testid="show-annotations-with-notes"
+            onClick={() => onShowOnlyWithNotesChange(true)}
+            pressed={showOnlyWithNotes}
+          >
+            Notes ({annotationNoteCount})
+          </LinkButton>
+        </div>
+      )}
       {selectedTab === 'note' && settings.enableExperimentalNewNoteButton && (
         <div className="flex justify-end">
           <LabeledButton

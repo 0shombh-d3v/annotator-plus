@@ -1,4 +1,5 @@
 import { mount } from 'enzyme';
+import { act } from 'preact/test-utils';
 
 import { checkAccessibility } from '../../../test-util/accessibility';
 import { mockImportedComponents } from '../../../test-util/mock-imported-components';
@@ -59,6 +60,7 @@ describe('SidebarView', () => {
       isLoggedIn: sinon.stub(),
       profile: sinon.stub().returns({ userid: null }),
       searchUris: sinon.stub().returns([]),
+      selectedTab: sinon.stub().returns('annotation'),
       toggleFocusMode: sinon.stub(),
     };
 
@@ -290,6 +292,55 @@ describe('SidebarView', () => {
       const wrapper = createComponent();
 
       assert.isFalse(wrapper.find('SelectionTabs').exists());
+    });
+
+    it('filters the thread list to annotations with written notes', () => {
+      const withNote = {
+        annotation: {
+          id: 'with-note',
+          target: [{ selector: [] }],
+          text: 'A written note',
+        },
+      };
+      const highlight = {
+        annotation: {
+          id: 'highlight',
+          target: [{ selector: [] }],
+          text: '',
+        },
+      };
+      const whitespaceOnly = {
+        annotation: {
+          id: 'whitespace',
+          target: [{ selector: [] }],
+          text: '   ',
+        },
+      };
+      const unsavedAnnotation = {
+        annotation: {
+          target: [{ selector: [] }],
+          text: '',
+        },
+      };
+      fakeUseRootThread.returns({
+        children: [withNote, highlight, whitespaceOnly, unsavedAnnotation],
+      });
+
+      const wrapper = createComponent();
+      assert.equal(
+        wrapper.find('SelectionTabs').prop('annotationNoteCount'),
+        1
+      );
+
+      act(() => {
+        wrapper.find('SelectionTabs').prop('onShowOnlyWithNotesChange')(true);
+      });
+      wrapper.update();
+
+      assert.deepEqual(wrapper.find('ThreadList').prop('threads'), [
+        withNote,
+        unsavedAnnotation,
+      ]);
     });
   });
 

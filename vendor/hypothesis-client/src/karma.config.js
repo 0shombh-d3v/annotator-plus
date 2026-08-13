@@ -6,7 +6,8 @@ const path = require('path');
 let chromeFlags = [];
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-process.env.CHROME_BIN = require('puppeteer').executablePath();
+process.env.CHROME_BIN =
+  process.env.CHROME_BIN || require('puppeteer').executablePath();
 
 if (process.env.RUNNING_IN_DOCKER) {
   // In Docker, the tests run as root, so the sandbox must be disabled.

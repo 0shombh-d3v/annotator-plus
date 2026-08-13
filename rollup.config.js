@@ -7,7 +7,7 @@ import fs from 'fs';
 import folderZipString from './rollup-folder-zip-string';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
 import analyze from 'rollup-plugin-analyzer';
-import { terser } from "rollup-plugin-terser";
+import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
 
 const banner = 
@@ -26,13 +26,16 @@ export default {
   input: 'src/main.tsx',
   output: {
     dir: vault_plugin_dir,
-    sourcemap: 'inline',
+    sourcemap: process.env.BUILD == 'production' ? false : 'inline',
     sourcemapExcludeSources: true,
     format: 'cjs',
     exports: 'default',
     banner,
   },
   external: ['obsidian',
+  'fs',
+  'https',
+  'url',
   "codemirror",
   "@codemirror/autocomplete",
   "@codemirror/closebrackets",

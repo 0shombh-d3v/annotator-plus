@@ -67,7 +67,7 @@ export class PortProvider {
    *   match the origin.
    */
   constructor(hypothesisAppsOrigin) {
-    this._hypothesisAppsOrigin = '*';
+    this._hypothesisAppsOrigin = hypothesisAppsOrigin;
     this._emitter = new TinyEmitter();
 
     /**
@@ -185,7 +185,8 @@ export class PortProvider {
 
       const message = { frame1, frame2, type: 'offer', requestId };
 
-      source.postMessage(message, '*', [messageChannel.port1]);
+      const targetOrigin = origin === 'null' ? '*' : origin;
+      source.postMessage(message, targetOrigin, [messageChannel.port1]);
 
       if (frame2 === 'sidebar') {
         this._sidebarHostChannel.port2.postMessage(message, [

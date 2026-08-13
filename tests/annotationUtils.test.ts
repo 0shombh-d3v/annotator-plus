@@ -1,17 +1,17 @@
-import fs from "fs";
-import path from "path";
-import { IHasAnnotatorSettings } from "settings";
-import * as annotationUtils from "../src/annotationUtils";
+import fs from 'fs';
+import path from 'path';
+import { IHasAnnotatorSettings } from 'settings';
+import * as annotationUtils from '../src/annotationUtils';
 import { Annotation } from '../src/types';
 
 const testAnnotatorSettings: IHasAnnotatorSettings = {
     settings: {
-        deafultDarkMode: false,
+        darkMode: 'follow-obsidian',
         darkReaderSettings: null,
         debugLogging: false,
         customDefaultPath: null,
         epubSettings: {
-            readingMode: "scroll",
+            readingMode: 'scroll',
             fontSize: 16
         },
         annotationMarkdownSettings: {
@@ -21,45 +21,127 @@ const testAnnotatorSettings: IHasAnnotatorSettings = {
             highlightHighlightedText: true
         }
     }
-}
+};
 
 function loadMd(mdfile: string) {
-    const mdTestFilePath = path.join(__dirname, "./", mdfile);
-    return fs.readFileSync(mdTestFilePath, {encoding: "utf8"}).replaceAll('\r\n','\n');
+    const mdTestFilePath = path.join(__dirname, './', mdfile);
+    return fs.readFileSync(mdTestFilePath, { encoding: 'utf8' }).replaceAll('\r\n', '\n');
 }
 
 function loadJson(jsonfile: string) {
-    const jsonTestFilePath = path.join(__dirname, "./", jsonfile);
-    return fs.readFileSync(jsonTestFilePath, {encoding: "utf8"});
+    const jsonTestFilePath = path.join(__dirname, './', jsonfile);
+    return fs.readFileSync(jsonTestFilePath, { encoding: 'utf8' });
 }
 
-
-test("AnnotationShouldBeCorrectlyParsed", ()=>{
-    const mdTestFile = loadMd("testfile.md");
-    const jsonTestFile = loadJson("testfile.json");
+test('AnnotationShouldBeCorrectlyParsed', () => {
+    const mdTestFile = loadMd('testfile.md');
+    const jsonTestFile = loadJson('testfile.json');
     const loadedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(null, mdTestFile);
     expect(JSON.parse(jsonTestFile)).toEqual(loadedAnnotations);
-})
+});
 
-test("AnnotationsCanBeModified", ()=>{
-    const mdTestFile = loadMd("testfile2.md");
+test('AnnotationsCanBeModified', () => {
+    const mdTestFile = loadMd('testfile2.md');
     const loadedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(null, mdTestFile);
-    const modifiedAnnotation: Annotation = {...JSON.parse(JSON.stringify(loadedAnnotations.rows[0])), text: "this is a modified comment"};
-    const res = annotationUtils.writeAnnotationToAnnotationFileString(modifiedAnnotation, mdTestFile, testAnnotatorSettings);
-    const loadedModifiedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(null, res.newAnnotationFileString);
+    const modifiedAnnotation: Annotation = {
+        ...JSON.parse(JSON.stringify(loadedAnnotations.rows[0])),
+        text: 'this is a modified comment'
+    };
+    const res = annotationUtils.writeAnnotationToAnnotationFileString(
+        modifiedAnnotation,
+        mdTestFile,
+        testAnnotatorSettings
+    );
+    const loadedModifiedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(
+        null,
+        res.newAnnotationFileString
+    );
     expect(loadedModifiedAnnotations.total).toEqual(loadedAnnotations.total);
     expect(loadedModifiedAnnotations.rows[0]).toEqual(modifiedAnnotation);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const drop1 = ([_, ...rest]: Annotation[])=>rest;
+    const drop1 = ([_, ...rest]: Annotation[]) => rest;
     expect(drop1(loadedAnnotations.rows)).toEqual(drop1(loadedModifiedAnnotations.rows));
-})
+});
 
-test("AnnotationsCanBeAdded", ()=>{
-    const mdTestFile = loadMd("testfile2.md");
+test('AnnotationsCanBeAdded', () => {
+    const mdTestFile = loadMd('testfile2.md');
     const loadedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(null, mdTestFile);
-    const newAnnotation: Annotation = {...JSON.parse(JSON.stringify(loadedAnnotations.rows[0])), id: 'anewid'};
+    const newAnnotation: Annotation = { ...JSON.parse(JSON.stringify(loadedAnnotations.rows[0])), id: 'anewid' };
     const res = annotationUtils.writeAnnotationToAnnotationFileString(newAnnotation, mdTestFile, testAnnotatorSettings);
-    const loadedModifiedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(null, res.newAnnotationFileString);
-    expect(loadedModifiedAnnotations.total).toEqual(loadedAnnotations.total+1);
+    const loadedModifiedAnnotations = annotationUtils.loadAnnotationsAtUriFromFileText(
+        null,
+        res.newAnnotationFileString
+    );
+    expect(loadedModifiedAnnotations.total).toEqual(loadedAnnotations.total + 1);
     expect(loadedModifiedAnnotations.rows).toEqual([...loadedAnnotations.rows, newAnnotation]);
-})
+});
+
+test('selector identity prefers position and rejects page notes', () => {
+    const target = (selector: Annotation['target'][0]['selector']) =>
+        ({ target: [{ source: 'pdf', selector }] } as Annotation);
+    const position = { type: 'TextPositionSelector', start: 10, end: 20 } as const;
+    const quote = { type: 'TextQuoteSelector', exact: 'same text', prefix: '', suffix: '' } as const;
+
+    expect(annotationUtils.checkPseudoAnnotationEquality(target([position, quote]), target([quote, position]))).toBe(
+        true
+    );
+    expect(
+        annotationUtils.checkPseudoAnnotationEquality(
+            target([position, quote]),
+            target([{ ...position, start: 30, end: 40 }, quote])
+        )
+    ).toBe(false);
+    expect(
+        annotationUtils.checkPseudoAnnotationEquality(
+            target([position, quote]),
+            target([position, { ...quote, exact: 'different text' }])
+        )
+    ).toBe(false);
+    expect(annotationUtils.checkPseudoAnnotationEquality({ target: [] } as Annotation, target([position]))).toBe(false);
+});
+
+test('legacy selector sets match independent of selector and object-key order', () => {
+    const first = {
+        target: [
+            {
+                source: 'pdf',
+                selector: [
+                    {
+                        type: 'RangeSelector',
+                        startContainer: '/p[1]',
+                        startOffset: 0,
+                        endContainer: '/p[1]',
+                        endOffset: 2
+                    },
+                    { type: 'TextQuoteSelector', exact: 'hi', prefix: '', suffix: '' }
+                ]
+            }
+        ]
+    } as Annotation;
+    const second = {
+        target: [
+            {
+                source: 'pdf',
+                selector: [
+                    { suffix: '', exact: 'hi', prefix: '', type: 'TextQuoteSelector' },
+                    {
+                        endOffset: 2,
+                        endContainer: '/p[1]',
+                        startOffset: 0,
+                        startContainer: '/p[1]',
+                        type: 'RangeSelector'
+                    }
+                ]
+            }
+        ]
+    } as Annotation;
+    expect(annotationUtils.checkPseudoAnnotationEquality(first, second)).toBe(true);
+});
+
+test('annotation writes accept only safe IDs and the expected payload shape', () => {
+    expect(annotationUtils.isValidAnnotationId('safe_note-1')).toBe(true);
+    expect(annotationUtils.isValidAnnotationId('../unsafe')).toBe(false);
+    expect(annotationUtils.isWritableAnnotation({ text: 'note', tags: ['tag'], target: [] })).toBe(true);
+    expect(annotationUtils.isWritableAnnotation({ id: 'bad/id', text: 'note', tags: [], target: [] })).toBe(false);
+    expect(annotationUtils.isWritableAnnotation({ text: 'note', tags: 'tag', target: [] })).toBe(false);
+});

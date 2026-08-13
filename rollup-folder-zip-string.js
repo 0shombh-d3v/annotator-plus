@@ -5,11 +5,11 @@ import path from 'path';
 import minify from 'minify';
 import MagicString from 'magic-string';
 
-const importSuffix = "!zipStringEncoded"; 
-const stringMap = new Map();
+const importSuffix = "!zipStringEncoded";
 let counter = 0;
 
 export default function zipStringEncoded() {
+  const stringMap = new Map();
   return {
     name: 'zip-string-encoded', // this name will show up in warnings and errors
     resolveId ( source ) {
@@ -23,7 +23,7 @@ export default function zipStringEncoded() {
         const folder = id.substr(0, id.length - importSuffix.length);
         const zip = await getZipOfFolder(folder);
         const theString = await zip.generateAsync({type: "string", compression: "DEFLATE", compressionOptions: {level: 9}});
-        const placeholder = `rollupZipStringEncodedNo${counter}`;
+        const placeholder = `rollupZipStringEncodedNo${counter++}`;
         const replacementCode = theString.replaceAll("*", "* ");
         stringMap.set(placeholder, replacementCode);
         return `const a = function(){/*@preserve${placeholder}*/};const s=a.toString();const s2 = s.substring(22,s.length-3); const res= s2.replaceAll("* ", "*"); export default res;`; // the source code for "virtual-module"
@@ -56,7 +56,7 @@ const getFilePathsRecursively = (dir) => {
 
   // returns a flat array of absolute paths of all files recursively contained in the dir
   let results = [];
-  let list = fs.readdirSync(dir);
+  let list = fs.readdirSync(dir).sort();
 
   var pending = list.length;
   if (!pending) return results;
@@ -78,7 +78,8 @@ const getFilePathsRecursively = (dir) => {
   return results;
 };
 
-const compressibleFormats = new Set(["html", "js", "img"]);
+const minifiableFormats = new Set(["html", "js"]);
+const ZIP_DATE = new Date('1980-01-01T00:00:00.000Z');
 
 const getZipOfFolder = async (dir) => {
 
@@ -92,7 +93,7 @@ const getZipOfFolder = async (dir) => {
     let ext = filePath.split('.').pop().trim();
     
     let data;
-    if(compressibleFormats.has(ext)) {
+    if(minifiableFormats.has(ext)) {
       try {
           console.log("minifying ", filePath)
           data = await minify(filePath)
@@ -106,17 +107,20 @@ const getZipOfFolder = async (dir) => {
     }
 
     let stat = fs.lstatSync(filePath);
-    let permissions = stat.mode;
 
     if (stat.isSymbolicLink()) {
       zip.file(addPath, fs.readlinkSync(filePath), {
         unixPermissions: parseInt('120755', 8), // This permission can be more permissive than necessary for non-executables but we don't mind.
-        dir: stat.isDirectory()
+        dir: stat.isDirectory(),
+        date: ZIP_DATE,
+        createFolders: false
       });
     } else {
       zip.file(addPath, data, {
-        unixPermissions: permissions,
-        dir: stat.isDirectory()
+        unixPermissions: parseInt('100644', 8),
+        dir: stat.isDirectory(),
+        date: ZIP_DATE,
+        createFolders: false
       });
     }
   }

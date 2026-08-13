@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 
 import { useRootThread } from './hooks/use-root-thread';
 import { withServices } from '../service-context';
 import { useSidebarStore } from '../store';
+import { isAnnotation } from '../helpers/annotation-metadata';
 import { tabForAnnotation } from '../helpers/tabs';
 
 import FilterStatus from './FilterStatus';
@@ -34,6 +35,7 @@ function SidebarView({
   streamer,
 }) {
   const rootThread = useRootThread();
+  const [showOnlyWithNotes, setShowOnlyWithNotes] = useState(false);
 
   // Store state values
   const store = useSidebarStore();
@@ -42,6 +44,7 @@ function SidebarView({
     store.hasAppliedFilter() || store.hasSelectedAnnotations();
   const isLoading = store.isLoading();
   const isLoggedIn = store.isLoggedIn();
+  const selectedTab = store.selectedTab();
 
   const linkedAnnotationId = store.directLinkedAnnotationId();
   const linkedAnnotation = linkedAnnotationId
@@ -74,6 +77,19 @@ function SidebarView({
 
   const showFilterStatus = !hasContentError;
   const showTabs = !hasContentError && !hasAppliedFilter;
+
+  const threadsWithNotes = rootThread.children.filter(thread => {
+    const annotation = thread.annotation;
+    return annotation && isAnnotation(annotation) && !!annotation.text?.trim();
+  });
+  const visibleThreads =
+    showTabs && selectedTab === 'annotation' && showOnlyWithNotes
+      ? rootThread.children.filter(
+          thread =>
+            threadsWithNotes.includes(thread) ||
+            (thread.annotation && !thread.annotation.id)
+        )
+      : rootThread.children;
 
   // Show a CTA to log in if successfully viewing a direct-linked annotation
   // and not logged in
@@ -155,8 +171,15 @@ function SidebarView({
       {hasDirectLinkedGroupError && (
         <SidebarContentError errorType="group" onLoginRequest={onLogin} />
       )}
-      {showTabs && <SelectionTabs isLoading={isLoading} />}
-      <ThreadList threads={rootThread.children} />
+      {showTabs && (
+        <SelectionTabs
+          annotationNoteCount={threadsWithNotes.length}
+          isLoading={isLoading}
+          onShowOnlyWithNotesChange={setShowOnlyWithNotes}
+          showOnlyWithNotes={showOnlyWithNotes}
+        />
+      )}
+      <ThreadList threads={visibleThreads} />
       {showLoggedOutMessage && <LoggedOutMessage onLogin={onLogin} />}
     </div>
   );

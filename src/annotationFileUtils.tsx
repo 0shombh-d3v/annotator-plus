@@ -1,12 +1,25 @@
 import { TFile, Vault } from 'obsidian';
-import { Annotation, AnnotationList } from 'types';
-import AnnotatorPlugin from './main';
+import { Annotation, AnnotationList } from './types';
+import type AnnotatorPlugin from './main';
 import {
     deleteAnnotationFromAnnotationFileString,
     getAnnotationFromFileContent,
     loadAnnotationsAtUriFromFileText,
     writeAnnotationToAnnotationFileString
-} from 'annotationUtils';
+} from './annotationUtils';
+
+const writeQueues = new Map<string, Promise<unknown>>();
+
+function serializeFileUpdate<T>(path: string, update: () => Promise<T>): Promise<T> {
+    const previous = writeQueues.get(path) || Promise.resolve();
+    const current = previous.catch(() => undefined).then(update);
+    writeQueues.set(path, current);
+    void current.then(
+        () => writeQueues.get(path) === current && writeQueues.delete(path),
+        () => writeQueues.get(path) === current && writeQueues.delete(path)
+    );
+    return current;
+}
 
 export async function getAnnotation(annotationId: string, file: TFile, vault: Vault): Promise<Annotation | null> {
     const text = await vault.read(file);
@@ -14,19 +27,21 @@ export async function getAnnotation(annotationId: string, file: TFile, vault: Va
 }
 
 export async function writeAnnotation(annotation: Annotation, plugin: AnnotatorPlugin, annotationFilePath: string) {
-    const vault = plugin.app.vault;
-    const tfile = vault.getAbstractFileByPath(annotationFilePath);
-
-    let res: ReturnType<typeof writeAnnotationToAnnotationFileString>;
-    if (tfile instanceof TFile) {
-        const text = await vault.read(tfile);
-        res = writeAnnotationToAnnotationFileString(annotation, text, plugin);
-        vault.modify(tfile, res.newAnnotationFileString);
-    } else {
-        res = writeAnnotationToAnnotationFileString(annotation, null, plugin);
-        vault.create(annotationFilePath, res.newAnnotationFileString);
-    }
-    return res.newAnnotation;
+    return serializeFileUpdate(annotationFilePath, async () => {
+        const vault = plugin.app.vault;
+        const tfile = vault.getAbstractFileByPath(annotationFilePath);
+        let res: ReturnType<typeof writeAnnotationToAnnotationFileString>;
+        if (tfile instanceof TFile) {
+            await vault.process(tfile, text => {
+                res = writeAnnotationToAnnotationFileString(annotation, text, plugin);
+                return res.newAnnotationFileString;
+            });
+        } else {
+            res = writeAnnotationToAnnotationFileString(annotation, null, plugin);
+            await vault.create(annotationFilePath, res.newAnnotationFileString);
+        }
+        return res.newAnnotation;
+    });
 }
 
 export async function loadAnnotations(
@@ -51,21 +66,16 @@ export async function deleteAnnotation(
     deleted: boolean;
     id: string;
 }> {
-    const tfile = vault.getAbstractFileByPath(annotationFilePath);
-    if (tfile instanceof TFile) {
-        const text = await vault.read(tfile);
-        const updatedText = deleteAnnotationFromAnnotationFileString(annotationId, text);
-        if (text !== updatedText) {
-            vault.modify(tfile, updatedText);
-            return {
-                deleted: true,
-                id: annotationId
-            };
+    return serializeFileUpdate(annotationFilePath, async () => {
+        const tfile = vault.getAbstractFileByPath(annotationFilePath);
+        let deleted = false;
+        if (tfile instanceof TFile) {
+            await vault.process(tfile, text => {
+                const updatedText = deleteAnnotationFromAnnotationFileString(annotationId, text);
+                deleted = text !== updatedText;
+                return updatedText;
+            });
         }
-    }
-
-    return {
-        deleted: false,
-        id: annotationId
-    };
+        return { deleted, id: annotationId };
+    });
 }

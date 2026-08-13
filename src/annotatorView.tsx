@@ -2,147 +2,84 @@ import { getAnnotation } from 'annotationFileUtils';
 import { ANNOTATION_TARGET_PROPERTY, ANNOTATION_TARGET_TYPE_PROPERTY, VIEW_TYPE_PDF_ANNOTATOR } from './constants';
 import { DarkReaderType } from 'darkreader';
 import AnnotatorPlugin from 'main';
-import { Annotation } from './types';
+import { Annotation, AnnotationTarget } from './types';
 import { FileView, Menu, MenuItem, TFile, WorkspaceLeaf } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { isUrl, get_url_extension } from 'utils';
+import { get_url_extension } from 'utils';
+import { DARK_READER_FIXES, shouldUseDarkMode } from './darkMode';
+import { resolveAnnotationTarget } from './targetResolver';
+import { checkPseudoAnnotationEquality } from './annotationUtils';
 
 export default class AnnotatorView extends FileView {
     plugin: AnnotatorPlugin;
     iframe: HTMLIFrameElement;
     activeG: () => void;
-    annotationTarget?: string;
-    darkReaderReferences: Set<WeakRef<DarkReaderType>>;
-    useDarkMode: boolean;
+    annotationTarget?: AnnotationTarget;
+    darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
     getViewType(): string {
         return VIEW_TYPE_PDF_ANNOTATOR;
     }
     constructor(leaf: WorkspaceLeaf, plugin: AnnotatorPlugin) {
         super(leaf);
-        this.useDarkMode = plugin.settings.deafultDarkMode;
         this.plugin = plugin;
         this.plugin.views.add(this);
     }
 
-    getAnnotationTarget(file: TFile): string {
+    isDarkModeEnabled(): boolean {
+        return shouldUseDarkMode(
+            this.plugin.settings.darkMode,
+            this.containerEl.ownerDocument.body.classList.contains('theme-dark')
+        );
+    }
+
+    async getAnnotationTarget(file: TFile): Promise<AnnotationTarget> {
         const annotationTargetPropertyValue = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
-        if (!annotationTargetPropertyValue) {
-            this.plugin.log('Invalid annotation target!');
-            return '';
-        }
-        for (let target of [
-            annotationTargetPropertyValue,
-            `${this.plugin.settings.customDefaultPath}${annotationTargetPropertyValue}`
-        ]) {
-            //unpack target if it is is an array (For Metaedit compatability)
-            if (Array.isArray(target)) {
-                target = target[0];
-            }
-
-            if (isUrl(target)) {
-                return target;
-            }
-            let destFile: TFile;
-            try {
-                destFile = this.app.metadataCache.getFirstLinkpathDest(target, file?.path || '');
-            } finally {
-                if (destFile) {
-                    return destFile.path;
-                }
-            }
-        }
-
-        //unpack target if it is is an array (For Metaedit compatability)
-        if (Array.isArray(annotationTargetPropertyValue)) {
-            return annotationTargetPropertyValue[0];
-        }
-
-        return annotationTargetPropertyValue;
+        return resolveAnnotationTarget(annotationTargetPropertyValue, this.plugin.settings.customDefaultPath, {
+            resolveVaultFile: path => this.app.metadataCache.getFirstLinkpathDest(path, file.path)
+        });
     }
 
     async onLoadFile(file: TFile) {
-        // this ensures that the steps below are carried out asynchronously without being awatied.
-        (async () => {
+        try {
             // Prevent pane from loading too early.
             await this.plugin.setupPromise;
-            await this.plugin.awaitDataViewPage(file.path);
             ReactDOM.unmountComponentAtNode(this.contentEl);
             this.contentEl.empty();
-            const annotationTarget = this.getAnnotationTarget(file);
+            const annotationTarget = await this.getAnnotationTarget(file);
 
             this.contentEl.removeClass('view-content');
             this.contentEl.style.height = '100%';
             this.annotationTarget = annotationTarget;
-            if (annotationTarget) {
-                const annotationTargetType =
-                    this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) ||
-                    get_url_extension(annotationTarget);
-                let component;
-                switch (annotationTargetType) {
-                    case 'pdf':
-                        component = (
-                            <this.plugin.PdfAnnotation
-                                pdf={annotationTarget}
-                                containerEl={this.contentEl}
-                                annotationFile={file.path}
-                                onload={async iframe => {
-                                    this.iframe = iframe;
-                                }}
-                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
-                            />
-                        );
-                        break;
-                    case 'epub':
-                        component = (
-                            <this.plugin.EpubAnnotation
-                                epub={annotationTarget}
-                                containerEl={this.contentEl}
-                                annotationFile={file.path}
-                                onload={async iframe => {
-                                    this.iframe = iframe;
-                                }}
-                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
-                            />
-                        );
-                        break;
-                    case 'video':
-                        component = (
-                            <this.plugin.VideoAnnotation
-                                video={annotationTarget}
-                                containerEl={this.contentEl}
-                                annotationFile={file.path}
-                                onload={async iframe => {
-                                    this.iframe = iframe;
-                                }}
-                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
-                            />
-                        );
-                        break;
-                    case 'web':
-                        component = (
-                            <this.plugin.WebAnnotation
-                                url={annotationTarget}
-                                containerEl={this.contentEl}
-                                annotationFile={file.path}
-                                onload={async iframe => {
-                                    this.iframe = iframe;
-                                }}
-                                onDarkReadersUpdated={this.onDarkReadersUpdated.bind(this)}
-                            />
-                        );
-                        break;
-                }
-                ReactDOM.render(component, this.contentEl);
-            } else {
+            const annotationTargetType = String(
+                this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) ||
+                    get_url_extension(annotationTarget.url)
+            ).toLowerCase();
+            const commonProps = {
+                containerEl: this.contentEl,
+                annotationFile: file.path,
+                onload: async (iframe: HTMLIFrameElement) => {
+                    this.iframe = iframe;
+                },
+                onDarkReadersUpdated: this.onDarkReadersUpdated.bind(this)
+            };
+            if (annotationTargetType === 'pdf') {
+                ReactDOM.render(<this.plugin.PdfAnnotation pdf={annotationTarget} {...commonProps} />, this.contentEl);
+            } else if (annotationTargetType === 'epub') {
                 ReactDOM.render(
-                    <div>
-                        No <pre>annotation-target</pre> property present in frontmatter.
-                    </div>,
+                    <this.plugin.EpubAnnotation epub={annotationTarget} {...commonProps} />,
                     this.contentEl
                 );
+            } else {
+                throw new Error('Annotator+ supports PDF and EPUB targets only.');
             }
-        })();
+        } catch (error) {
+            this.contentEl.empty();
+            this.contentEl.createDiv({
+                cls: 'annotator-plus-error',
+                text: error instanceof Error ? error.message : 'Could not open the annotation target.'
+            });
+        }
     }
 
     async onDarkReadersUpdated(darkReaderReferences?: Set<WeakRef<DarkReaderType>>): Promise<void> {
@@ -156,8 +93,8 @@ export default class AnnotatorView extends FileView {
             const darkReaderSettings = this.plugin.settings.darkReaderSettings;
             const f = () => {
                 try {
-                    if (this.useDarkMode) {
-                        darkReader.enable(darkReaderSettings, { invert: ['.canvasWrapper'] });
+                    if (this.isDarkModeEnabled()) {
+                        darkReader.enable(darkReaderSettings, DARK_READER_FIXES);
                     } else {
                         darkReader.disable();
                     }
@@ -207,12 +144,12 @@ export default class AnnotatorView extends FileView {
         menu.addItem(
             (item: MenuItem): MenuItem =>
                 item
-                    .setTitle('Annotator Toggle Dark Mode')
+                    .setTitle(`Annotator: Use ${this.isDarkModeEnabled() ? 'Light' : 'Dark'} Mode`)
                     .setIcon('switch')
                     .setSection('pane')
                     .onClick(async () => {
-                        this.useDarkMode = !this.useDarkMode;
-                        await this.onDarkReadersUpdated();
+                        this.plugin.settings.darkMode = this.isDarkModeEnabled() ? 'light' : 'dark';
+                        await this.plugin.saveSettings();
                     })
         );
     }
@@ -224,11 +161,9 @@ export default class AnnotatorView extends FileView {
         let done = false;
         let newYOffset;
         const isPageNote = !annotation.target?.length;
-        const selectors = new Set(isPageNote ? [] : annotation.target[0].selector.map(x => JSON.stringify(x)));
-
         const annotationTargetType =
             this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, this.file) ||
-            get_url_extension(this.annotationTarget);
+            get_url_extension(this.annotationTarget?.url || '');
 
         const g = () => {
             try {
@@ -273,9 +208,7 @@ export default class AnnotatorView extends FileView {
                 for (const guest of guests) {
                     if (!guest) continue;
                     const matchingAnchors = guest.anchors.filter(x =>
-                        x?.annotation?.target?.[0]?.selector
-                            ?.map(x => selectors.has(JSON.stringify(x)))
-                            .reduce((a, b) => a || b)
+                        checkPseudoAnnotationEquality(annotation, x?.annotation)
                     );
 
                     guest._sidebarRPC.call(

@@ -150,9 +150,9 @@ declare namespace DarkReader {
 }
 
 export type DarkReaderType = {
-    enable: typeof DarkReader.enable,
-    disable: typeof DarkReader.disable,
-    auto: typeof DarkReader.auto,
-    exportGeneratedCSS: typeof DarkReader.exportGeneratedCSS,
-    setFetchMethod: typeof DarkReader.setFetchMethod,
+    enable: typeof DarkReader.enable;
+    disable: typeof DarkReader.disable;
+    auto: typeof DarkReader.auto;
+    exportGeneratedCSS: typeof DarkReader.exportGeneratedCSS;
+    setFetchMethod: typeof DarkReader.setFetchMethod;
 };

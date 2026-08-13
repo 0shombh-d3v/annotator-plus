@@ -45,6 +45,9 @@ export async function unloadResources() {
     for (const path of paths) {
         resourcesZip.remove(path);
     }
+    resourceUrls.clear();
+    resourceUrlToPlainText.clear();
+    loadingPromise = null;
 }
 
 export async function loadResourcesZip(zipObject: JSZip | Promise<JSZip>) {

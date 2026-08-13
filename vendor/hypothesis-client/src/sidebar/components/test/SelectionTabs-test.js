@@ -13,7 +13,10 @@ describe('SelectionTabs', () => {
 
   // default props
   const defaultProps = {
+    annotationNoteCount: 12,
     isLoading: false,
+    onShowOnlyWithNotesChange: sinon.stub(),
+    showOnlyWithNotes: false,
   };
 
   function createComponent(props) {
@@ -84,6 +87,25 @@ describe('SelectionTabs', () => {
         0
       );
     });
+
+    it('filters annotations by whether they have written notes', () => {
+      const onShowOnlyWithNotesChange = sinon.stub();
+      const wrapper = createComponent({ onShowOnlyWithNotesChange });
+      const allButton = wrapper.find(
+        'LinkButton[data-testid="show-all-annotations"]'
+      );
+      const withNotesButton = wrapper.find(
+        'LinkButton[data-testid="show-annotations-with-notes"]'
+      );
+
+      assert.equal(allButton.text(), 'All (123)');
+      assert.equal(withNotesButton.text(), 'Notes (12)');
+      assert.isTrue(allButton.prop('pressed'));
+      assert.isFalse(withNotesButton.prop('pressed'));
+
+      withNotesButton.props().onClick();
+      assert.calledWith(onShowOnlyWithNotesChange, true);
+    });
   });
 
   describe('Notes tab', () => {
@@ -100,6 +122,15 @@ describe('SelectionTabs', () => {
 
       assert.isTrue(noteTabButton.prop('pressed'));
       assert.isFalse(annotationTabButton.prop('pressed'));
+    });
+
+    it('does not display the annotation note filter', () => {
+      fakeStore.selectedTab.returns('note');
+      const wrapper = createComponent();
+
+      assert.isFalse(
+        wrapper.find('[data-testid="annotation-note-filter"]').exists()
+      );
     });
 
     describe('Add Page Note button', () => {

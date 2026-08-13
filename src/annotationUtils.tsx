@@ -2,10 +2,28 @@ import { SAMPLE_PDF_URL } from './constants';
 import { IHasAnnotatorSettings } from 'settings';
 import { Annotation, AnnotationList } from 'types';
 
+const ANNOTATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export const isValidAnnotationId = (value: unknown): value is string =>
+    typeof value === 'string' && ANNOTATION_ID_PATTERN.test(value);
+
+export const isWritableAnnotation = (value: unknown): value is Annotation => {
+    if (!value || typeof value !== 'object') return false;
+    const annotation = value as Partial<Annotation>;
+    return (
+        (annotation.id === undefined || isValidAnnotationId(annotation.id)) &&
+        typeof annotation.text === 'string' &&
+        Array.isArray(annotation.tags) &&
+        annotation.tags.every(tag => typeof tag === 'string') &&
+        Array.isArray(annotation.target)
+    );
+};
+
 const makeAnnotationBlockRegex = (annotationId?: string) =>
     new RegExp(
         '(?<annotationBlock>^\n(>.*?\n)*?>```annotation-json(\n>.*?)*?)\n\\^(?<annotationId>' +
-            (annotationId ?? '[a-zA-Z0-9]+') +
+            (annotationId ? escapeRegExp(annotationId) : '[A-Za-z0-9_-]{1,128}') +
             ')\n',
         'gm'
     );
@@ -231,10 +249,37 @@ export function deleteAnnotationFromAnnotationFileString(
 }
 
 export function checkPseudoAnnotationEquality(annotation: Annotation, pseudoAnnotation: Annotation): boolean {
-    const isPageNote = !annotation.target?.length;
-    if (isPageNote) {
-        return false;
+    const selectors = annotation.target?.[0]?.selector;
+    const pseudoSelectors = pseudoAnnotation.target?.[0]?.selector;
+    if (!selectors?.length || !pseudoSelectors?.length) return false;
+
+    const position = selectors.find(
+        (x): x is Extract<typeof x, { type: 'TextPositionSelector' }> => x.type === 'TextPositionSelector'
+    );
+    const pseudoPosition = pseudoSelectors.find(
+        (x): x is Extract<typeof x, { type: 'TextPositionSelector' }> => x.type === 'TextPositionSelector'
+    );
+    if (position && pseudoPosition) {
+        if (position.start !== pseudoPosition.start || position.end !== pseudoPosition.end) return false;
+        const quote = selectors.find(
+            (x): x is Extract<typeof x, { type: 'TextQuoteSelector' }> => x.type === 'TextQuoteSelector'
+        );
+        const pseudoQuote = pseudoSelectors.find(
+            (x): x is Extract<typeof x, { type: 'TextQuoteSelector' }> => x.type === 'TextQuoteSelector'
+        );
+        return !quote || !pseudoQuote || quote.exact === pseudoQuote.exact;
     }
-    const selectors = new Set(annotation.target[0].selector.map(x => JSON.stringify(x)));
-    return pseudoAnnotation?.target?.[0]?.selector?.map(x => selectors.has(JSON.stringify(x))).reduce((a, b) => a || b);
+
+    const normalize = (value: unknown): string => {
+        if (Array.isArray(value)) return `[${value.map(normalize).sort().join(',')}]`;
+        if (value && typeof value === 'object') {
+            const record = value as Record<string, unknown>;
+            return `{${Object.keys(record)
+                .sort()
+                .map(key => `${JSON.stringify(key)}:${normalize(record[key])}`)
+                .join(',')}}`;
+        }
+        return JSON.stringify(value);
+    };
+    return normalize(selectors) === normalize(pseudoSelectors);
 }
