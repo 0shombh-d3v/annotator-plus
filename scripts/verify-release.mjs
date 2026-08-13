@@ -78,9 +78,13 @@ for (const marker of [
   'js-hypothesis-config',
   'showHighlights',
   'annotator-plus/sidebar.html',
+  'await window.PDFViewerApplication.initializedPromise',
   'https://cdn.hypothes.is/hypothesis/build/boot.js'
 ]) {
   if (!viewer.includes(marker)) throw new Error(`PDF reader is missing ${marker}`);
+}
+if (viewer.includes('<script src="https://cdn.hypothes.is/hypothesis/build/boot.js"></script>')) {
+  throw new Error('Hypothesis must not start before PDF.js initialization');
 }
 
 const epub = await resources.file('cdn.hypothes.is/demos/epub/epub.js/index.html').async('string');

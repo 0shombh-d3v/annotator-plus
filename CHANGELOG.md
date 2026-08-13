@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3 — 2026-08-14
+
+- Wait for PDF.js initialization before starting Hypothesis so fresh and newly rendered pages use native PDF anchoring.
+
 ## 0.4.2 — 2026-08-14
 
 - Made published bundles use the committed, reviewed reader assets so platform-specific Tailwind output cannot change release bytes.
