@@ -14,7 +14,13 @@ import {
 } from 'annotationUtils';
 import { MarkdownRenderer, TFile, Vault } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
-import { awaitResourceLoading, resourcesZip, resourceUrls, resourceUrlToPlainText } from 'resourcesFolder';
+import {
+    awaitResourceLoading,
+    getBundledResourcePath,
+    resourcesZip,
+    resourceUrls,
+    resourceUrlToPlainText
+} from 'resourcesFolder';
 import { PdfNoteIndicatorController, setupPdfNoteIndicatorsInFrame } from 'pdfNoteIndicators';
 import { AnnotationTarget } from './types';
 import { targetMatchesRequest } from './targetResolver';
@@ -137,7 +143,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                     const folder = resourcesZip;
                     if (proxiedHosts.has(url.host)) {
                         try {
-                            const pathName = `${url.host}${url.pathname}`.replace(/^\//, '');
+                            const pathName = getBundledResourcePath(url);
                             const file =
                                 folder.file(pathName) ||
                                 folder.file(`${pathName}.html`) ||
@@ -169,9 +175,12 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 }}
                 htmlPostProcessFunction={(html: string) => {
                     if ('pdf' in props) {
+                        const workerUrl = resourceUrls.get('pdfjs/build/pdf.worker.mjs');
+                        if (!workerUrl) throw new Error('Bundled PDF worker is unavailable');
                         html = html
                             .replaceAll(SAMPLE_PDF_URL_BASE64, utf8_to_b64(props.pdf.url))
-                            .replaceAll(SAMPLE_PDF_URL, props.pdf.url);
+                            .replaceAll(SAMPLE_PDF_URL, props.pdf.url)
+                            .replaceAll('__ANNOTATOR_PLUS_PDF_WORKER_URL__', workerUrl);
                     }
                     if ('epub' in props) {
                         html = html.replaceAll(SAMPLE_EPUB_URL, props.epub.url);

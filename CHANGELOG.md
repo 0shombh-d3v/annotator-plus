@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-08-13
+
+- Fixed the black screen caused by upgraded PDF.js resources using outdated bundled paths and browser APIs.
+- Restored bundled PDF worker loading and annotation-sidebar resources while keeping PDF document scripting disabled.
+
 ## 0.3.0 — 2026-08-13
 
 - Forked Obsidian Annotator as **Annotator+** with a separate plugin ID.

@@ -20253,7 +20253,7 @@ const PDFViewerApplication = {
 initCom(PDFViewerApplication);
 PDFPrintServiceFactory.initGlobals(PDFViewerApplication);
 {
-  const HOSTED_VIEWER_ORIGINS = new Set(["null", "http://mozilla.github.io", "https://mozilla.github.io"]);
+  const HOSTED_VIEWER_ORIGINS = new Set(["null", "app://obsidian.md", "http://mozilla.github.io", "https://mozilla.github.io"]);
   var validateFileURL = function (file) {
     if (!file) {
       return;

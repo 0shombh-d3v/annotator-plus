@@ -12,6 +12,14 @@ function bufferToBlobUrl(buffer: ArrayBuffer, type: string) {
     return URL.createObjectURL(blob);
 }
 
+export function getBundledResourcePath(url: URL | string): string {
+    const parsedUrl = typeof url == 'string' ? new URL(url) : url;
+    if (parsedUrl.hostname === 'via.hypothes.is' && parsedUrl.pathname.startsWith('/pdfjs/')) {
+        return parsedUrl.pathname.replace(/^\//, '');
+    }
+    return `${parsedUrl.host}${parsedUrl.pathname}`.replace(/^\//, '');
+}
+
 async function _loadResourcesZip(zipObject: JSZip | Promise<JSZip>): Promise<JSZip> {
     const zip = await zipObject;
     for (const filePath of Object.keys(zip.files)) {

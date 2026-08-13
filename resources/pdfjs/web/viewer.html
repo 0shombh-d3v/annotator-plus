@@ -27,26 +27,32 @@ See https://github.com/adobe-type-tools/cmap-resources
     <meta name="google" content="notranslate" />
     <title>PDF.js viewer</title>
 
-  <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' blob: 'unsafe-inline'; worker-src 'self' blob: data:; style-src 'self' blob:; img-src 'self' blob: data:; media-src blob:; font-src 'self' blob: data:; connect-src 'self' blob: data: https: file: vault:; base-uri 'none'; form-action 'none';"
-    />
-
 <!-- This snippet is used in production (included from viewer.html) -->
 <link rel="resource" type="application/l10n" href="locale/locale.json" />
 <script>
-  document.addEventListener('webviewerloaded', () => {
+  if (!Map.prototype.getOrInsertComputed) {
+    Map.prototype.getOrInsertComputed = function (key, callback) {
+      if (!this.has(key)) this.set(key, callback(key));
+      return this.get(key);
+    };
+    Map.prototype.getOrInsert = function (key, value) {
+      if (!this.has(key)) this.set(key, value);
+      return this.get(key);
+    };
+  }
+  parent.document.addEventListener('webviewerloaded', () => {
     const options = window.PDFViewerApplicationOptions;
     const encodedTarget = 'aHR0cHM6Ly9hcnhpdi5vcmcvcGRmLzE3MDIuMDg3MzQucGRm';
     let target = '';
     try { target = decodeURIComponent(escape(atob(encodedTarget))); } catch {}
     options.set('disablePreferences', true);
     options.set('defaultUrl', target);
+    options.set('workerSrc', '__ANNOTATOR_PLUS_PDF_WORKER_URL__');
     options.set('enableScripting', false);
     options.set('enableAltTextModelDownload', false);
     options.set('enableGuessAltText', false);
     options.set('enableWebGPU', false);
-  });
+  }, { once: true });
   window.hypothesisConfig = () => ({ appType: 'via', openSidebar: true, showHighlights: true });
 </script>
 <script src="../build/pdf.mjs" type="module"></script>
