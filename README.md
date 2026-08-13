@@ -15,9 +15,9 @@ Annotations remain in the Markdown note that opened the document. Annotator+ doe
 - The sidebar can switch between **All** highlights and **Notes** while keeping **Page Notes** separate.
 - Appearance can follow Obsidian live, stay always dark, or stay always light.
 - Dark mode uses a higher-contrast amber highlight while keeping the red note underline visible.
-- PDF scripting is disabled, annotation targets are limited to vault files, local `file://` URLs, and credential-free HTTPS URLs, and annotation writes are validated and serialized.
+- Reader and annotation resources are bundled for offline use; annotation data remains in the vault note.
 
-Annotator+ is desktop-only. PDF and EPUB targets are supported; the original plugin's experimental web and video annotation modes are not included.
+Annotator+ is desktop-only. PDF and EPUB are its primary supported targets.
 
 ## Install
 
@@ -59,8 +59,7 @@ No Obsidian restart is required.
 
 - Annotations are stored in your vault note, not in a remote annotation account.
 - Bundled reader resources run locally. HTTPS is used only when the configured annotation target itself is remote.
-- Remote targets must match the configured URL exactly; only safe PDF range headers are forwarded and redirects must remain HTTPS.
-- EPUB embedded scripting and PDF document scripting are disabled.
+- Keep remote targets and documents limited to sources you trust.
 
 Treat PDFs and EPUBs from unknown sources as untrusted files and keep Obsidian and Annotator+ updated. See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 

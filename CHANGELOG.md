@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2 — 2026-08-13
+
+- Restored the proven PDF reader and Hypothesis client after 0.3.0–0.3.1 broke the annotation sidebar, highlights, and notes.
+- Added compatibility for the forked `annotator-plus` plugin ID without changing existing annotation data.
+- Added release checks for the reader, note indicators, appearance policy, and sidebar compatibility bridge.
+- Rolled back the 0.3.0 reader/security rewrite; its protections will return only after the full annotation UI passes integration testing.
+
 ## 0.3.1 — 2026-08-13
 
 - Fixed the black screen caused by upgraded PDF.js resources using outdated bundled paths and browser APIs.

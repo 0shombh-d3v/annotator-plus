@@ -25,11 +25,11 @@ The Hypothesis client is ordinary source under `vendor/hypothesis-client`; there
 npm run check
 CHROME_BIN="/path/to/google-chrome" npm run check:vendor
 npm audit --audit-level=high
-npm run build:all
+npm run build
 npm run release:verify
 ```
 
-`npm run build` uses the reviewed, committed Hypothesis browser bundles. Use `npm run build:all` when vendored client source changed, then commit the regenerated files under `resources/cdn.hypothes.is/hypothesis/build`. Keeping the legacy vendored build toolchain out of release CI prevents it from becoming part of the release trust boundary.
+`npm run build` copies the validated runtime from `release/main.js`. This pins the PDF reader and Hypothesis client combination that passed the Obsidian smoke test. `npm run quick-build` remains available for source development, but do not replace the release runtime until the PDF, sidebar, highlights, **All / Notes** filter, and note indicators pass in Obsidian.
 
 For local development, put the absolute destination plugin directory in `.vault_plugin_dir`, run `npm run dev`, and reload the plugin after a build.
 

@@ -1,6 +1,6 @@
 {
   "name": "annotator-plus",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Private, local-first PDF and EPUB annotation for Obsidian.",
   "main": "main.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "check": "npm run typecheck && npm test && npm run lint",
     "check:vendor": "yarn --cwd vendor/hypothesis-client checkformatting && yarn --cwd vendor/hypothesis-client typecheck && yarn --cwd vendor/hypothesis-client test",
     "quick-build": "rollup --config rollup.config.js --environment BUILD:production",
-    "build": "npm run quick-build",
+    "build": "node scripts/build-release.mjs",
     "build:all": "npm run build-hypothesis && npm run quick-build",
     "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && yarn --cwd vendor/hypothesis-client build && move-file vendor/hypothesis-client/build resources/cdn.hypothes.is/hypothesis/build && rimraf resources/cdn.hypothes.is/hypothesis/build/**/*.map resources/cdn.hypothes.is/hypothesis/build/scripts/test-inputs.js resources/cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js resources/cdn.hypothes.is/hypothesis/build/scripts/ui-playground.bundle.js resources/cdn.hypothes.is/hypothesis/build/styles/ui-playground.css",
     "release:verify": "node scripts/verify-release.mjs",
