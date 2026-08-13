@@ -1,4 +1,3 @@
-import { MarkdownView } from '@hypothesis/annotation-ui';
 import {
   Button,
   IconButton,
@@ -52,6 +51,7 @@ import {
 } from '../markdown-commands';
 import type { EditorState } from '../markdown-commands';
 import { getCaretCoordinates } from '../util/textarea-caret-position';
+import AnnotatorPlusMarkdownView from './AnnotatorPlusMarkdownView';
 import MentionSuggestionsPopover from './MentionSuggestionsPopover';
 
 /**
@@ -648,7 +648,7 @@ export default function MarkdownEditor({
         mentionsEnabled={mentionsEnabled}
       />
       {preview ? (
-        <MarkdownView
+        <AnnotatorPlusMarkdownView
           markdown={text}
           classes="border bg-grey-1 p-2"
           style={textStyle}

@@ -5,6 +5,14 @@ body {
   color: #333;
 }
 
+.reader-control {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  line-height: 1;
+}
+
 svg {
   display: block;
 }
@@ -27,7 +35,8 @@ svg {
   padding: 10px;
   stroke: #E2E2E2;
   fill: #E2E2E2;
-
+  color: #E2E2E2;
+  font-size: 28px;
 }
 
 #opener:hover {
@@ -134,10 +143,6 @@ svg {
   color: #000;
 }
 
-.arrow .material-icons {
-  font-size: 64px;
-}
-
 #prev {
   float: left;
 }
@@ -179,10 +184,6 @@ svg {
   top: 0;
   color: #333;
   cursor: pointer;
-}
-
-#closer .material-icons {
-  color: #333;
 }
 
 #opener {

@@ -2,7 +2,7 @@ import { SAMPLE_PDF_URL, SAMPLE_PDF_URL_BASE64, SAMPLE_EPUB_URL } from './consta
 import { OfflineIframe } from 'react-offline-iframe';
 import React, { useEffect, useRef } from 'react';
 import { SpecificAnnotationProps } from 'types';
-import { b64_to_utf8, utf8_to_b64, wait } from 'utils';
+import { b64_to_utf8, utf8_to_b64 } from 'utils';
 import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
@@ -12,21 +12,21 @@ import {
     isValidAnnotationId,
     isWritableAnnotation
 } from 'annotationUtils';
-import { MarkdownRenderer, TFile, Vault } from 'obsidian';
+import { MarkdownRenderChild, MarkdownRenderer, TFile, Vault } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
 import {
     awaitResourceLoading,
     getBundledResourcePath,
+    inlineBundledStylesheet,
+    isBundledResourceUrl,
     resourcesZip,
-    resourceUrls,
-    resourceUrlToPlainText
+    resourceUrls
 } from 'resourcesFolder';
 import { PdfNoteIndicatorController, setupPdfNoteIndicatorsInFrame } from 'pdfNoteIndicators';
 import { AnnotationTarget } from './types';
 import { targetMatchesRequest } from './targetResolver';
 import { fetchHttpsTarget } from './secureFetch';
 import { promises as fs } from 'fs';
-import { HypothesisMessageRelay } from './messageRelay';
 
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
 
@@ -41,9 +41,11 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
         }
     ) => {
         const darkReaderReferences = useRef(new Set<WeakRef<DarkReaderType>>()).current;
+        const markdownRenderChildren = useRef(new Set<MarkdownRenderChild>()).current;
         const disposed = useRef(false);
         const pdfAnnotations = useRef<Annotation[]>([]);
         const pdfNoteIndicatorController = useRef<PdfNoteIndicatorController>(null);
+        const sidebarCleanups = useRef(new Set<() => void>()).current;
 
         const refreshPdfNoteIndicators = (annotations?: Annotation[]) => {
             if (!('pdf' in props)) return;
@@ -55,17 +57,13 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
             disposed.current = false;
             return () => {
                 disposed.current = true;
-                relay.current.clear();
+                sidebarCleanups.forEach(cleanup => cleanup());
+                sidebarCleanups.clear();
+                markdownRenderChildren.forEach(child => child.unload());
+                markdownRenderChildren.clear();
                 darkReaderReferences.clear();
                 pdfNoteIndicatorController.current?.disconnect();
             };
-        }, []);
-
-        const relay = useRef(new HypothesisMessageRelay());
-        useEffect(() => {
-            const listener = (event: MessageEvent) => relay.current.handle(event);
-            addEventListener('message', listener);
-            return () => removeEventListener('message', listener);
         }, []);
 
         return (
@@ -82,6 +80,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             statusText: 'ok'
                         });
                     }
+                    if (isBundledResourceUrl(href)) return fetch(href);
                     const localApi = url.origin === 'http://localhost:8001';
                     if (localApi && url.pathname === '/api/search') {
                         try {
@@ -139,7 +138,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             statusText: 'ok'
                         });
                     }
-                    await awaitResourceLoading;
+                    await awaitResourceLoading();
                     const folder = resourcesZip;
                     if (proxiedHosts.has(url.host)) {
                         try {
@@ -157,13 +156,15 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                                 statusText: 'ok'
                             });
                         } catch (e) {
-                            console.warn('mockFetch Failed, Error', { e, url });
+                            if (plugin.settings.debugLogging) {
+                                console.warn('Bundled reader resource was not found', { error: e, url: url.href });
+                            }
                             return new Response(null, { status: 404, statusText: 'file not found' });
                         }
                     }
                     const target = annotationTarget(props);
                     if (!targetMatchesRequest(target, url)) {
-                        return new Response(null, { status: 403, statusText: 'Blocked by Annotator+ target policy' });
+                        return new Response(null, { status: 403, statusText: 'Blocked by Annotator++ target policy' });
                     }
                     if (target.kind === 'vault') {
                         const file = vault.getAbstractFileByPath(target.path);
@@ -189,27 +190,27 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 }}
                 postMessagePatchStrategy={null}
                 tagPatchStrategy="prototype"
-                onAttributeSet={(el: HTMLElement, attr, value, patchedValue) => {
-                    if (resourceUrlToPlainText.has(patchedValue)) {
-                        const style = el.ownerDocument.createElement('style');
-                        style.textContent = resourceUrlToPlainText.get(patchedValue) || null;
-                        el.append(style);
-                    }
-                }}
+                onAttributeSet={inlineBundledStylesheet}
                 onMessagePatchStrategy={null}
                 onIframePatch={async iframe => {
                     if (!iframe.contentWindow || !iframe.contentDocument) return;
-                    relay.current.register(iframe.contentWindow);
-                    patchSidebarMarkdownRendering(iframe, props.annotationFile, plugin);
+                    const cleanupSidebar = patchSidebarMarkdownRendering(
+                        iframe,
+                        props.annotationFile,
+                        plugin,
+                        markdownRenderChildren
+                    );
+                    if (cleanupSidebar) sidebarCleanups.add(cleanupSidebar);
                     patchIframeEventBubbling(iframe, props.containerEl);
                     await props.onIframePatch?.(iframe);
 
                     const darkReader = await loadDarkReader(iframe, resourceUrls.get('dark-reader/darkreader.js'));
                     if (darkReader) {
-                        darkReaderReferences.add(new WeakRef(darkReader));
+                        const darkReaderReference = new WeakRef(darkReader);
+                        darkReaderReferences.add(darkReaderReference);
                         [...darkReaderReferences].filter(r => !r.deref()).forEach(r => darkReaderReferences.delete(r));
                         darkReader.setFetchMethod(iframe.contentWindow.fetch);
-                        await props.onDarkReadersUpdated(darkReaderReferences);
+                        await props.onDarkReadersUpdated(new Set([darkReaderReference]));
                     }
                     iframe.contentDocument.documentElement.addEventListener('keydown', function (ev) {
                         if (ev.key == 'Shift') {
@@ -279,62 +280,12 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                     await props.onload(iframe);
                     if (disposed.current) return;
                     if ('pdf' in props) {
-                        const pdfJsFrame = iframe.contentDocument.getElementsByTagName('iframe')[0];
                         pdfNoteIndicatorController.current?.disconnect();
                         pdfNoteIndicatorController.current = setupPdfNoteIndicatorsInFrame(
-                            pdfJsFrame,
+                            iframe,
                             () => pdfAnnotations.current
                         );
                     }
-                    let sidebarFrame;
-                    do {
-                        await wait(100);
-                        if (disposed.current || !iframe.isConnected) return;
-                        sidebarFrame =
-                            iframe?.contentDocument
-                                ?.querySelector('iframe')
-                                ?.contentDocument?.querySelector('body > hypothesis-sidebar')
-                                ?.shadowRoot?.querySelector('div > iframe') ||
-                            iframe?.contentDocument
-                                ?.querySelector('body > hypothesis-sidebar')
-                                ?.shadowRoot?.querySelector('div > iframe');
-                    } while (!sidebarFrame?.contentDocument?.querySelector('body > hypothesis-app'));
-
-                    const style = sidebarFrame.contentDocument.createElement('style');
-                    style.textContent = `
-        .PublishControlButton--primary {
-            border-top-right-radius: 2px;
-            border-bottom-right-radius: 2px;
-        }
-
-        .annotation-publish-button__menu-wrapper {
-            display: none;
-        }
-
-        .AnnotationHeader__highlight {
-            display: none!important;
-        }
-        
-        .AnnotationShareInfo {
-            display: none!important;
-        }
-        
-        .AnnotationHeader__icon {
-            display: none!important;
-        }
-        
-        [data-testid="login-links"] {
-            display: none!important;
-        }
-
-        [data-testid="top-bar-content"] > .Menu {
-            display: none!important;
-        }
-
-        [data-testid="top-bar-content"] > button[title="Help"] {
-            display: none!important;
-        }`;
-                    sidebarFrame.contentDocument.head.appendChild(style);
                 }}
                 outerIframeProps={{
                     height: '100%',
@@ -360,7 +311,7 @@ async function loadDarkReader(iframe: HTMLIFrameElement, moduleUrl?: string): Pr
         iframe.contentWindow.addEventListener(readyEvent, onReady, { once: true });
         const script = iframe.contentDocument.createElement('script');
         script.type = 'module';
-        script.textContent = `import DarkReader from ${JSON.stringify(moduleUrl)};
+        script.textContent = `import * as DarkReader from ${JSON.stringify(moduleUrl)};
 window.${resultKey}=DarkReader;
 window.dispatchEvent(new Event(${JSON.stringify(readyEvent)}));`;
         script.onerror = () => resolve(null);
@@ -368,7 +319,19 @@ window.dispatchEvent(new Event(${JSON.stringify(readyEvent)}));`;
     });
 }
 
-function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: string, plugin: AnnotatorPlugin): void {
+function patchSidebarMarkdownRendering(
+    iframe: HTMLIFrameElement,
+    filePath: string,
+    plugin: AnnotatorPlugin,
+    renderChildren: Set<MarkdownRenderChild>
+): (() => void) | null {
+    const source = iframe.getAttribute('patched-src');
+    try {
+        if (!source || new URL(source).pathname !== '/annotator-plus/sidebar.html') return null;
+    } catch {
+        return null;
+    }
+
     type HTMLElementConstructor = typeof window.HTMLElement;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const IframeElement = (iframe.contentWindow as any).Element;
@@ -384,6 +347,18 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     class ObsidianMarkdown extends ((iframe.contentWindow as any).HTMLElement as HTMLElementConstructor) {
         markdown: string;
+        renderChild?: MarkdownRenderChild;
+
+        clearRenderChild() {
+            if (!this.renderChild) return;
+            this.renderChild.unload();
+            renderChildren.delete(this.renderChild);
+            this.renderChild = undefined;
+        }
+
+        disconnectedCallback() {
+            this.clearRenderChild();
+        }
 
         // Whenever an attibute is changed, this function is called. A switch statement is a good way to handle the various attributes.
         // Note that this also gets called the first time the attribute is set, so we do not need any special initialisation code.
@@ -391,7 +366,14 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
             if (name == 'markdownbase64') {
                 this.markdown = b64_to_utf8(newValue);
                 (async () => {
-                    MarkdownRenderer.renderMarkdown(this.markdown, this, filePath, null);
+                    this.clearRenderChild();
+                    this.replaceChildren();
+                    const renderChild = new MarkdownRenderChild(this);
+                    this.renderChild = renderChild;
+                    renderChild.load();
+                    renderChildren.add(renderChild);
+                    await MarkdownRenderer.renderMarkdown(this.markdown, this, filePath, renderChild);
+                    if (this.renderChild !== renderChild) return;
                     const maxDepth = 10;
                     const patchEmbeds = (el: HTMLElement, filePath: string, depth: number) => {
                         if (depth > maxDepth) return;
@@ -413,11 +395,11 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
                                             cls: 'markdown-embed-link',
                                             attr: { 'aria-label': 'Open link' }
                                         });
-                                        MarkdownRenderer.renderMarkdown(
+                                        await MarkdownRenderer.renderMarkdown(
                                             await plugin.app.vault.cachedRead(target),
                                             previewEl,
                                             target.path,
-                                            null
+                                            renderChild
                                         );
                                         await patchEmbeds(previewEl, target.path, depth + 1);
                                         el.addClasses(['is-loaded']);
@@ -450,11 +432,32 @@ function patchSidebarMarkdownRendering(iframe: HTMLIFrameElement, filePath: stri
         }
     }
 
-    // Now that our class is defined, we can register it
-    iframe.contentWindow.customElements.define('obsidian-markdown', ObsidianMarkdown);
+    if (!iframe.contentWindow.customElements.get('obsidian-markdown')) {
+        iframe.contentWindow.customElements.define('obsidian-markdown', ObsidianMarkdown);
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (iframe.contentWindow as any).renderObsidianMarkdown = markdown => {
         return `<obsidian-markdown markdownbase64="${utf8_to_b64(markdown)}" />`;
+    };
+
+    const updateStyles = (css: string) => {
+        let style = iframe.contentDocument.getElementById('obsidian-styles') as HTMLStyleElement;
+        if (!style) {
+            style = iframe.contentDocument.createElement('style');
+            style.id = 'obsidian-styles';
+            iframe.contentDocument.head.appendChild(style);
+        }
+        style.textContent = css;
+    };
+    plugin.styleObserver.listen(updateStyles);
+    return () => {
+        plugin.styleObserver.remove(updateStyles);
+        [...renderChildren].forEach(child => {
+            if (child.containerEl.ownerDocument === iframe.contentDocument) {
+                child.unload();
+                renderChildren.delete(child);
+            }
+        });
     };
 }
 
@@ -487,6 +490,7 @@ function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElem
 
 function proxy(url: URL | string, props: SpecificAnnotationProps): URL {
     const href = typeof url == 'string' ? url : url.href;
+    const parsedUrl = typeof url == 'string' ? new URL(url) : url;
 
     if (
         href == SAMPLE_PDF_URL ||
@@ -506,20 +510,30 @@ function proxy(url: URL | string, props: SpecificAnnotationProps): URL {
     if (href == `https://hypothes.is/api/`) {
         return new URL(`zip:/fake-service/api.json`);
     }
-    if (href == `http://localhost:8001/api/links`) {
+    if (href == `https://hypothes.is/api/links` || href == `http://localhost:8001/api/links`) {
         return new URL(`zip:/fake-service/api/links.json`);
+    }
+    if (href.startsWith(`https://hypothes.is/api/`)) {
+        return new URL(href.replace(`https://hypothes.is/api/`, `http://localhost:8001/api/`));
     }
     if (href == `http://localhost:8001/api/profile`) {
         return new URL(`zip:/fake-service/api/profile.json`);
     }
     if (href.startsWith(`http://localhost:8001/api/profile/groups`)) {
-        return new URL(`zip:/fake-service/api/profile/groups.json`);
+        return new URL(`zip:/fake-service/api/groups.json`);
     }
     if (href.startsWith(`http://localhost:8001/api/groups`)) {
         return new URL(`zip:/fake-service/api/groups.json`);
     }
-    if (typeof url == 'string') {
-        return new URL(url);
+    if (parsedUrl.pathname === '/annotator-plus/sidebar.html' && parsedUrl.protocol === 'app:') {
+        return new URL('zip:/hypothes.is/app.html');
+    }
+    if (typeof url == 'string') return parsedUrl;
+    if (
+        url.pathname === '/annotator-plus/sidebar.html' &&
+        (url.hostname === 'via.hypothes.is' || url.protocol === 'app:')
+    ) {
+        return new URL('zip:/hypothes.is/app.html');
     }
     if (url.hostname === 'via.hypothes.is' && url.pathname.startsWith('/pdfjs/')) {
         return new URL(`zip:${url.pathname}`);

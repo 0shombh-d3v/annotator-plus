@@ -100,6 +100,31 @@ describe('SidebarTabs', () => {
         0,
       );
     });
+
+    it('filters saved highlights without notes and preserves unsaved drafts', () => {
+      const noted = { id: 'noted', annotation: { id: 'noted', text: 'Note' } };
+      const highlight = {
+        id: 'highlight',
+        annotation: { id: 'highlight', text: '' },
+      };
+      const draft = { id: 'draft', annotation: { text: '' } };
+      fakeUseRootThread.returns({
+        rootThread: { children: [noted, highlight, draft] },
+        tabCounts: { annotation: 3, note: 0, orphan: 0 },
+      });
+      const wrapper = createComponent();
+
+      const notesFilter = wrapper.find(
+        'LinkButton[data-testid="show-annotations-with-notes"]',
+      );
+      assert.equal(notesFilter.text(), 'Notes (1)');
+      notesFilter.find('button').simulate('click');
+
+      assert.deepEqual(wrapper.find('ThreadList').prop('threads'), [
+        noted,
+        draft,
+      ]);
+    });
   });
 
   describe('Notes tab', () => {

@@ -6,15 +6,18 @@ import { Annotation, AnnotationTarget } from './types';
 import { FileView, Menu, MenuItem, TFile, WorkspaceLeaf } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { get_url_extension } from 'utils';
+import { get_url_extension, wait } from 'utils';
 import { DARK_READER_FIXES, shouldUseDarkMode } from './darkMode';
 import { resolveAnnotationTarget } from './targetResolver';
-import { checkPseudoAnnotationEquality } from './annotationUtils';
+
+type AnnotatorPlusBridge = {
+    focusAnnotation: (id: string) => boolean;
+    showPageNotes: () => void;
+};
 
 export default class AnnotatorView extends FileView {
     plugin: AnnotatorPlugin;
     iframe: HTMLIFrameElement;
-    activeG: () => void;
     annotationTarget?: AnnotationTarget;
     darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
     getViewType(): string {
@@ -71,7 +74,7 @@ export default class AnnotatorView extends FileView {
                     this.contentEl
                 );
             } else {
-                throw new Error('Annotator+ supports PDF and EPUB targets only.');
+                throw new Error('Annotator++ supports PDF and EPUB targets only.');
             }
         } catch (error) {
             this.contentEl.empty();
@@ -84,12 +87,15 @@ export default class AnnotatorView extends FileView {
 
     async onDarkReadersUpdated(darkReaderReferences?: Set<WeakRef<DarkReaderType>>): Promise<void> {
         if (darkReaderReferences) {
-            this.darkReaderReferences = darkReaderReferences;
+            darkReaderReferences.forEach(reference => this.darkReaderReferences.add(reference));
         }
 
         this.darkReaderReferences.forEach(r => {
             const darkReader = r.deref();
-            if (!darkReader) return;
+            if (!darkReader) {
+                this.darkReaderReferences.delete(r);
+                return;
+            }
             const darkReaderSettings = this.plugin.settings.darkReaderSettings;
             const f = () => {
                 try {
@@ -103,7 +109,6 @@ export default class AnnotatorView extends FileView {
                 }
             };
             f();
-            setTimeout(f, 1000);
         });
     }
 
@@ -156,115 +161,24 @@ export default class AnnotatorView extends FileView {
 
     async scrollToAnnotation(annotationId: Annotation['id'] | null) {
         const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
-        if (!annotation) return;
-        let yoffset = -10000;
-        let done = false;
-        let newYOffset;
-        const isPageNote = !annotation.target?.length;
-        const annotationTargetType =
-            this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, this.file) ||
-            get_url_extension(this.annotationTarget?.url || '');
+        if (!annotation || !this.iframe) return;
 
-        const g = () => {
-            try {
-                if (this.activeG != g) return;
-                const document = this.iframe.contentDocument.getElementsByTagName('iframe')[0].contentDocument;
-                const sidebarIframe: HTMLIFrameElement =
-                    this.iframe?.contentDocument
-                        ?.querySelector('iframe')
-                        ?.contentDocument?.querySelector('body > hypothesis-sidebar')
-                        ?.shadowRoot?.querySelector('div > iframe') ||
-                    this.iframe?.contentDocument
-                        ?.querySelector('body > hypothesis-sidebar')
-                        ?.shadowRoot?.querySelector('div > iframe');
-
-                const guests: any[] = // eslint-disable-line
-                    (this.iframe.contentWindow as any).guests || // eslint-disable-line
-                    (this.iframe.contentDocument.getElementsByTagName('iframe')[0].contentWindow as any).guests; // eslint-disable-line
-
-                if (isPageNote) {
-                    //Open Page Notes
-                    const showAllButton: HTMLElement = sidebarIframe.contentDocument.querySelector(
-                        'body > hypothesis-app > div > div.HypothesisApp__content > main > div > div.FilterStatus > div > div:nth-child(2) > button'
-                    );
-                    showAllButton?.click?.();
-                    const pageNotesButton: HTMLElement = sidebarIframe.contentDocument.querySelector(
-                        'body > hypothesis-app > div > div.HypothesisApp__content > main > div > div.SelectionTabs-container > div > div:nth-child(2) > button'
-                    );
-                    pageNotesButton?.click?.();
-                    guests[0]._sidebarRPC.channelListeners.openSidebar();
+        for (let attempt = 0; attempt < 100; attempt++) {
+            const sidebarFrame = this.iframe.contentDocument
+                ?.querySelector('hypothesis-sidebar')
+                ?.shadowRoot?.querySelector<HTMLIFrameElement>('iframe.sidebar-frame');
+            const bridge = (sidebarFrame?.contentWindow as Window & { annotatorPlus?: AnnotatorPlusBridge })
+                ?.annotatorPlus;
+            if (bridge) {
+                if (!annotation.target?.length) {
+                    bridge.showPageNotes();
                     return;
                 }
-
-                switch (annotationTargetType) {
-                    case 'pdf':
-                        break;
-                    case 'epub':
-                        const loc = new URL(annotation.uri).searchParams.get('loc');
-                        (this.iframe.contentWindow as any).rendition.display(loc); // eslint-disable-line
-                        break;
-                }
-
-                for (const guest of guests) {
-                    if (!guest) continue;
-                    const matchingAnchors = guest.anchors.filter(x =>
-                        checkPseudoAnnotationEquality(annotation, x?.annotation)
-                    );
-
-                    guest._sidebarRPC.call(
-                        'showAnnotations',
-                        matchingAnchors.map(x => x.annotation.$tag)
-                    );
-                    switch (annotationTargetType) {
-                        case 'pdf':
-                            for (const anchor of matchingAnchors) {
-                                if (done) break;
-                                for (const highlight of anchor.highlights) {
-                                    if (done) break;
-                                    if (highlight.scrollIntoViewIfNeeded) {
-                                        highlight.scrollIntoViewIfNeeded();
-                                        done = true;
-                                    } else if (highlight.scrollIntoView) {
-                                        highlight.scrollIntoView();
-                                        done = true;
-                                    }
-                                }
-                            }
-                            break;
-                        case 'epub':
-                            // Use the "real" hypothes.is code.
-                            (
-                                sidebarIframe.contentDocument.getElementById(annotation.id).firstChild as HTMLElement
-                            ).click();
-                            break;
-                    }
-                    guest._sidebarRPC.channelListeners.focusAnnotations(matchingAnchors.map(x => x.annotation.$tag));
-                    (
-                        sidebarIframe.contentDocument.getElementById(annotation.id).firstChild as HTMLElement
-                    ).dispatchEvent(new Event('mouseenter'));
-                }
-
-                newYOffset = document.getElementsByTagName('hypothesis-highlight')[0].getBoundingClientRect().y;
-                if (newYOffset != yoffset && annotationTargetType == 'pdf') {
-                    yoffset = newYOffset;
-                    setTimeout(g, 100);
-                }
-            } catch (e) {
-                if (annotationTargetType == 'pdf') {
-                    setTimeout(g, 100);
-                } else if (this.plugin.settings.debugLogging) {
-                    console.error(e);
-                }
+                if (bridge.focusAnnotation(annotation.id)) return;
             }
-        };
-        this.activeG = g;
-        try {
-            setTimeout(function () {
-                g();
-            }, 1000);
-        } catch (e) {}
-        try {
-            g();
-        } catch (e) {}
+            await wait(50);
+        }
+
+        if (this.plugin.settings.debugLogging) console.warn('Annotator++ sidebar bridge did not become ready');
     }
 }

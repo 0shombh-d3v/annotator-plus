@@ -199,7 +199,7 @@ class EpubReader {
     configureNavigationEvents(book: epubjs.Book, id: Document, readingMode: 'scroll' | 'pagination') {
         // configure UI arrows
         if (readingMode == 'scroll') {
-            id.querySelectorAll('a.arrow').forEach((e: HTMLElement) => (e.style.display = 'none'));
+            id.querySelectorAll('.arrow').forEach((e: HTMLElement) => (e.style.display = 'none'));
             id.querySelector('#viewer').classList.add('hide-after');
         }
 

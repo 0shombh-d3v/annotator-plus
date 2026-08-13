@@ -30,7 +30,7 @@ export async function resolveAnnotationTarget(
             if (!(await fs.stat(path)).isFile()) throw new Error('The annotation target is not a file.');
             return { kind: 'file', path, url: parsed.href };
         }
-        throw new Error('Annotator+ supports only vault paths, file:// URLs, and HTTPS URLs.');
+        throw new Error('Annotator++ supports only vault paths, file:// URLs, and HTTPS URLs.');
     }
 
     for (const candidate of [target, `${fallbackPrefix || ''}${target}`]) {

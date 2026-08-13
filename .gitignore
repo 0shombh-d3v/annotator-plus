@@ -10,7 +10,6 @@ pnpm-lock.yaml
 main.js
 *.js.map
 dist/
-!release/main.js
 
 # obsidian
 data.json

@@ -1,6 +1,6 @@
 {
   "name": "annotator-plus",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Private, local-first PDF and EPUB annotation for Obsidian.",
   "main": "main.js",
   "scripts": {
@@ -10,13 +10,13 @@
     "dev": "rollup --config rollup.config.js -w",
     "test": "jest --runInBand",
     "check": "npm run typecheck && npm test && npm run lint",
-    "check:vendor": "yarn --cwd vendor/hypothesis-client checkformatting && yarn --cwd vendor/hypothesis-client typecheck && yarn --cwd vendor/hypothesis-client test",
+    "check:vendor": "cd vendor/hypothesis-client && node .yarn/releases/yarn-3.6.0.cjs checkformatting && node .yarn/releases/yarn-3.6.0.cjs typecheck && cd ../.. && node scripts/run-hypothesis-task.mjs test",
     "quick-build": "rollup --config rollup.config.js --environment BUILD:production",
-    "build": "node scripts/build-release.mjs",
+    "build": "npm run build:all",
     "build:all": "npm run build-hypothesis && npm run quick-build",
-    "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && yarn --cwd vendor/hypothesis-client build && move-file vendor/hypothesis-client/build resources/cdn.hypothes.is/hypothesis/build && rimraf resources/cdn.hypothes.is/hypothesis/build/**/*.map resources/cdn.hypothes.is/hypothesis/build/scripts/test-inputs.js resources/cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js resources/cdn.hypothes.is/hypothesis/build/scripts/ui-playground.bundle.js resources/cdn.hypothes.is/hypothesis/build/styles/ui-playground.css",
+    "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build && node scripts/run-hypothesis-task.mjs build && move-file vendor/hypothesis-client/build resources/cdn.hypothes.is/hypothesis/build && rimraf resources/cdn.hypothes.is/hypothesis/build/boot-template.js resources/cdn.hypothes.is/hypothesis/build/**/*.map resources/cdn.hypothes.is/hypothesis/build/scripts/test-inputs.js resources/cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js resources/cdn.hypothes.is/hypothesis/build/scripts/ui-playground.bundle.js resources/cdn.hypothes.is/hypothesis/build/styles/ui-playground.css",
     "release:verify": "node scripts/verify-release.mjs",
-    "release:package": "node scripts/package-release.mjs"
+    "release:package": "npm run release:verify && node scripts/package-release.mjs"
   },
   "keywords": ["obsidian", "annotations", "pdf", "epub", "hypothesis"],
   "author": "0shombh-d3v",
@@ -55,7 +55,6 @@
     "prettier": "2.8.8",
     "rimraf": "3.0.2",
     "rollup": "2.80.0",
-    "rollup-plugin-analyzer": "4.0.0",
     "rollup-plugin-copy": "3.5.0",
     "rollup-plugin-polyfill-node": "0.7.0",
     "ts-jest": "29.2.5",

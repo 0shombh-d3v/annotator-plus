@@ -62,6 +62,10 @@ async function isPDFDownloaded(app: PDFViewerApplication): Promise<boolean> {
     return app.downloadComplete;
   }
 
+  if (!app.pdfDocument) {
+    return false;
+  }
+
   await app.pdfDocument.getDownloadInfo();
   return true;
 }

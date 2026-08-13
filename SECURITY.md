@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest Annotator+ release receives security fixes.
+Only the latest Annotator++ release receives security fixes.
 
 ## Reporting a vulnerability
 

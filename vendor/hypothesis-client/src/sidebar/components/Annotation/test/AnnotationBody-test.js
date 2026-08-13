@@ -60,10 +60,14 @@ describe('AnnotationBody', () => {
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
+      '../AnnotatorPlusMarkdownView': {
+        default: function MarkdownView() {
+          return null;
+        },
+      },
       '../../helpers/account-id': { isThirdPartyUser: fakeIsThirdPartyUser },
       '../../helpers/theme': { applyTheme: fakeApplyTheme },
       '../../store': { useSidebarStore: () => fakeStore },
-      '@hypothesis/annotation-ui': { MarkdownView: () => null },
     });
   });
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,6 +10,22 @@
       return {
         openSidebar: false,
         enableMultiFrameSupport: true,
+        showHighlights: 'always',
+        assetRoot: 'https://cdn.hypothes.is/hypothesis/',
+        sidebarAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
+        notebookAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
+        profileAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
+        services: [{
+          apiUrl: 'https://hypothes.is/api/',
+          authority: 'partner.org',
+          groups: ['__world__'],
+          allowFlagging: false,
+          allowLeavingGroups: false,
+          enableShareLinks: false,
+          enableShareImportExportPanel: false,
+          enableAccountMenu: false,
+          enableHelpPanel: false
+        }],
         onLayoutChange: function(state) {
           var nav = document.getElementById("navigation");
           if (state.expanded === true) {
@@ -19,32 +35,26 @@
       };
     };
   </script>
-  <script src="https://cdn.hypothes.is/hypothesis"></script>
+  <script class="js-hypothesis-config" type="application/json">
+    {"assetRoot":"https://cdn.hypothes.is/hypothesis/","sidebarAppUrl":"app://obsidian.md/annotator-plus/sidebar.html","notebookAppUrl":"app://obsidian.md/annotator-plus/sidebar.html","profileAppUrl":"app://obsidian.md/annotator-plus/sidebar.html"}
+  </script>
+  <script src="https://cdn.hypothes.is/hypothesis/build/boot.js"></script>
 
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
   <link rel="stylesheet" type="text/css" href="css/reader.css">
 
 </head>
 <body>
   <div id="main">
-    <a id="opener">
-      <i class="material-icons">menu</i>
-    </a>
+    <button id="opener" class="reader-control" type="button" aria-label="Open table of contents">☰</button>
     <div id="viewer" class="spreads loading"></div>
     <span id="hiddenTitle"></span>
-    <a id="prev" href="#prev" class="arrow">
-      <i class="material-icons">chevron_left</i>
-    </a>
-    <a id="next" href="#next" class="arrow">
-      <i class="material-icons">chevron_right</i>
-    </a>
+    <button id="prev" class="arrow reader-control" type="button" aria-label="Previous page">‹</button>
+    <button id="next" class="arrow reader-control" type="button" aria-label="Next page">›</button>
   </div>
   <div id="navigation">
-    <a id="closer">
-      <i class="material-icons">close</i>
-    </a>
+    <button id="closer" class="reader-control" type="button" aria-label="Close table of contents">×</button>
     <h1 id="title">...</h1>
-    <image id="cover" width="150px"/>
+    <img id="cover" width="150" alt="">
     <h2 id="author">...</h2>
     <ul id="toc"></ul>
   </div>

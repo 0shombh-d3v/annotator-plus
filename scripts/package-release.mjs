@@ -10,7 +10,7 @@ await mkdir(output, { recursive: true });
 const zip = new JSZip();
 const zipDate = new Date('1980-01-01T00:00:00.000Z');
 zip.file(`annotator-plus-${version}/`, null, { dir: true, date: zipDate, unixPermissions: 0o40755 });
-for (const file of ['main.js', 'manifest.json']) {
+for (const file of ['main.js', 'manifest.json', 'LICENSE.TXT', 'THIRD_PARTY_NOTICES.md']) {
   const data = await readFile(file);
   await cp(file, `${output}/${file}`);
   zip.file(`annotator-plus-${version}/${file}`, data, { date: zipDate, unixPermissions: 0o100644 });
@@ -29,4 +29,4 @@ for (const asset of assets) {
 await cp('main.js', 'dist/main.js');
 await cp('manifest.json', 'dist/manifest.json');
 await writeFile('dist/SHA256SUMS', `${checksums.join('\n')}\n`);
-console.log(`Packaged Annotator+ ${version} in dist/`);
+console.log(`Packaged Annotator++ ${version} in dist/`);

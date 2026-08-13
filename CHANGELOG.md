@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — 2026-08-14
+
+- Rebuilt the PDF and annotation stack from pinned current sources: PDF.js 6.2.108 and Hypothesis client commit `b4d085a`.
+- Replaced the fragile nested Via relay with a direct PDF.js reader and a public Hypothesis sidebar bridge.
+- Restored the complete annotation sidebar, existing vault annotations, clickable dark-red note underlines, **All / Notes** filtering, and Obsidian Markdown rendering.
+- Added live **Follow Obsidian / Always dark / Always light** appearance handling and a higher-contrast dark-mode highlight.
+- Kept EPUB offline, updated Dark Reader to 4.9.128, and replaced remote icon fonts with native accessible controls.
+- Removed frozen release-bundle and captured-site fallbacks; every release is now rebuilt and verified from the source in this repository.
+- Hardened target fetching, annotation writes, release verification, CI, licensing, and deterministic packaging.
+
 ## 0.3.2 — 2026-08-13
 
 - Restored the proven PDF reader and Hypothesis client after 0.3.0–0.3.1 broke the annotation sidebar, highlights, and notes.

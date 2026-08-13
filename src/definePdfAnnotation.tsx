@@ -5,33 +5,44 @@ import AnnotatorPlugin from 'main';
 import { wait } from 'utils';
 import { PdfAnnotationProps } from './types';
 
+type PdfViewerApplication = {
+    pdfViewer: { currentScale: number };
+};
+
+async function waitForPdfViewer(iframe: HTMLIFrameElement): Promise<{
+    application: PdfViewerApplication;
+    container: HTMLElement;
+    document: Document;
+    viewer: HTMLElement;
+}> {
+    for (let attempt = 0; attempt < 200; attempt++) {
+        const document = iframe.contentDocument;
+        const application = (iframe.contentWindow as Window & { PDFViewerApplication?: PdfViewerApplication })
+            ?.PDFViewerApplication;
+        const container = document?.getElementById('viewerContainer');
+        const viewer = document?.getElementById('viewer');
+        if (application?.pdfViewer && container && viewer) return { application, container, document, viewer };
+        await wait(50);
+    }
+    throw new Error('PDF.js did not finish starting');
+}
+
 export default (vault: Vault, plugin: AnnotatorPlugin) => {
     const GenericAnnotationPdf = defineGenericAnnotation(vault, plugin);
     const PdfAnnotation = ({ onload, ...props }: PdfAnnotationProps) => {
         return (
             <GenericAnnotationPdf
-                baseSrc="https://via.hypothes.is/https.html"
+                baseSrc="https://via.hypothes.is/pdfjs/web/viewer.html"
                 {...props}
                 onload={async iframe => {
-                    let pdfJsFrame;
-                    do {
-                        await wait(100);
-                        pdfJsFrame = iframe.contentDocument.getElementsByTagName('iframe')[0];
-                    } while (
-                        pdfJsFrame == null ||
-                        !pdfJsFrame.contentDocument?.addEventListener ||
-                        !pdfJsFrame.contentWindow?.PDFViewerApplication?.pdfViewer
+                    const { application: PDFViewerApplication, container, document, viewer } = await waitForPdfViewer(
+                        iframe
                     );
-
-                    const document = pdfJsFrame.contentDocument;
-                    const { PDFViewerApplication } = pdfJsFrame.contentWindow;
 
                     let startX = 0,
                         startY = 0;
                     let initialPinchDistance = 0;
                     let pinchScale = 1;
-                    const viewer = document.getElementById('viewer');
-                    const container = document.getElementById('viewerContainer');
                     const reset = () => {
                         startX = startY = initialPinchDistance = 0;
                         pinchScale = 1;
@@ -56,9 +67,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             if (initialPinchDistance <= 0 || e.touches.length < 2) {
                                 return;
                             }
-                            if (e.scale !== 1) {
-                                e.preventDefault();
-                            }
+                            e.preventDefault();
                             const pinchDistance = Math.hypot(
                                 e.touches[1].pageX - e.touches[0].pageX,
                                 e.touches[1].pageY - e.touches[0].pageY
@@ -85,7 +94,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                         container.scrollTop += dy * (pinchScale - 1);
                         reset();
                     });
-                    await onload(iframe);
+                    await onload?.(iframe);
                 }}
             />
         );

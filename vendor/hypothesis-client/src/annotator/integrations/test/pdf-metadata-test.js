@@ -235,6 +235,27 @@ describe('PDFMetadata', () => {
     });
   });
 
+  it('waits when PDF.js initializes before creating pdfDocument', async () => {
+    const fakeApp = new FakePDFViewerApplication('', {
+      withDownloadComplete: false,
+    });
+    const pdfDocument = fakeApp.pdfDocument;
+    fakeApp.pdfDocument = null;
+    const pdfMetadata = new PDFMetadata(fakeApp);
+
+    fakeApp.completeInit();
+    const uriPromise = pdfMetadata.getUri();
+    await delay(0);
+    fakeApp.pdfDocument = pdfDocument;
+    fakeApp.finishLoading({
+      eventName: 'documentloaded',
+      url: 'http://fake.com',
+      fingerprint: 'fakeFingerprint',
+    });
+
+    assert.equal(await uriPromise, 'http://fake.com/');
+  });
+
   // The `initializedPromise` param simulates different versions of PDF.js with
   // and without the `PDFViewerApplication.initializedPromise` API.
   [true, false].forEach(initializedPromise => {

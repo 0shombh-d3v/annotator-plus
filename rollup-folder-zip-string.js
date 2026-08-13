@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import JSZip from 'jszip';
 import fs from 'fs';
 import path from 'path';
@@ -92,19 +91,7 @@ const getZipOfFolder = async (dir) => {
     let addPath = slash(path.relative(dir, filePath)); // use this instead if you don't want the source folder itself in the zip
     let ext = filePath.split('.').pop().trim();
     
-    let data;
-    if(minifiableFormats.has(ext)) {
-      try {
-          console.log("minifying ", filePath)
-          data = await minify(filePath)
-      } catch(e) {
-          
-        console.log("Minification Failed for ", filePath)
-      }
-    }
-    if(!data) {
-      data = fs.readFileSync(filePath);
-    }
+    const data = minifiableFormats.has(ext) ? await minify(filePath) : fs.readFileSync(filePath);
 
     let stat = fs.lstatSync(filePath);
 

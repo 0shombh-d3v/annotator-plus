@@ -8,7 +8,7 @@ import {
 } from '@hypothesis/frontend-shared';
 import classnames from 'classnames';
 import type { ComponentChildren } from 'preact';
-import { useCallback } from 'preact/hooks';
+import { useCallback, useState } from 'preact/hooks';
 
 import { pluralize } from '../../shared/pluralize';
 import type { SidebarSettings } from '../../types/config';
@@ -114,12 +114,22 @@ function SidebarTabs({
   frameSync,
 }: SidebarTabsProps) {
   const { rootThread, tabCounts } = useRootThread();
+  const [showOnlyWithNotes, setShowOnlyWithNotes] = useState(false);
   const store = useSidebarStore();
   const selectedTab = store.selectedTab();
   const noteCount = tabCounts.note;
   const annotationCount = tabCounts.annotation;
   const orphanCount = tabCounts.orphan;
   const isWaitingToAnchorAnnotations = store.isWaitingToAnchorAnnotations();
+  const threadsWithNotes = rootThread.children.filter(
+    thread => !!thread.annotation?.text.trim(),
+  );
+  const visibleThreads =
+    selectedTab === 'annotation' && showOnlyWithNotes
+      ? rootThread.children.filter(
+          thread => !thread.annotation?.id || threadsWithNotes.includes(thread),
+        )
+      : rootThread.children;
 
   const selectTab = (tabId: TabName) => {
     store.selectTab(tabId);
@@ -199,6 +209,34 @@ function SidebarTabs({
             </Tab>
           )}
         </div>
+        {selectedTab === 'annotation' && annotationCount > 0 && (
+          <div
+            aria-label="Filter annotations"
+            className="flex items-center gap-x-2 text-sm theme-clean:ml-[15px]"
+            data-testid="annotation-note-filter"
+            role="group"
+          >
+            <LinkButton
+              classes={classnames({ 'font-bold': !showOnlyWithNotes })}
+              data-testid="show-all-annotations"
+              onClick={() => setShowOnlyWithNotes(false)}
+              pressed={!showOnlyWithNotes}
+              underline="none"
+            >
+              All ({annotationCount})
+            </LinkButton>
+            <span aria-hidden="true">|</span>
+            <LinkButton
+              classes={classnames({ 'font-bold': showOnlyWithNotes })}
+              data-testid="show-annotations-with-notes"
+              onClick={() => setShowOnlyWithNotes(true)}
+              pressed={showOnlyWithNotes}
+              underline="none"
+            >
+              Notes ({threadsWithNotes.length})
+            </LinkButton>
+          </div>
+        )}
         <div
           className="space-y-3"
           role="tabpanel"
@@ -246,7 +284,7 @@ function SidebarTabs({
               </CardContent>
             </Card>
           )}
-          <ThreadList threads={rootThread.children} />
+          <ThreadList threads={visibleThreads} />
         </div>
       </div>
     </>

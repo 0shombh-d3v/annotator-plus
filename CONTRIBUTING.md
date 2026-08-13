@@ -1,20 +1,21 @@
-# Contributing to Annotator+
+# Contributing to Annotator++
 
-Thank you for improving Annotator+. Bug reports, accessibility fixes, documentation corrections, and focused pull requests are welcome.
+Thank you for improving Annotator++. Bug reports, accessibility fixes, documentation corrections, and focused pull requests are welcome.
 
 ## Before opening an issue
 
-Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator+ version, operating system, target type, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
+Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator++ version, operating system, target type, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
-Requirements: Node.js 24, npm, Yarn 1.x, and Google Chrome for the vendored Hypothesis test suite.
+Requirements: Node.js 24, npm, and a Chromium-compatible browser for the vendored Hypothesis test suite. The repository includes the pinned Yarn 3.6.0 executable used by the Hypothesis source tree.
 
 ```bash
 git clone https://github.com/0shombh-d3v/annotator-plus.git
 cd annotator-plus
 npm ci --ignore-scripts
-PUPPETEER_SKIP_DOWNLOAD=true yarn --cwd vendor/hypothesis-client install --frozen-lockfile --ignore-scripts
+(cd vendor/hypothesis-client && node .yarn/releases/yarn-3.6.0.cjs install --immutable)
+node vendor/hypothesis-client/node_modules/playwright/cli.js install chromium
 ```
 
 The Hypothesis client is ordinary source under `vendor/hypothesis-client`; there is no submodule or second repository.
@@ -23,13 +24,16 @@ The Hypothesis client is ordinary source under `vendor/hypothesis-client`; there
 
 ```bash
 npm run check
-CHROME_BIN="/path/to/google-chrome" npm run check:vendor
+npm run check:vendor
 npm audit --audit-level=high
 npm run build
 npm run release:verify
+npm run release:package
 ```
 
-`npm run build` copies the validated runtime from `release/main.js`. This pins the PDF reader and Hypothesis client combination that passed the Obsidian smoke test. `npm run quick-build` remains available for source development, but do not replace the release runtime until the PDF, sidebar, highlights, **All / Notes** filter, and note indicators pass in Obsidian.
+`npm run build` compiles the vendored Hypothesis source, removes development-only assets, and then builds `main.js` with all reader resources embedded. There is no frozen release bundle or second repository. `npm run quick-build` rebuilds the plugin around the existing generated Hypothesis assets and is intended only for local iteration.
+
+The current reader pins are PDF.js 6.2.108, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. Update one reader component at a time, preserve its license, and repeat both automated checks and the Obsidian PDF/EPUB smoke tests before changing a pin.
 
 For local development, put the absolute destination plugin directory in `.vault_plugin_dir`, run `npm run dev`, and reload the plugin after a build.
 

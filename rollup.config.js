@@ -6,7 +6,6 @@ import copy from 'rollup-plugin-copy'
 import fs from 'fs';
 import folderZipString from './rollup-folder-zip-string';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
-import analyze from 'rollup-plugin-analyzer';
 import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
 
@@ -61,7 +60,11 @@ export default {
   "@lezer/common",
   "@lezer/lr"],
   plugins: [
-    typescript(),
+    typescript({
+      inlineSourceMap: false,
+      sourceMap: process.env.BUILD != 'production',
+      inlineSources: process.env.BUILD != 'production'
+    }),
     json(),
     nodeResolve({browser: true}),
     replace({
@@ -87,7 +90,6 @@ export default {
         },
       },
     }),
-    folderZipString(),
-    analyze({summaryOnly: true})
+    folderZipString()
   ]
 };

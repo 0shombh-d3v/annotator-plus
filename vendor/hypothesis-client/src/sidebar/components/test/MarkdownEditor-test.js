@@ -38,8 +38,8 @@ describe('MarkdownEditor', () => {
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
+      './AnnotatorPlusMarkdownView': { default: MarkdownView },
       '../markdown-commands': fakeMarkdownCommands,
-      '@hypothesis/annotation-ui': { MarkdownView },
       '../../shared/user-agent': {
         isMacOS: fakeIsMacOS,
       },

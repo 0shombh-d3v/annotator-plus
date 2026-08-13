@@ -24,11 +24,10 @@ export function resetPropertyStyleSheet() {
  */
 function loadStyles(shadowRoot: ShadowRoot): Promise<void> {
   // Find the preloaded stylesheet added by the boot script.
-  const url = (
-    document.querySelector(
-      'link[rel="preload"][href*="/build/styles/annotator.css"]',
-    ) as HTMLLinkElement | undefined
-  )?.href;
+  const preload = document.querySelector(
+    '[data-annotator-plus-style-url], link[rel="preload"][href*="/build/styles/annotator.css"]',
+  ) as HTMLLinkElement | undefined;
+  const url = preload?.dataset.annotatorPlusStyleUrl ?? preload?.href;
 
   if (!url) {
     return Promise.resolve();

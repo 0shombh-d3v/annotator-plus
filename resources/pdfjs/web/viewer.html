@@ -53,14 +53,36 @@ See https://github.com/adobe-type-tools/cmap-resources
     options.set('enableGuessAltText', false);
     options.set('enableWebGPU', false);
   }, { once: true });
-  window.hypothesisConfig = () => ({ appType: 'via', openSidebar: true, showHighlights: true });
+  window.hypothesisConfig = () => ({
+    appType: 'via',
+    openSidebar: true,
+    showHighlights: 'always',
+    assetRoot: 'https://cdn.hypothes.is/hypothesis/',
+    sidebarAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
+    notebookAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
+    profileAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
+    services: [{
+      apiUrl: 'https://hypothes.is/api/',
+      authority: 'partner.org',
+      groups: ['__world__'],
+      allowFlagging: false,
+      allowLeavingGroups: false,
+      enableShareLinks: false,
+      enableShareImportExportPanel: false,
+      enableAccountMenu: false,
+      enableHelpPanel: false
+    }]
+  });
+</script>
+<script class="js-hypothesis-config" type="application/json">
+  {"assetRoot":"https://cdn.hypothes.is/hypothesis/","sidebarAppUrl":"app://obsidian.md/annotator-plus/sidebar.html","notebookAppUrl":"app://obsidian.md/annotator-plus/sidebar.html","profileAppUrl":"app://obsidian.md/annotator-plus/sidebar.html"}
 </script>
 <script src="../build/pdf.mjs" type="module"></script>
 
     <link rel="stylesheet" href="viewer.css" />
 
   <script src="viewer.mjs" type="module"></script>
-  <script src="https://hypothes.is/embed.js"></script>
+  <script src="https://cdn.hypothes.is/hypothesis/build/boot.js"></script>
   </head>
 
   <body tabindex="0">

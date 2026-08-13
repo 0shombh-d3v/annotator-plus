@@ -1,21 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Hypothesis</title>
-    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Annotator++</title>
   </head>
   <body>
     <hypothesis-app></hypothesis-app>
-
-    <!-- App Configuration !-->
     <script class="js-hypothesis-config" type="application/json">
-      {"apiUrl": "https://hypothes.is/api/", "authDomain": "hypothes.is", "oauthClientId": "631206c8-7792-11e7-90b3-872e79925778", "rpcAllowedOrigins": ["https://lms.hypothes.is", "https://lms-dummy.hypothes.is"], "websocketUrl": "wss://h-websocket.hypothes.is/ws", "sentry": {"environment": "prod"}}
+      {"apiUrl":"https://hypothes.is/api/","assetRoot":"https://cdn.hypothes.is/hypothesis/","authDomain":"partner.org","oauthClientId":"annotator-plus","rpcAllowedOrigins":["app://obsidian.md"],"websocketUrl":"wss://h-websocket.hypothes.is/ws"}
     </script>
-
-    <!-- Client boot script !-->
-    <script src="https://cdn.hypothes.is/hypothesis"></script>
-
+    <script src="https://cdn.hypothes.is/hypothesis/build/boot.js"></script>
   </body>
 </html>

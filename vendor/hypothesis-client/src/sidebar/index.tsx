@@ -14,6 +14,7 @@ import {
   startServer as startRPCServer,
   preStartServer as preStartRPCServer,
 } from './cross-origin-rpc';
+import { tabForAnnotation } from './helpers/tabs';
 import { ServiceContext } from './service-context';
 import { AnalyticsService } from './services/analytics';
 import { AnnotationActivityService } from './services/annotation-activity';
@@ -131,6 +132,39 @@ function setupFrameSync(
 }
 
 /**
+ * Expose the two navigation operations used by the Obsidian host.
+ *
+ * @inject
+ */
+function setupAnnotatorPlusBridge(
+  $window: Window,
+  frameSync: FrameSyncService,
+  store: SidebarStore,
+) {
+  Object.defineProperty($window, 'annotatorPlus', {
+    configurable: true,
+    value: Object.freeze({
+      focusAnnotation(id: string) {
+        const annotation = store.findAnnotationByID(id);
+        if (!annotation) {
+          return false;
+        }
+        store.selectTab(tabForAnnotation(annotation));
+        store.selectAnnotations([id]);
+        store.setAnnotationFocusRequest(id);
+        frameSync.notifyHost('openSidebar');
+        frameSync.scrollToAnnotation(annotation);
+        return true;
+      },
+      showPageNotes() {
+        store.selectTab('note');
+        frameSync.notifyHost('openSidebar');
+      },
+    }),
+  });
+}
+
+/**
  * Launch the client application corresponding to the current URL.
  *
  * @param appEl - Root HTML container for the app
@@ -185,6 +219,7 @@ function startApp(settings: SidebarSettings, appEl: HTMLElement) {
   container.run(loadGroupsAndProfile);
   container.run(startRPCServer);
   container.run(setupFrameSync);
+  container.run(setupAnnotatorPlusBridge);
 
   // Render the UI.
   render(

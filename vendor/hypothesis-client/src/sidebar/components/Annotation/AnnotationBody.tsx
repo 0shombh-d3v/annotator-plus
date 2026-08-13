@@ -1,4 +1,4 @@
-import { Excerpt, MarkdownView } from '@hypothesis/annotation-ui';
+import { Excerpt } from '@hypothesis/annotation-ui';
 import { Button, CollapseIcon, ExpandIcon } from '@hypothesis/frontend-shared';
 import classnames from 'classnames';
 import { useMemo, useState } from 'preact/hooks';
@@ -10,6 +10,7 @@ import type { MentionMode } from '../../helpers/mentions';
 import { applyTheme } from '../../helpers/theme';
 import { withServices } from '../../service-context';
 import { useSidebarStore } from '../../store';
+import AnnotatorPlusMarkdownView from '../AnnotatorPlusMarkdownView';
 import TagList from '../TagList';
 import TagListItem from '../TagListItem';
 
@@ -102,7 +103,7 @@ function AnnotationBody({ annotation, settings }: AnnotationBodyProps) {
           onToggleCollapsed={setCollapsed}
           overflowThreshold={20}
         >
-          <MarkdownView
+          <AnnotatorPlusMarkdownView
             markdown={text}
             style={textStyle}
             mentions={annotation.mentions}

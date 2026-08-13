@@ -19,7 +19,13 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Install vendored Hypothesis dependencies
+        working-directory: vendor/hypothesis-client
+        run: node .yarn/releases/yarn-3.6.0.cjs install --immutable
+      - name: Install Chromium for Hypothesis tests
+        run: node vendor/hypothesis-client/node_modules/playwright/cli.js install --with-deps chromium
       - run: npm run check
+      - run: npm run check:vendor
       - run: npm audit --audit-level=high
       - run: npm run build
       - run: npm run release:verify

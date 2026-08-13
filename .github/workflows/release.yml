@@ -17,9 +17,15 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Install vendored Hypothesis dependencies
+        working-directory: vendor/hypothesis-client
+        run: node .yarn/releases/yarn-3.6.0.cjs install --immutable
+      - name: Install Chromium for Hypothesis tests
+        run: node vendor/hypothesis-client/node_modules/playwright/cli.js install --with-deps chromium
       - name: Verify tag
         run: test "${GITHUB_REF_NAME}" = "$(node -p "require('./manifest.json').version")"
       - run: npm run check
+      - run: npm run check:vendor
       - run: npm audit --audit-level=high
       - run: npm run build
       - run: npm run release:verify
@@ -27,4 +33,4 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/main.js dist/manifest.json "dist/annotator-plus-$GITHUB_REF_NAME.zip" dist/SHA256SUMS --generate-notes --title "Annotator+ $GITHUB_REF_NAME"
+        run: gh release create "$GITHUB_REF_NAME" dist/main.js dist/manifest.json "dist/annotator-plus-$GITHUB_REF_NAME.zip" dist/SHA256SUMS --generate-notes --title "Annotator++ $GITHUB_REF_NAME"
