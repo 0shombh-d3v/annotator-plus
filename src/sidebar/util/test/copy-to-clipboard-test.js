@@ -1,54 +1,57 @@
-import { copyText } from '../copy-to-clipboard';
+import { copyPlainText, copyHTML } from '../copy-to-clipboard';
 
 describe('copy-to-clipboard', () => {
-  beforeEach(() => {
-    sinon.stub(document, 'execCommand');
+  const createFakeNavigator = clipboard => ({ clipboard });
+
+  describe('copyPlainText', () => {
+    it('writes provided text to clipboard', async () => {
+      const text = 'Lorem ipsum dolor sit amet';
+      const writeText = sinon.stub();
+
+      await copyPlainText(text, createFakeNavigator({ writeText }));
+
+      assert.calledWith(writeText, text);
+    });
   });
 
-  afterEach(() => {
-    document.execCommand.restore();
-  });
+  describe('copyHTML', () => {
+    it('writes provided text to clipboard', async () => {
+      const text = 'Lorem ipsum dolor sit amet';
+      const write = sinon.stub();
 
-  describe('copyText', () => {
-    /**
-     * Returns the temporary element used to hold text being copied.
-     */
-    function tempSpan() {
-      return document.querySelector('[data-testid=copy-text]');
-    }
+      await copyHTML(text, createFakeNavigator({ write }));
 
-    beforeEach(() => {
-      // Make no hidden element created for copying text has been left over
-      // from a previous test.
-      assert.isNull(tempSpan());
+      assert.calledOnce(write);
 
-      // Make sure there is nothing already selected to copy.
-      window.getSelection().removeAllRanges();
+      const [clipboardItem] = write.lastCall.args[0];
+      const getTextForType = async type => {
+        const blob = await clipboardItem.getType(type);
+        return blob.text();
+      };
+
+      assert.deepEqual(clipboardItem.types, ['text/html', 'text/plain']);
+      assert.equal(await getTextForType('text/html'), text);
+      assert.equal(await getTextForType('text/plain'), text);
     });
 
-    it('copies the passed text to the clipboard', () => {
-      // We can't actually copy to the clipboard due to security restrictions,
-      // but we can verify that `execCommand("copy")` was called and that the
-      // passed text was selected at the time.
-      document.execCommand.callsFake(() => {
-        assert.equal(document.getSelection().toString(), 'test string');
+    it('falls back to execCommand if clipboard API is not supported', async () => {
+      const text = 'Lorem ipsum dolor sit amet';
+      const clipboardData = new DataTransfer();
+      const document = Object.assign(new EventTarget(), {
+        execCommand: sinon.stub().callsFake(command => {
+          if (command === 'copy') {
+            document.dispatchEvent(
+              new ClipboardEvent('copy', { clipboardData }),
+            );
+          }
+        }),
       });
-      copyText('test string');
+
+      await copyHTML(text, createFakeNavigator({}), document);
+
       assert.calledWith(document.execCommand, 'copy');
-      assert.isNull(tempSpan());
-    });
-
-    it('removes temporary span if copying fails', () => {
-      document.execCommand.callsFake(() => {
-        assert.ok(tempSpan());
-        throw new Error('No clipboard access for you!');
-      });
-      try {
-        copyText('fibble-wobble');
-      } catch (e) {
-        assert.equal(e.message, 'No clipboard access for you!');
-      }
-      assert.isNull(tempSpan());
+      assert.equal(clipboardData.getData('text/html'), text);
+      assert.equal(clipboardData.getData('text/plain'), text);
     });
   });
 });

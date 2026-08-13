@@ -4,13 +4,13 @@ import { act } from 'preact/test-utils';
 import { matchShortcut, installShortcut, useShortcut } from '../shortcut';
 
 function createEvent(key, { ctrl, alt, shift, meta } = {}) {
-  return {
+  return new KeyboardEvent('keydown', {
     key,
     ctrlKey: !!ctrl,
     altKey: !!alt,
     shiftKey: !!shift,
     metaKey: !!meta,
-  };
+  });
 }
 
 describe('shared/shortcut', () => {
@@ -66,7 +66,7 @@ describe('shared/shortcut', () => {
         it('should not match if non-modifier key does not match', () => {
           assert.isFalse(matchShortcut(event, shortcut));
         });
-      }
+      },
     );
 
     ['ctrl', 'META'].forEach(shortcut => {
@@ -81,6 +81,10 @@ describe('shared/shortcut', () => {
       assert.throws(() => {
         matchShortcut(createEvent('a'), 'a+b');
       }, 'Multiple non-modifier keys specified');
+    });
+
+    it('should return false if event is not a `KeyboardEvent`', () => {
+      assert.isFalse(matchShortcut(new Event('keydown'), 'a'));
     });
   });
 
@@ -138,6 +142,65 @@ describe('shared/shortcut', () => {
       pressKey('a');
 
       assert.notCalled(onPress);
+    });
+
+    it('does not trigger when target is an input if ignoreWhenEditable is set', () => {
+      const onPress = sinon.stub();
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      const removeShortcut = installShortcut('a', onPress, {
+        ignoreWhenEditable: true,
+      });
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+      input.dispatchEvent(event);
+      removeShortcut();
+      assert.notCalled(onPress);
+      document.body.removeChild(input);
+    });
+
+    it('does not trigger when target is contenteditable if ignoreWhenEditable is set', () => {
+      const onPress = sinon.stub();
+      const div = document.createElement('div');
+      div.contentEditable = 'true';
+      document.body.appendChild(div);
+      const removeShortcut = installShortcut('a', onPress, {
+        ignoreWhenEditable: true,
+      });
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+      div.dispatchEvent(event);
+      removeShortcut();
+      assert.notCalled(onPress);
+      document.body.removeChild(div);
+    });
+
+    it('still triggers on non-editable targets when ignoreWhenEditable is set', () => {
+      const onPress = sinon.stub();
+      const span = document.createElement('span');
+      document.body.appendChild(span);
+      const removeShortcut = installShortcut('a', onPress, {
+        ignoreWhenEditable: true,
+      });
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+      span.dispatchEvent(event);
+      removeShortcut();
+      assert.called(onPress);
+      document.body.removeChild(span);
+    });
+
+    it('fires shortcut when target is not an HTMLElement even with ignoreWhenEditable', () => {
+      const onPress = sinon.stub();
+      const removeShortcut = installShortcut('a', onPress, {
+        ignoreWhenEditable: true,
+      });
+
+      const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+      const textNode = document.createTextNode('x');
+      Object.defineProperty(event, 'target', { value: textNode });
+
+      document.documentElement.dispatchEvent(event);
+      removeShortcut();
+
+      assert.called(onPress);
     });
   });
 

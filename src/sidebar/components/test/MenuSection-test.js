@@ -1,17 +1,18 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import MenuSection from '../MenuSection';
 import { $imports } from '../MenuSection';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('MenuSection', () => {
   const createMenuSection = props =>
     mount(
       <MenuSection {...props}>
         <div className="MenuItem">Test item</div>
-      </MenuSection>
+      </MenuSection>,
     );
 
   beforeEach(() => {
@@ -41,6 +42,6 @@ describe('MenuSection', () => {
     'should pass a11y checks',
     checkAccessibility({
       content: () => createMenuSection(),
-    })
+    }),
   );
 });

@@ -1,4 +1,5 @@
-import { delay } from '../../test-util/wait';
+import { delay } from '@hypothesis/frontend-testing';
+
 import { BucketBarClient, $imports } from '../bucket-bar-client';
 
 describe('BucketBarClient', () => {
@@ -60,6 +61,19 @@ describe('BucketBarClient', () => {
     createBucketBarClient();
 
     contentContainer.dispatchEvent(new Event('scroll'));
+    await delay(0);
+
+    assert.calledOnce(fakeRPC.call);
+    assert.calledWith(fakeRPC.call, 'anchorsChanged');
+  });
+
+  it('should update buckets when descendant of contentContainer element scrolls', async () => {
+    createBucketBarClient();
+
+    const scrollBox = document.createElement('div');
+    contentContainer.append(scrollBox);
+
+    scrollBox.dispatchEvent(new Event('scroll'));
     await delay(0);
 
     assert.calledOnce(fakeRPC.call);

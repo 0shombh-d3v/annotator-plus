@@ -1,11 +1,12 @@
-import * as fixtures from '../../../test/annotation-fixtures';
 import * as metadata from '../../../helpers/annotation-metadata';
+import * as fixtures from '../../../test/annotation-fixtures';
 import { createStore } from '../../create-store';
 import { annotationsModule } from '../annotations';
 import { routeModule } from '../route';
+import { sessionModule } from '../session';
 
 function createTestStore() {
-  return createStore([annotationsModule, routeModule], [{}]);
+  return createStore([annotationsModule, routeModule, sessionModule], [{}]);
 }
 
 // Tests for some of the functionality in this store module are currently in
@@ -44,7 +45,7 @@ describe('sidebar/store/modules/annotations', () => {
       ]);
     });
 
-    it('assigns a local tag to annotations', () => {
+    it('assigns a $tag to annotations', () => {
       const annotA = Object.assign(fixtures.defaultAnnotation(), { id: 'a1' });
       const annotB = Object.assign(fixtures.defaultAnnotation(), { id: 'a2' });
 
@@ -55,6 +56,46 @@ describe('sidebar/store/modules/annotations', () => {
       });
 
       assert.deepEqual(tags, ['t1', 't2']);
+    });
+
+    it('assigns a $cluster to annotations', () => {
+      const getClusters = () =>
+        store.getState().annotations.annotations.map(a => a.$cluster);
+
+      const userHighlight = Object.assign(fixtures.defaultAnnotation(), {
+        id: 'a1',
+        user: 'acct:jondoe@hypothes.is',
+      });
+
+      const userAnnotation = Object.assign(fixtures.defaultAnnotation(), {
+        id: 'a2',
+        user: 'acct:jondoe@hypothes.is',
+        text: 'content', // This will ensure this is treated as an annotation instead of a highlight
+      });
+
+      const otherContent = Object.assign(fixtures.defaultAnnotation(), {
+        id: 'a3',
+        user: 'acct:someone-else@hypothes.is',
+        text: 'content',
+      });
+
+      store.updateProfile({ userid: 'acct:jondoe@hypothes.is' });
+      store.addAnnotations([userHighlight, userAnnotation, otherContent]);
+      assert.deepEqual(getClusters(), [
+        'user-highlights',
+        'user-annotations',
+        'other-content',
+      ]);
+
+      store.clearAnnotations();
+
+      store.updateProfile({ userid: null });
+      store.addAnnotations([userHighlight, userAnnotation, otherContent]);
+      assert.deepEqual(getClusters(), [
+        'other-content',
+        'other-content',
+        'other-content',
+      ]);
     });
 
     it('updates annotations with matching IDs in the store', () => {
@@ -69,7 +110,7 @@ describe('sidebar/store/modules/annotations', () => {
       assert.equal(updatedAnnot.text, 'update');
     });
 
-    it('updates annotations with matching tags in the store', () => {
+    it('updates annotations with matching $tags in the store', () => {
       const annot = fixtures.newAnnotation();
       annot.$tag = 'local-tag';
       store.addAnnotations([annot]);
@@ -113,7 +154,7 @@ describe('sidebar/store/modules/annotations', () => {
       clock.tick(ANCHOR_TIME_LIMIT);
 
       assert.isFalse(
-        store.getState().annotations.annotations[0].$anchorTimeout
+        store.getState().annotations.annotations[0].$anchorTimeout,
       );
     });
 
@@ -151,33 +192,33 @@ describe('sidebar/store/modules/annotations', () => {
       it('should clear annotations and annotation state from the store', () => {
         const annot = fixtures.defaultAnnotation();
         store.addAnnotations([annot]);
-        store.focusAnnotations([annot.id]);
+        store.hoverAnnotations([annot.id]);
         store.highlightAnnotations([annot.id]);
 
         store.clearAnnotations();
 
         assert.isEmpty(store.getState().annotations.annotations);
-        assert.isEmpty(store.focusedAnnotations());
+        assert.isEmpty(store.hoveredAnnotations());
         assert.isEmpty(store.highlightedAnnotations());
       });
     });
 
-    describe('focusAnnotations', () => {
+    describe('hoverAnnotations', () => {
       it('adds the provided annotation IDs to the focused annotations', () => {
-        store.focusAnnotations(['1', '2', '3']);
-        assert.deepEqual(store.focusedAnnotations(), ['1', '2', '3']);
+        store.hoverAnnotations(['1', '2', '3']);
+        assert.deepEqual(store.hoveredAnnotations(), ['1', '2', '3']);
       });
 
       it('replaces any other focused annotation IDs', () => {
-        store.focusAnnotations(['1']);
-        store.focusAnnotations(['2', '3']);
-        assert.deepEqual(store.focusedAnnotations(), ['2', '3']);
+        store.hoverAnnotations(['1']);
+        store.hoverAnnotations(['2', '3']);
+        assert.deepEqual(store.hoveredAnnotations(), ['2', '3']);
       });
 
       it('sets focused annotations to an empty object if no IDs provided', () => {
-        store.focusAnnotations(['1']);
-        store.focusAnnotations([]);
-        assert.isEmpty(store.focusedAnnotations());
+        store.hoverAnnotations(['1']);
+        store.hoverAnnotations([]);
+        assert.isEmpty(store.hoveredAnnotations());
       });
     });
 
@@ -198,14 +239,14 @@ describe('sidebar/store/modules/annotations', () => {
       });
     });
 
-    describe('isAnnotationFocused', () => {
-      it('returns true if the provided annotation ID is in the set of focused annotations', () => {
-        store.focusAnnotations([1, 2]);
-        assert.isTrue(store.isAnnotationFocused(2));
+    describe('isAnnotationHovered', () => {
+      it('returns true if the provided annotation ID is in the set of hovered annotations', () => {
+        store.hoverAnnotations([1, 2]);
+        assert.isTrue(store.isAnnotationHovered(2));
       });
 
-      it('returns false if the provided annotation ID is not in the set of focused annotations', () => {
-        assert.isFalse(store.isAnnotationFocused(2));
+      it('returns false if the provided annotation ID is not in the set of hovered annotations', () => {
+        assert.isFalse(store.isAnnotationHovered(2));
       });
     });
   });
@@ -376,32 +417,6 @@ describe('sidebar/store/modules/annotations', () => {
     });
   });
 
-  describe('#hideAnnotation', () => {
-    it('sets the `hidden` state to `true`', () => {
-      const store = createTestStore();
-      const ann = fixtures.moderatedAnnotation({ hidden: false });
-
-      store.addAnnotations([ann]);
-      store.hideAnnotation(ann.id);
-
-      const storeAnn = store.findAnnotationByID(ann.id);
-      assert.equal(storeAnn.hidden, true);
-    });
-  });
-
-  describe('#unhideAnnotation', () => {
-    it('sets the `hidden` state to `false`', () => {
-      const store = createTestStore();
-      const ann = fixtures.moderatedAnnotation({ hidden: true });
-
-      store.addAnnotations([ann]);
-      store.unhideAnnotation(ann.id);
-
-      const storeAnn = store.findAnnotationByID(ann.id);
-      assert.equal(storeAnn.hidden, false);
-    });
-  });
-
   describe('#removeAnnotations', () => {
     it('removes the annotation', () => {
       const store = createTestStore();
@@ -484,6 +499,134 @@ describe('sidebar/store/modules/annotations', () => {
       const annot = fixtures.defaultAnnotation();
       store.addAnnotations([annot]);
       assert.isTrue(store.annotationExists(annot.id));
+    });
+  });
+
+  describe('isAnnotationHighlighted', () => {
+    [
+      { annotation: undefined, expectedResult: false },
+      { annotation: {}, expectedResult: false },
+      { annotation: { id: '1' }, expectedResult: true },
+      { annotation: { id: '2' }, expectedResult: true },
+      { annotation: { id: '3' }, expectedResult: false },
+    ].forEach(({ annotation, expectedResult }) => {
+      it('returns true if the annotation ID is in the set of highlighted annotations', () => {
+        const store = createTestStore();
+        store.highlightAnnotations(['1', '2']);
+        assert.equal(store.isAnnotationHighlighted(annotation), expectedResult);
+      });
+    });
+  });
+
+  describe('usersWhoAnnotated', () => {
+    it('returns expected list of unique and sorted users', () => {
+      const store = createTestStore();
+
+      // Add a few annotations assigned to duplicated unordered users
+      store.addAnnotations([
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a1',
+          user: 'acct:jondoe@hypothes.is',
+        }),
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a2',
+          user: 'acct:jondoe@hypothes.is',
+        }),
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a3',
+          user: 'acct:janedoe@hypothes.is',
+          user_info: {
+            display_name: 'Jane Doe',
+          },
+        }),
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a3',
+          user: 'acct:janedoe@hypothes.is',
+          user_info: {
+            display_name: 'Jane Doe',
+          },
+        }),
+      ]);
+
+      // Only one instance of every user should be returned, and they should be
+      // sorted by username
+      assert.deepEqual(
+        [
+          {
+            userid: 'acct:janedoe@hypothes.is',
+            username: 'janedoe',
+            displayName: 'Jane Doe',
+          },
+          {
+            userid: 'acct:jondoe@hypothes.is',
+            username: 'jondoe',
+            displayName: null,
+          },
+        ],
+        store.usersWhoAnnotated(),
+      );
+    });
+  });
+
+  describe('usersWhoWereMentioned', () => {
+    it('returns expected list of unique users', () => {
+      const store = createTestStore();
+
+      // Add a few annotations with mentions
+      store.addAnnotations([
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a1',
+          mentions: [
+            {
+              userid: 'acct:jondoe@hypothes.is',
+              username: 'jondoe',
+              display_name: null,
+            },
+          ],
+        }),
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a2',
+          mentions: [
+            {
+              userid: 'acct:janedoe@hypothes.is',
+              username: 'janedoe',
+              display_name: 'Jane Doe',
+            },
+          ],
+        }),
+        Object.assign(fixtures.defaultAnnotation(), {
+          id: 'a3',
+          mentions: [
+            {
+              userid: 'acct:janedoe@hypothes.is',
+              username: 'janedoe',
+              display_name: 'Jane Doe',
+            },
+            {
+              userid: 'acct:jondoe@hypothes.is',
+              username: 'jondoe',
+              display_name: null,
+            },
+          ],
+        }),
+      ]);
+
+      // Only one instance of every mentioned user should be returned
+      assert.deepEqual(
+        [
+          {
+            userid: 'acct:jondoe@hypothes.is',
+            username: 'jondoe',
+            displayName: null,
+          },
+          {
+            userid: 'acct:janedoe@hypothes.is',
+            username: 'janedoe',
+            displayName: 'Jane Doe',
+          },
+        ],
+        store.usersWhoWereMentioned(),
+      );
     });
   });
 });

@@ -1,6 +1,6 @@
-import EventEmitter from 'tiny-emitter';
+import { delay } from '@hypothesis/frontend-testing';
 
-import { delay } from '../../../test-util/wait';
+import { EventEmitter } from '../../../shared/event-emitter';
 import { PDFMetadata } from '../pdf-metadata';
 
 /**
@@ -19,17 +19,24 @@ class FakeMetadata {
   get(key) {
     return this._metadata[key];
   }
-
-  has(key) {
-    return Object.hasOwn(this._metadata, key);
-  }
 }
 
 /**
  * Fake implementation of PDF.js `window.PDFViewerApplication.pdfDocument`.
  */
 class FakePDFDocumentProxy {
-  constructor({
+  constructor() {
+    this._contentDispositionFilename = null;
+    this._info = null;
+    this._metadata = null;
+    this.fingerprint = null;
+
+    const { resolve, promise } = Promise.withResolvers();
+    this._downloadInfoResolver = resolve;
+    this._downloadInfoPromise = promise;
+  }
+
+  finishLoading({
     contentDispositionFilename = null,
     fingerprint,
     info,
@@ -42,6 +49,8 @@ class FakePDFDocumentProxy {
     this._contentDispositionFilename = contentDispositionFilename;
     this._info = info;
     this._metadata = metadata;
+
+    this._downloadInfoResolver({ length: 100 });
 
     if (newFingerprintAPI) {
       this.fingerprints = [fingerprint, null];
@@ -56,6 +65,10 @@ class FakePDFDocumentProxy {
       info: this._info,
       metadata: this._metadata,
     };
+  }
+
+  async getDownloadInfo() {
+    return this._downloadInfoPromise;
   }
 }
 
@@ -77,6 +90,7 @@ class FakePDFViewerApplication {
    *   @prop {boolean} eventBusEvents - Whether the `eventBus` API is enabled
    *   @prop {boolean} initializedPromise - Whether the `initializedPromise` API is enabled
    *   @prop {boolean} newFingerprintAPI - Whether to emulate the new fingerprints API
+   *   @prop {boolean} withDownloadComplete - Whether to explicitly set `downloadComplete`
    */
   constructor(
     url = '',
@@ -85,15 +99,17 @@ class FakePDFViewerApplication {
       eventBusEvents = true,
       initializedPromise = true,
       newFingerprintAPI = true,
-    } = {}
+      withDownloadComplete = true,
+    } = {},
   ) {
     this.url = url;
     this.documentInfo = undefined;
     this.metadata = undefined;
-    this.pdfDocument = null;
+    this.pdfDocument = new FakePDFDocumentProxy();
     this.dispatchDOMEvents = domEvents;
     this.initialized = false;
     this.newFingerprintAPI = newFingerprintAPI;
+    this.downloadComplete = withDownloadComplete ? false : undefined;
 
     // Use `EventEmitter` as a fake version of PDF.js's `EventBus` class as the
     // API for subscribing to events is the same.
@@ -132,7 +148,7 @@ class FakePDFViewerApplication {
       info.Title = title;
     }
 
-    this.pdfDocument = new FakePDFDocumentProxy({
+    this.pdfDocument.finishLoading({
       contentDispositionFilename,
       fingerprint,
       info,
@@ -188,38 +204,36 @@ describe('PDFMetadata', () => {
       eventBusEvents: true,
       initializedPromise: true,
     },
-  ].forEach(
-    ({ eventName, domEvents, eventBusEvents, initializedPromise }, i) => {
-      it(`waits for PDF to load (${i})`, async () => {
-        const fakeApp = new FakePDFViewerApplication('', {
-          domEvents,
-          eventBusEvents,
-          initializedPromise,
-        });
-        const pdfMetadata = new PDFMetadata(fakeApp);
+    {
+      // PDF.js >= 4.5: `downloadComplete` prop was removed.
+      withDownloadComplete: false,
+    },
+  ].forEach(({ eventName, ...appOptions }, i) => {
+    it(`waits for PDF to load (${i})`, async () => {
+      const fakeApp = new FakePDFViewerApplication('', appOptions);
+      const pdfMetadata = new PDFMetadata(fakeApp);
 
-        fakeApp.completeInit();
+      fakeApp.completeInit();
 
-        // Request the PDF URL before the document has finished loading.
-        const uriPromise = pdfMetadata.getUri();
+      // Request the PDF URL before the document has finished loading.
+      const uriPromise = pdfMetadata.getUri();
 
-        // Simulate a short delay in completing PDF.js initialization and
-        // loading the PDF.
-        //
-        // Note that this delay is longer than the `app.initialized` polling
-        // interval in `pdfViewerInitialized`.
-        await delay(10);
+      // Simulate a short delay in completing PDF.js initialization and
+      // loading the PDF.
+      //
+      // Note that this delay is longer than the `app.initialized` polling
+      // interval in `pdfViewerInitialized`.
+      await delay(10);
 
-        fakeApp.finishLoading({
-          eventName,
-          url: 'http://fake.com',
-          fingerprint: 'fakeFingerprint',
-        });
-
-        assert.equal(await uriPromise, 'http://fake.com/');
+      fakeApp.finishLoading({
+        eventName,
+        url: 'http://fake.com',
+        fingerprint: 'fakeFingerprint',
       });
-    }
-  );
+
+      assert.equal(await uriPromise, 'http://fake.com/');
+    });
+  });
 
   // The `initializedPromise` param simulates different versions of PDF.js with
   // and without the `PDFViewerApplication.initializedPromise` API.
@@ -251,7 +265,7 @@ describe('PDFMetadata', () => {
   function createPDFMetadata(metadata = testMetadata, viewerOptions) {
     const fakePDFViewerApplication = new FakePDFViewerApplication(
       '',
-      viewerOptions
+      viewerOptions,
     );
     fakePDFViewerApplication.completeInit();
     fakePDFViewerApplication.finishLoading(metadata);
@@ -277,7 +291,7 @@ describe('PDFMetadata', () => {
             url: 'file:///test.pdf',
             fingerprint: 'fakeFingerprint',
           },
-          { newFingerprintAPI }
+          { newFingerprintAPI },
         );
         const uri = await pdfMetadata.getUri();
         assert.equal(uri, 'urn:x-pdf:fakeFingerprint');
@@ -294,7 +308,7 @@ describe('PDFMetadata', () => {
 
       const expected = new URL(
         fakePDFViewerApplication.url,
-        document.location.href
+        document.location.href,
       ).toString();
       assert.equal(uri, expected);
     });
@@ -336,7 +350,7 @@ describe('PDFMetadata', () => {
       const metadata = await pdfMetadata.getMetadata();
 
       const fileLink = metadata.link.find(link =>
-        link.href.includes('file://')
+        link.href.includes('file://'),
       );
       assert.isUndefined(fileLink);
     });

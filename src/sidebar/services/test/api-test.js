@@ -1,7 +1,6 @@
 import fetchMock from 'fetch-mock';
 
 import { APIService } from '../api';
-
 // API route directory.
 //
 // This should mirror https://hypothes.is/api/. The domain name has been changed
@@ -12,6 +11,7 @@ import { APIService } from '../api';
 // `curl https://hypothes.is/api/ | sed 's/hypothes.is/example.com/g' | jq . > api-index.json`
 //
 import apiIndex from './api-index.json';
+
 const routes = apiIndex.links;
 
 describe('APIService', () => {
@@ -44,7 +44,7 @@ describe('APIService', () => {
     method,
     pathAndQuery,
     status = 200,
-    body = defaultBodyForStatus(status)
+    body = defaultBodyForStatus(status),
   ) {
     const url = `https://example.com/api/${pathAndQuery}`;
     if (status > 0) {
@@ -56,7 +56,7 @@ describe('APIService', () => {
           status,
           throws: new Error(body),
         },
-        { method }
+        { method },
       );
     }
   }
@@ -83,6 +83,11 @@ describe('APIService', () => {
 
   afterEach(() => {
     fetchMock.restore();
+  });
+
+  it('reads an annotation', () => {
+    expectCall('get', 'annotations/an-id');
+    return api.annotation.read({ id: 'an-id' });
   });
 
   it('saves a new annotation', () => {
@@ -119,9 +124,34 @@ describe('APIService', () => {
     return api.annotation.unhide({ id: 'an-id' });
   });
 
+  it('moderates an annotation', () => {
+    expectCall('patch', 'annotations/an-id/moderation');
+    return api.annotation.moderate({ id: 'an-id' }, 'DENIED');
+  });
+
   it('removes current user from a group', () => {
     expectCall('delete', 'groups/an-id/members/me', 204);
     return api.group.member.delete({ pubid: 'an-id', userid: 'me' });
+  });
+
+  it('gets group members', () => {
+    const groupMembers = {
+      meta: {
+        page: { total: 0 },
+      },
+      data: [],
+    };
+    expectCall(
+      'get',
+      `groups/an-id/members?${encodeURIComponent('page[number]')}=1&${encodeURIComponent('page[size]')}=100`,
+      200,
+      groupMembers,
+    );
+    return api.group.members.read({
+      pubid: 'an-id',
+      'page[number]': 1,
+      'page[size]': 100,
+    });
   });
 
   it('gets a group by provided group id', () => {
@@ -153,7 +183,7 @@ describe('APIService', () => {
   it('encodes semicolons in query parameters', () => {
     expectCall(
       'get',
-      'search?uri=http%3A%2F%2Ffoobar.com%2F%3Ffoo%3Dbar%3Bbaz%3Dqux'
+      'search?uri=http%3A%2F%2Ffoobar.com%2F%3Ffoo%3Dbar%3Bbaz%3Dqux',
     );
     return api.search({ uri: 'http://foobar.com/?foo=bar;baz=qux' });
   });
@@ -168,8 +198,8 @@ describe('APIService', () => {
     expectCall(
       'get',
       `search?uri=${encodeURIComponent(pdfURL)}&uri=${encodeURIComponent(
-        fingerprintURL
-      )}`
+        fingerprintURL,
+      )}`,
     );
 
     return api.search({ uri: [pdfURL, fingerprintURL] });
@@ -194,6 +224,14 @@ describe('APIService', () => {
   it("updates a user's profile", () => {
     expectCall('patch', 'profile');
     return api.profile.update({}, { preferences: {} });
+  });
+
+  it('creates analytics event', () => {
+    expectCall('post', 'analytics/events');
+    return api.analytics.events.create(
+      {},
+      { event: 'client.realtime.apply_updates' },
+    );
   });
 
   context('when an API call fails', () => {
@@ -239,7 +277,7 @@ describe('APIService', () => {
         response,
         sinon.match({
           userid: 'acct:user@example.com',
-        })
+        }),
       );
     });
   });
@@ -273,7 +311,7 @@ describe('APIService', () => {
     expectCall('get', 'profile');
     return api.profile.read({}).then(() => {
       assert.isTrue(
-        fakeStore.apiRequestFinished.calledAfter(fakeStore.apiRequestStarted)
+        fakeStore.apiRequestFinished.calledAfter(fakeStore.apiRequestStarted),
       );
     });
   });
@@ -282,7 +320,7 @@ describe('APIService', () => {
     expectCall('get', 'profile', 400);
     return api.profile.read({}).catch(() => {
       assert.isTrue(
-        fakeStore.apiRequestFinished.calledAfter(fakeStore.apiRequestStarted)
+        fakeStore.apiRequestFinished.calledAfter(fakeStore.apiRequestStarted),
       );
     });
   });
@@ -292,7 +330,7 @@ describe('APIService', () => {
 
     return api.profile.read({}).catch(() => {
       assert.isTrue(
-        fakeStore.apiRequestFinished.calledAfter(fakeStore.apiRequestStarted)
+        fakeStore.apiRequestFinished.calledAfter(fakeStore.apiRequestStarted),
       );
     });
   });
@@ -345,5 +383,20 @@ describe('APIService', () => {
       assert.instanceOf(error, Error);
       assert.equal(error.message, 'Missing API route: profile.read');
     });
+  });
+
+  it('passes abort signal to `fetch` if provided', async () => {
+    expectCall('post', 'analytics/events');
+
+    const { signal } = new AbortController();
+
+    await api.analytics.events.create(
+      {},
+      { event: 'client.realtime.apply_updates' },
+      signal,
+    );
+
+    const [, options] = fetchMock.lastCall();
+    assert.equal(options.signal, signal);
   });
 });

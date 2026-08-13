@@ -1,9 +1,9 @@
+import { immutable } from '../../../util/immutable';
 import { createStore } from '../../create-store';
 import { annotationsModule } from '../annotations';
 import { draftsModule } from '../drafts';
 import { Draft } from '../drafts';
 import { selectionModule } from '../selection';
-import { immutable } from '../../../util/immutable';
 
 const fixtures = immutable({
   draftWithText: {
@@ -33,7 +33,7 @@ describe('store/modules/drafts', () => {
   beforeEach(() => {
     store = createStore(
       [draftsModule, annotationsModule, selectionModule],
-      [{}]
+      [{}],
     );
   });
 
@@ -44,31 +44,43 @@ describe('store/modules/drafts', () => {
         annotation: {
           ...fixtures.annotation,
         },
+        description: undefined,
         ...fixtures.draftWithText,
       });
     });
+
     describe('#isEmpty', () => {
       it('returns false if draft has tags or text', () => {
         const draft = new Draft(fixtures.annotation, fixtures.draftWithText);
         assert.isFalse(draft.isEmpty());
       });
+
+      it('returns false if draft has a description', () => {
+        const draft = new Draft(fixtures.annotation, {
+          ...fixtures.emptyDraft,
+          description: 'foo',
+        });
+        assert.isFalse(draft.isEmpty());
+      });
+
       it('returns true if draft has no tags or text', () => {
         const draft = new Draft(fixtures.annotation, fixtures.emptyDraft);
         assert.isTrue(draft.isEmpty());
       });
     });
+
     describe('#match', () => {
       it('matches an annotation with the same tag or id', () => {
         const draft = new Draft(fixtures.annotation, fixtures.draftWithText);
         assert.isTrue(
           draft.match({
             id: fixtures.annotation.id,
-          })
+          }),
         );
         assert.isTrue(
           draft.match({
             $tag: fixtures.annotation.$tag,
-          })
+          }),
         );
       });
       it('does not match an annotation with a different tag or id', () => {
@@ -76,12 +88,12 @@ describe('store/modules/drafts', () => {
         assert.isFalse(
           draft.match({
             id: 'fake',
-          })
+          }),
         );
         assert.isFalse(
           draft.match({
             $tag: 'fake',
-          })
+          }),
         );
       });
     });
@@ -92,7 +104,7 @@ describe('store/modules/drafts', () => {
       store.createDraft(fixtures.annotation, fixtures.draftWithTags);
       assert.deepEqual(
         store.getDraftIfNotEmpty(fixtures.annotation).annotation,
-        fixtures.annotation
+        fixtures.annotation,
       );
     });
 
@@ -100,7 +112,7 @@ describe('store/modules/drafts', () => {
       store.createDraft(fixtures.annotation, fixtures.draftWithText);
       assert.deepEqual(
         store.getDraftIfNotEmpty(fixtures.annotation).annotation,
-        fixtures.annotation
+        fixtures.annotation,
       );
     });
 
@@ -120,7 +132,7 @@ describe('store/modules/drafts', () => {
       store.createDraft(fixtures.annotation, fixtures.draftWithText);
       assert.deepEqual(
         store.getDraft(fixtures.annotation),
-        new Draft(fixtures.annotation, fixtures.draftWithText)
+        new Draft(fixtures.annotation, fixtures.draftWithText),
       );
     });
 

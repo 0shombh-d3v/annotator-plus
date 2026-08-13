@@ -1,4 +1,5 @@
-import { delay, waitFor } from '../../../test-util/wait';
+import { delay, waitFor } from '@hypothesis/frontend-testing';
+
 import {
   VitalSourceInjector,
   VitalSourceContentIntegration,
@@ -53,6 +54,10 @@ class FakeVitalSourceViewer {
   }
 }
 
+function resolveURL(relativeURL) {
+  return new URL(relativeURL, document.baseURI).toString();
+}
+
 describe('annotator/integrations/vitalsource', () => {
   let fakeViewer;
   let FakeHTMLIntegration;
@@ -65,10 +70,18 @@ describe('annotator/integrations/vitalsource', () => {
     fakeHTMLIntegration = {
       anchor: sinon.stub(),
       contentContainer: sinon.stub(),
-      describe: sinon.stub(),
+      describe: sinon.stub().returns([
+        {
+          type: 'TextQuoteSelector',
+          exact: 'dummy selection',
+        },
+      ]),
       destroy: sinon.stub(),
       fitSideBySide: sinon.stub().returns(false),
+      getAnnotatableRange: sinon.stub().returnsArg(0),
       scrollToAnchor: sinon.stub(),
+      sideBySideActive: sinon.stub().returns(false),
+
       sideBySideEnabled: false,
     };
 
@@ -95,7 +108,7 @@ describe('annotator/integrations/vitalsource', () => {
     it('returns "content" if the book container element is found in the parent document', () => {
       assert.equal(
         vitalSourceFrameRole(fakeViewer.contentFrame.contentWindow),
-        'content'
+        'content',
       );
     });
 
@@ -129,7 +142,12 @@ describe('annotator/integrations/vitalsource', () => {
 
     it('injects client into content frame', async () => {
       await waitFor(() => fakeInjectClient.called);
-      assert.calledWith(fakeInjectClient, fakeViewer.contentFrame, fakeConfig);
+      assert.calledWith(
+        fakeInjectClient,
+        fakeViewer.contentFrame,
+        fakeConfig,
+        'vitalsource-content',
+      );
     });
 
     [
@@ -155,7 +173,7 @@ describe('annotator/integrations/vitalsource', () => {
         assert.calledWith(
           fakeInjectClient,
           fakeViewer.contentFrame,
-          fakeConfig
+          fakeConfig,
         );
       });
     });
@@ -180,7 +198,7 @@ describe('annotator/integrations/vitalsource', () => {
       // nothing as we've already handled the current frame.
       fakeViewer.contentFrame.insertAdjacentElement(
         'afterend',
-        document.createElement('div')
+        document.createElement('div'),
       );
       await delay(0);
 
@@ -188,40 +206,172 @@ describe('annotator/integrations/vitalsource', () => {
     });
   });
 
+  class FakeMosaicBookElement {
+    constructor() {
+      this._format = 'epub';
+
+      this.goToCfi = sinon.stub();
+      this.goToURL = sinon.stub();
+    }
+
+    selectEPUBBook() {
+      this._format = 'epub';
+    }
+
+    selectPDFBook() {
+      this._format = 'pbk';
+    }
+
+    getBookInfo() {
+      return {
+        format: this._format,
+        title: 'Test book title',
+        isbn: 'TEST-BOOK-ID',
+      };
+    }
+
+    async getCurrentPage() {
+      if (this._format === 'epub') {
+        return {
+          absoluteURL: '/pages/chapter_02.xhtml',
+          cfi: '/2',
+          chapterTitle: 'Chapter two',
+          index: undefined,
+          page: '20',
+        };
+      } else if (this._format === 'pbk') {
+        return {
+          absoluteURL: '/pages/2',
+          cfi: '/1',
+          index: 1,
+          page: '2',
+          chapterTitle: 'First chapter',
+        };
+      } else {
+        throw new Error('Unknown book');
+      }
+    }
+
+    async getPages() {
+      const pageData = await this.getCurrentPage();
+      const data = [pageData];
+      return { ok: true, data };
+    }
+
+    async getPageBreaks() {
+      let data = [];
+      if (this._format === 'epub') {
+        data = [
+          // Pages before chapter
+          {
+            cfi: '/0',
+            cfiWithoutAssertions: '/0',
+            label: '5',
+          },
+          // Pages within current chapter
+          {
+            cfi: '/2',
+            cfiWithoutAssertions: '/2',
+            label: '20',
+          },
+          {
+            cfi: '/2!/2',
+            cfiWithoutAssertions: '/2!/2',
+            label: '21',
+          },
+          // Pages after current chapter
+          {
+            cfi: '/4!/2',
+            cfiWithoutAssertions: '/4!/2',
+            label: '22',
+          },
+        ];
+      }
+      return { ok: true, data };
+    }
+
+    async getTOC() {
+      if (this._format === 'epub') {
+        const toc = [
+          {
+            cfi: '/1[foo]!/4/10',
+            title: 'Chapter one (from TOC)',
+          },
+          {
+            cfi: '/2[bar]!/2/8',
+            title: 'Chapter two (from TOC)',
+          },
+          {
+            cfi: '/4[bar]!/2/8',
+            title: 'Chapter three (from TOC)',
+          },
+        ];
+        return { ok: true, data: toc };
+      } else {
+        return { ok: false };
+      }
+    }
+  }
+
   describe('VitalSourceContentIntegration', () => {
+    // List of active integrations.
     let integrations;
 
+    let fakeBookElement;
+
+    /** Create a new integration and add it to the active list. */
     function createIntegration() {
-      const integration = new VitalSourceContentIntegration();
+      const integration = new VitalSourceContentIntegration(document.body, {
+        bookElement: fakeBookElement,
+      });
       integrations.push(integration);
       return integration;
     }
 
+    /** Destroy an integration and remove it from the active list. */
+    function destroyIntegration(integration) {
+      const idx = integrations.indexOf(integration);
+      if (idx === -1) {
+        throw new Error('Integration is not in list of active integrations');
+      }
+      integrations.splice(idx, 1);
+      integration.destroy();
+    }
+
     beforeEach(() => {
       integrations = [];
+      fakeBookElement = new FakeMosaicBookElement();
     });
 
     afterEach(() => {
       integrations.forEach(int => int.destroy());
     });
 
-    it('allows annotation', () => {
+    it('delegates to HTML integration to check if selected content is annotatable', () => {
       const integration = createIntegration();
-      assert.equal(integration.canAnnotate(), true);
+      const range = new Range();
+
+      assert.equal(integration.getAnnotatableRange(range), range);
+      assert.calledWith(fakeHTMLIntegration.getAnnotatableRange, range);
+    });
+
+    it('asks sidebar to persist annotations after frame unloads', () => {
+      const integration = createIntegration();
+      assert.isTrue(integration.persistFrame());
     });
 
     it('delegates to HTMLIntegration for side-by-side mode', () => {
       const integration = createIntegration();
       assert.calledOnce(FakeHTMLIntegration);
-      const htmlOptions = FakeHTMLIntegration.args[0][0];
-      assert.isTrue(htmlOptions.features.flagEnabled('html_side_by_side'));
 
       fakeHTMLIntegration.fitSideBySide.returns(true);
+      fakeHTMLIntegration.sideBySideActive.returns(true);
       const layout = { expanded: true, width: 150 };
       const isActive = integration.fitSideBySide(layout);
 
       assert.isTrue(isActive);
       assert.calledWith(fakeHTMLIntegration.fitSideBySide, layout);
+      assert.isTrue(integration.sideBySideActive());
     });
 
     it('stops mouse events from propagating to parent frame', () => {
@@ -229,7 +379,7 @@ describe('annotator/integrations/vitalsource', () => {
 
       const events = ['mouseup', 'mousedown', 'mouseout'];
 
-      for (let eventName of events) {
+      for (const eventName of events) {
         const listener = sinon.stub();
         document.addEventListener(eventName, listener);
 
@@ -246,9 +396,10 @@ describe('annotator/integrations/vitalsource', () => {
       integration.contentContainer();
       assert.calledWith(fakeHTMLIntegration.contentContainer);
 
+      const root = {};
       const range = new Range();
-      await integration.describe(range);
-      assert.calledWith(fakeHTMLIntegration.describe, range);
+      await integration.describe(root, range);
+      assert.calledWith(fakeHTMLIntegration.describe, root, range);
 
       const selectors = [{ type: 'TextQuoteSelector', exact: 'foobar' }];
       await integration.anchor(selectors);
@@ -259,12 +410,169 @@ describe('annotator/integrations/vitalsource', () => {
       assert.calledWith(fakeHTMLIntegration.scrollToAnchor, anchor);
     });
 
+    it('adds selector for current EPUB book Content Document', async () => {
+      const integration = createIntegration();
+      integration.contentContainer();
+      assert.calledWith(fakeHTMLIntegration.contentContainer);
+
+      const root = {};
+      const range = new Range();
+      const selectors = await integration.describe(root, range);
+
+      const cfiSelector = selectors.find(s => s.type === 'EPUBContentSelector');
+
+      assert.ok(cfiSelector);
+      assert.deepEqual(cfiSelector, {
+        type: 'EPUBContentSelector',
+        url: resolveURL('/pages/chapter_02.xhtml'),
+        cfi: '/2',
+        title: 'Chapter two (from TOC)',
+      });
+
+      const pageSelector = selectors.find(s => s.type === 'PageSelector');
+      assert.deepEqual(pageSelector, {
+        type: 'PageSelector',
+        index: 0,
+        label: '20',
+      });
+    });
+
+    it('adds selector for current PDF book page', async () => {
+      fakeBookElement.selectPDFBook();
+
+      const integration = createIntegration();
+      integration.contentContainer();
+      assert.calledWith(fakeHTMLIntegration.contentContainer);
+
+      const root = {};
+      const range = new Range();
+      const selectors = await integration.describe(root, range);
+      const cfiSelector = selectors.find(s => s.type === 'EPUBContentSelector');
+
+      assert.ok(cfiSelector);
+      assert.deepEqual(cfiSelector, {
+        type: 'EPUBContentSelector',
+        url: resolveURL('/pages/2'),
+        cfi: '/1',
+        title: 'First chapter',
+      });
+
+      const pageSelector = selectors.find(s => s.type === 'PageSelector');
+      assert.ok(pageSelector);
+      assert.deepEqual(pageSelector, {
+        type: 'PageSelector',
+        index: 1,
+        label: '2',
+      });
+    });
+
+    ['absoluteURL', 'cfi'].forEach(field => {
+      it(`throws if page info field "${field}" is missing`, async () => {
+        fakeBookElement.selectPDFBook();
+
+        const pageInfo = { ...(await fakeBookElement.getCurrentPage()) };
+        delete pageInfo[field];
+        fakeBookElement.getCurrentPage = async () => pageInfo;
+
+        const integration = createIntegration();
+        integration.contentContainer();
+        assert.calledWith(fakeHTMLIntegration.contentContainer);
+
+        const root = {};
+        const range = new Range();
+        let error;
+        try {
+          await integration.describe(root, range);
+        } catch (err) {
+          error = err;
+        }
+
+        assert.instanceOf(error, Error);
+        assert.equal(
+          error.message,
+          `Page metadata field "${field}" is missing`,
+        );
+      });
+    });
+
     describe('#getMetadata', () => {
       it('returns book metadata', async () => {
         const integration = createIntegration();
         const metadata = await integration.getMetadata();
-        assert.equal(metadata.title, document.title);
+        assert.equal(metadata.title, 'Test book title');
         assert.deepEqual(metadata.link, []);
+      });
+    });
+
+    describe('#navigateToSegment', () => {
+      function createAnnotationWithSelector(selector) {
+        return {
+          target: [
+            {
+              selector: [selector],
+            },
+          ],
+        };
+      }
+
+      [
+        {
+          // Annotation with no selectors identifying a segment.
+          type: 'TextQuoteSelector',
+          exact: 'foo',
+        },
+        {
+          // Segment selector with no CFI or URL
+          type: 'EPUBContentSelector',
+        },
+      ].forEach(selector => {
+        it('throws if annotation has no segment info available', () => {
+          const integration = createIntegration();
+          const ann = createAnnotationWithSelector(selector);
+          assert.throws(() => {
+            integration.navigateToSegment(ann);
+          }, 'No segment information available');
+
+          assert.notCalled(fakeBookElement.goToCfi);
+          assert.notCalled(fakeBookElement.goToURL);
+        });
+      });
+
+      it('navigates to CFI if available', () => {
+        const integration = createIntegration();
+        const ann = createAnnotationWithSelector({
+          type: 'EPUBContentSelector',
+          cfi: '/2/4',
+          url: resolveURL('/chapters/02.xhtml'),
+        });
+
+        integration.navigateToSegment(ann);
+
+        assert.calledWith(fakeBookElement.goToCfi, '/2/4');
+      });
+
+      it('navigates to URL if no CFI available', () => {
+        const integration = createIntegration();
+        const ann = createAnnotationWithSelector({
+          type: 'EPUBContentSelector',
+          url: resolveURL('/chapters/02.xhtml'),
+        });
+
+        integration.navigateToSegment(ann);
+
+        assert.calledWith(fakeBookElement.goToURL, '/chapters/02.xhtml');
+      });
+    });
+
+    describe('#segmentInfo', () => {
+      it('returns metadata for current page/chapter', async () => {
+        const integration = createIntegration();
+        const segment = await integration.segmentInfo();
+        assert.deepEqual(segment, {
+          cfi: '/2',
+          pages: { start: '20', end: '21' },
+          url: resolveURL('/pages/chapter_02.xhtml'),
+        });
       });
     });
 
@@ -275,20 +583,42 @@ describe('annotator/integrations/vitalsource', () => {
         history.pushState({}, '', bookURI);
       });
 
-      afterEach(() => {
+      afterEach(async () => {
+        const urlChanged = new Promise(resolve => {
+          window.addEventListener('popstate', () => resolve(), { once: true });
+        });
+
         history.back();
+
+        await urlChanged;
       });
 
-      it('returns book URL excluding query string', async () => {
+      it('returns book reader URL', async () => {
         const integration = createIntegration();
         const uri = await integration.uri();
-        const parsedURL = new URL(uri);
-        assert.equal(parsedURL.hostname, document.location.hostname);
         assert.equal(
-          parsedURL.pathname,
-          '/books/abc/epub/OPS/xhtml/chapter_001.html'
+          uri,
+          'https://bookshelf.vitalsource.com/reader/books/TEST-BOOK-ID',
         );
-        assert.equal(parsedURL.search, '');
+      });
+
+      it('throws if book ID is missing', async () => {
+        fakeBookElement.getBookInfo = () => ({
+          format: 'epub',
+          title: 'Test book title',
+          // `isbn` field is missing
+        });
+
+        const integration = createIntegration();
+        let error;
+        try {
+          await integration.uri();
+        } catch (err) {
+          error = err;
+        }
+
+        assert.instanceOf(error, Error);
+        assert.equal(error.message, 'Unable to get book ID from VitalSource');
       });
     });
 
@@ -362,7 +692,7 @@ describe('annotator/integrations/vitalsource', () => {
           assert.isFalse(frame.hasAttribute('scrolling'));
           assert.equal(
             getComputedStyle(frame).height,
-            `${window.innerHeight}px` // "100%" in pixels
+            `${window.innerHeight}px`, // "100%" in pixels
           );
 
           // Try re-adding the scrolling attribute. It should get re-removed.
@@ -384,7 +714,7 @@ describe('annotator/integrations/vitalsource', () => {
           FakeImageTextLayer,
           fakePageImage,
           sinon.match.array,
-          pageText
+          pageText,
         );
 
         const glyphs = FakeImageTextLayer.getCall(0).args[1].map(domRect => ({
@@ -414,6 +744,18 @@ describe('annotator/integrations/vitalsource', () => {
         assert.calledOnce(fakeImageTextLayer.destroy);
       });
 
+      it('disables side-by-side mode when destroyed', () => {
+        createPageImageAndData();
+        const integration = createIntegration();
+
+        integration.fitSideBySide({ expanded: true, width: 100 });
+        assert.isTrue(integration.sideBySideActive());
+
+        destroyIntegration(integration);
+
+        assert.isFalse(integration.sideBySideActive());
+      });
+
       context('when side-by-side mode is toggled', () => {
         it('resizes page image', () => {
           createPageImageAndData();
@@ -425,12 +767,16 @@ describe('annotator/integrations/vitalsource', () => {
           const sidebarWidth = window.innerWidth - 481;
           const expectedWidth = window.innerWidth - sidebarWidth;
           integration.fitSideBySide({ expanded: true, width: sidebarWidth });
+
+          assert.isTrue(integration.sideBySideActive());
           assert.equal(fakePageImage.parentElement.style.textAlign, 'left');
           assert.equal(fakePageImage.style.width, `${expectedWidth}px`);
           assert.calledOnce(fakeImageTextLayer.updateSync);
 
           // Deactivate side-by-side mode. Style overrides should be removed.
           integration.fitSideBySide({ expanded: false });
+
+          assert.isFalse(integration.sideBySideActive());
           assert.equal(fakePageImage.parentElement.style.textAlign, '');
           assert.equal(fakePageImage.style.width, '');
           assert.calledTwice(fakeImageTextLayer.updateSync);
@@ -443,6 +789,8 @@ describe('annotator/integrations/vitalsource', () => {
           // This will leave less than 480px available to the main content
           const sidebarWidth = window.innerWidth - 479;
           integration.fitSideBySide({ expanded: true, width: sidebarWidth });
+
+          assert.isFalse(integration.sideBySideActive());
           assert.equal(fakePageImage.parentElement.style.textAlign, '');
           assert.equal(fakePageImage.style.width, '');
         });

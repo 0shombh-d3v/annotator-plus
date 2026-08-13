@@ -57,14 +57,73 @@ describe('sidebar/helpers/session', () => {
         settings: { services: [{ onHelpRequestProvided: true }] },
         expected: false,
       },
+      {
+        description: 'help panel is disabled',
+        isSidebar: true,
+        sessionState: {},
+        settings: {
+          services: [
+            {
+              enableHelpPanel: false,
+            },
+          ],
+        },
+        expected: false,
+      },
     ].forEach(fixture => {
       it(`should calculate auto-display to be ${fixture.expected} when ${fixture.description}`, () => {
         const shouldDisplay = sessionUtil.shouldAutoDisplayTutorial(
           fixture.isSidebar,
           fixture.sessionState,
-          fixture.settings
+          fixture.settings,
         );
         assert.equal(shouldDisplay, fixture.expected);
+      });
+    });
+  });
+
+  describe('shouldShowYoutubeDisclaimer', () => {
+    [
+      {
+        description:
+          'youtubeAssignment is true and H sends show_youtube_gdpr_banner true',
+        settings: { youtubeAssignment: true },
+        profile: { preferences: { show_youtube_gdpr_banner: true } },
+        expected: true,
+      },
+      {
+        description:
+          'youtubeAssignment is true and preference is undefined (no banner)',
+        settings: { youtubeAssignment: true },
+        profile: {},
+        expected: false,
+      },
+      {
+        description:
+          'youtubeAssignment is true but user has dismissed (H omits key)',
+        settings: { youtubeAssignment: true },
+        profile: { preferences: {} },
+        expected: false,
+      },
+      {
+        description: 'youtubeAssignment is false',
+        settings: { youtubeAssignment: false },
+        profile: { preferences: { show_youtube_gdpr_banner: true } },
+        expected: false,
+      },
+      {
+        description: 'youtubeAssignment is undefined',
+        settings: {},
+        profile: { preferences: { show_youtube_gdpr_banner: true } },
+        expected: false,
+      },
+    ].forEach(fixture => {
+      it(`returns ${fixture.expected} when ${fixture.description}`, () => {
+        const result = sessionUtil.shouldShowYoutubeDisclaimer(
+          fixture.settings,
+          fixture.profile,
+        );
+        assert.equal(result, fixture.expected);
       });
     });
   });

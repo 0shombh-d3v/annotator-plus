@@ -1,9 +1,10 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import AutocompleteList, { $imports } from '../AutocompleteList';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('AutocompleteList', () => {
   let fakeList;
@@ -15,7 +16,7 @@ describe('AutocompleteList', () => {
         list={fakeList}
         onSelectItem={fakeOnSelectItem}
         {...props}
-      />
+      />,
     );
   }
 
@@ -33,12 +34,18 @@ describe('AutocompleteList', () => {
   it('hides the list container when `open` is false', () => {
     // `open` prop defaults to `false`
     const wrapper = createComponent();
-    assert.include(wrapper.find('Card').props().classes, 'hidden');
+    const container = wrapper.find(
+      '[data-testid="autocomplete-list-container"]',
+    );
+    assert.isTrue(container.getDOMNode().classList.contains('hidden'));
   });
 
   it('hides the list container when `list` is empty', () => {
     const wrapper = createComponent({ open: true, list: [] });
-    assert.include(wrapper.find('Card').props().classes, 'hidden');
+    const container = wrapper.find(
+      '[data-testid="autocomplete-list-container"]',
+    );
+    assert.isTrue(container.getDOMNode().classList.contains('hidden'));
   });
 
   it('renders the items in order of the list prop', () => {
@@ -49,8 +56,8 @@ describe('AutocompleteList', () => {
 
   it('sets `aria-selected` on the <li> at the matching index to `activeItem`', () => {
     const wrapper = createComponent({ open: true, activeItem: 0 });
-    assert.equal(wrapper.find('li').at(0).prop('aria-selected'), 'true');
-    assert.equal(wrapper.find('li').at(1).prop('aria-selected'), 'false');
+    assert.equal(wrapper.find('li').at(0).prop('aria-selected'), true);
+    assert.equal(wrapper.find('li').at(1).prop('aria-selected'), false);
   });
 
   it('calls `onSelect` when an <li> is clicked with the corresponding item', () => {
@@ -95,6 +102,6 @@ describe('AutocompleteList', () => {
           return createComponent({ open: true, activeItem: 1 });
         },
       },
-    ])
+    ]),
   );
 });

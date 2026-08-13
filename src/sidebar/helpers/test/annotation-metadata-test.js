@@ -1,9 +1,11 @@
 import * as fixtures from '../../test/annotation-fixtures';
 import * as annotationMetadata from '../annotation-metadata';
 import {
-  documentMetadata,
-  domainAndTitle,
+  cfi,
+  description,
   isSaved,
+  pageLabel,
+  shape,
 } from '../annotation-metadata';
 
 describe('sidebar/helpers/annotation-metadata', () => {
@@ -15,260 +17,175 @@ describe('sidebar/helpers/annotation-metadata', () => {
     };
   };
 
-  describe('documentMetadata', () => {
-    context('when the annotation has a document property', () => {
-      it('returns the hostname from annotation.uri as the domain', () => {
-        const annotation = fakeAnnotation();
-        assert.equal(documentMetadata(annotation).domain, 'example.com');
-      });
-
-      context('when annotation.uri does not start with "urn"', () => {
-        it('uses annotation.uri as the uri', () => {
-          const annotation = fakeAnnotation();
-          assert.equal(
-            documentMetadata(annotation).uri,
-            'http://example.com/a/page'
-          );
-        });
-      });
-
-      context('when document.title is an available', () => {
-        it('uses the first document title as the title', () => {
-          const annotation = fakeAnnotation({
-            document: {
-              title: ['My Document', 'My Other Document'],
-            },
-          });
-
-          assert.equal(
-            documentMetadata(annotation).title,
-            annotation.document.title[0]
-          );
-        });
-      });
-
-      context('when there is no document.title', () => {
-        it('returns the domain as the title', () => {
-          const annotation = fakeAnnotation();
-          assert.equal(documentMetadata(annotation).title, 'example.com');
-        });
-      });
-
-      ['http://localhost:5000', '[not a URL]'].forEach(uri => {
-        it('returns empty domain if URL is invalid or private', () => {
-          const annotation = fakeAnnotation({ uri });
-          const { domain } = documentMetadata(annotation);
-          assert.equal(domain, '');
-        });
-      });
-    });
-
-    context('when the annotation does not have a document property', () => {
-      let annotationNoDocument;
-
-      beforeEach(() => {
-        annotationNoDocument = fakeAnnotation();
-        delete annotationNoDocument.document;
-      });
-
-      it('returns annotation.uri for the uri', () => {
-        assert.equal(
-          documentMetadata(annotationNoDocument).uri,
-          annotationNoDocument.uri
-        );
-      });
-
-      it('returns the hostname of annotation.uri for the domain', () => {
-        assert.equal(
-          documentMetadata(annotationNoDocument).domain,
-          'example.com'
-        );
-      });
-
-      it('returns the hostname of annotation.uri for the title', () => {
-        assert.equal(
-          documentMetadata(annotationNoDocument).title,
-          'example.com'
-        );
-      });
-    });
-  });
-
-  describe('domainAndTitle', () => {
-    context('when an annotation has a non-http(s) uri', () => {
-      it('returns no title link', () => {
-        const annotation = fakeAnnotation({
-          uri: 'file:///example.pdf',
-        });
-
-        assert.equal(domainAndTitle(annotation).titleLink, null);
-      });
-    });
-
-    context('when an annotation has a direct link', () => {
-      it('returns the direct link as a title link', () => {
-        const annotation = {
-          uri: 'https://annotatedsite.com/',
-          links: {
-            incontext: 'https://example.com',
-          },
-        };
-
-        assert.equal(
-          domainAndTitle(annotation).titleLink,
-          'https://example.com'
-        );
-      });
-    });
-
-    context(
-      'when an annotation has no direct link but has a http(s) uri',
-      () => {
-        it('returns the uri as title link', () => {
-          const annotation = fakeAnnotation({
-            uri: 'https://example.com',
-          });
-
-          assert.equal(
-            domainAndTitle(annotation).titleLink,
-            'https://example.com'
-          );
-        });
-      }
-    );
-
-    context('when the annotation title is shorter than 30 characters', () => {
-      it('returns the annotation title as title text', () => {
-        const annotation = fakeAnnotation({
-          uri: 'https://annotatedsite.com/',
-          document: {
-            title: ['A Short Document Title'],
-          },
-        });
-
-        assert.equal(
-          domainAndTitle(annotation).titleText,
-          'A Short Document Title'
-        );
-      });
-    });
-
-    context('when the annotation title is longer than 30 characters', () => {
-      it('truncates the title text with ellipsis character "…"', () => {
-        const annotation = fakeAnnotation({
-          document: {
-            title: ['My Really Really Long Document Title'],
-          },
-        });
-
-        assert.equal(
-          domainAndTitle(annotation).titleText,
-          'My Really Really Long Document…'
-        );
-      });
-    });
-
-    context('when the document uri refers to a filename', () => {
-      it('returns the filename as domain text', () => {
-        const annotation = fakeAnnotation({
-          uri: 'file:///path/to/example.pdf',
-          document: {
-            title: ['Document Title'],
-          },
-        });
-
-        assert.equal(domainAndTitle(annotation).domain, 'example.pdf');
-      });
-    });
-
-    context('when domain and title are the same', () => {
-      it('returns an empty domain text string', () => {
-        const annotation = fakeAnnotation({
-          uri: 'https://example.com',
-          document: {
-            title: ['example.com'],
-          },
-        });
-
-        assert.equal(domainAndTitle(annotation).domain, '');
-      });
-    });
-
-    context('when the document has no domain', () => {
-      it('returns an empty domain text string', () => {
-        const annotation = fakeAnnotation({
-          uri: 'doi:10.1234/5678',
-          document: {
-            title: ['example.com'],
-          },
-        });
-
-        assert.equal(domainAndTitle(annotation).domain, '');
-      });
-    });
-
-    context('when the document is a local file with a title', () => {
-      it('returns the filename', () => {
-        const annotation = fakeAnnotation({
-          uri: 'file:///home/seanh/MyFile.pdf',
-          document: {
-            title: ['example.com'],
-          },
-        });
-
-        assert.equal(domainAndTitle(annotation).domain, 'MyFile.pdf');
-      });
-    });
-  });
-
   describe('location', () => {
-    it('returns the position for annotations with a text position', () => {
-      assert.equal(
-        annotationMetadata.location({
-          target: [
-            {
-              selector: [
-                {
-                  type: 'TextPositionSelector',
-                  start: 100,
-                },
-              ],
-            },
-          ],
-        }),
-        100
-      );
-    });
-
-    it('returns +ve infinity for annotations without a text position', () => {
-      assert.equal(
-        annotationMetadata.location({
-          target: [
-            {
-              selector: undefined,
-            },
-          ],
-        }),
-        Number.POSITIVE_INFINITY
-      );
-    });
-  });
-
-  describe('isHidden', () => {
-    it('returns `true` if annotation has been hidden', () => {
-      const annotation = fixtures.moderatedAnnotation({ hidden: true });
-      assert.isTrue(annotationMetadata.isHidden(annotation));
-    });
-
     [
-      fixtures.newEmptyAnnotation(),
-      fixtures.newReply(),
-      fixtures.newHighlight(),
-      fixtures.oldAnnotation(),
-    ].forEach(nonHiddenAnnotation => {
-      it('returns `false` if annotation is not hidden', () => {
-        assert.isFalse(annotationMetadata.isHidden(nonHiddenAnnotation));
+      // TextPositionSelector
+      {
+        selectors: [
+          {
+            type: 'TextPositionSelector',
+            start: 100,
+          },
+        ],
+        expected: {
+          charOffset: 100,
+        },
+      },
+
+      // EPUBContentSelector
+      {
+        selectors: [
+          {
+            type: 'EPUBContentSelector',
+            cfi: '/2/4',
+            url: 'content/chapter2.xhtml',
+          },
+        ],
+        expected: {
+          cfi: '/2/4',
+        },
+      },
+
+      // PageSelector
+      {
+        selectors: [
+          {
+            type: 'PageSelector',
+            index: 2,
+          },
+        ],
+        expected: {
+          pageIndex: 2,
+        },
+      },
+
+      // ShapeSelector with rect shape
+      {
+        selectors: [
+          {
+            type: 'ShapeSelector',
+            shape: {
+              type: 'rect',
+              top: 100,
+            },
+            view: {
+              top: 10,
+            },
+          },
+        ],
+        expected: {
+          top: 90,
+        },
+      },
+
+      // ShapeSelector with point shape
+      {
+        selectors: [
+          {
+            type: 'ShapeSelector',
+            shape: {
+              type: 'point',
+              y: 100,
+            },
+            view: {
+              top: 10,
+            },
+          },
+        ],
+        expected: {
+          top: 90,
+        },
+      },
+
+      // ShapeSelector with unsupported shape
+      {
+        selectors: [
+          {
+            type: 'ShapeSelector',
+            shape: {
+              type: 'circle',
+              centerY: 100,
+            },
+          },
+        ],
+        expected: {},
+      },
+
+      // ShapeSelector with no viewport information
+      {
+        selectors: [
+          {
+            type: 'ShapeSelector',
+            shape: {
+              type: 'point',
+              y: 100,
+            },
+          },
+        ],
+        expected: {
+          top: 100,
+        },
+      },
+
+      // All selectors
+      {
+        selectors: [
+          {
+            type: 'TextPositionSelector',
+            start: 100,
+          },
+          {
+            type: 'EPUBContentSelector',
+            cfi: '/2/4',
+            url: 'content/chapter2.xhtml',
+          },
+          {
+            type: 'PageSelector',
+            index: 1,
+          },
+          {
+            type: 'ShapeSelector',
+            shape: {
+              type: 'point',
+              y: 100,
+            },
+            view: {
+              top: 10,
+            },
+          },
+        ],
+        expected: {
+          charOffset: 100,
+          cfi: '/2/4',
+          pageIndex: 1,
+          top: 90,
+        },
+      },
+      // No selectors
+      {
+        selectors: [],
+        expected: {},
+      },
+    ].forEach(({ selectors, expected }) => {
+      it('returns location key', () => {
+        const loc = annotationMetadata.location({
+          target: [{ selector: selectors }],
+        });
+
+        // Compare only defined fields
+        for (const field of Object.keys(loc)) {
+          if (loc[field] === undefined) {
+            delete loc[field];
+          }
+        }
+
+        assert.deepEqual(loc, expected);
       });
+    });
+
+    it('returns empty object if annotation has empty target list', () => {
+      const loc = annotationMetadata.location({ target: [] });
+      assert.deepEqual(loc, {});
     });
   });
 
@@ -318,7 +235,7 @@ describe('sidebar/helpers/annotation-metadata', () => {
       it(`returns ${testcase.expect} for isHighlight when annotation is: ${testcase.desc}`, () => {
         assert.equal(
           annotationMetadata.isHighlight(testcase.annotation),
-          testcase.expect
+          testcase.expect,
         );
       });
     });
@@ -329,7 +246,7 @@ describe('sidebar/helpers/annotation-metadata', () => {
       assert.isTrue(
         annotationMetadata.isPageNote({
           target: [],
-        })
+        }),
       );
     });
 
@@ -337,7 +254,7 @@ describe('sidebar/helpers/annotation-metadata', () => {
       assert.isTrue(
         annotationMetadata.isPageNote({
           target: [{ selector: undefined }],
-        })
+        }),
       );
     });
 
@@ -345,7 +262,7 @@ describe('sidebar/helpers/annotation-metadata', () => {
       assert.isTrue(
         annotationMetadata.isPageNote({
           target: undefined,
-        })
+        }),
       );
     });
 
@@ -354,7 +271,7 @@ describe('sidebar/helpers/annotation-metadata', () => {
         annotationMetadata.isPageNote({
           target: [],
           references: ['xyz'],
-        })
+        }),
       );
     });
   });
@@ -364,7 +281,7 @@ describe('sidebar/helpers/annotation-metadata', () => {
       assert.isTrue(
         annotationMetadata.isAnnotation({
           target: [{ selector: [] }],
-        })
+        }),
       );
     });
 
@@ -394,51 +311,34 @@ describe('sidebar/helpers/annotation-metadata', () => {
         fixtures.oldReply(),
       ];
       assert.equal(
-        annotationMetadata.annotationRole(annotationAnnotation),
-        'Annotation'
+        annotationMetadata.annotationRole(annotationAnnotation, {}),
+        'Annotation',
       );
 
       assert.equal(
-        annotationMetadata.annotationRole(highlightAnnotation),
-        'Highlight'
+        annotationMetadata.annotationRole(highlightAnnotation, {}),
+        'Highlight',
       );
 
       assert.equal(
-        annotationMetadata.annotationRole(pageNoteAnnotation),
-        'Page note'
+        annotationMetadata.annotationRole(pageNoteAnnotation, {}),
+        'Page note',
       );
 
       replyAnnotations.forEach(reply => {
-        assert.equal(annotationMetadata.annotationRole(reply), 'Reply');
-      });
-    });
-  });
-
-  describe('isPublic', () => {
-    it('returns true if an annotation is shared within a group', () => {
-      assert.isTrue(annotationMetadata.isPublic(fixtures.publicAnnotation()));
-    });
-
-    [
-      {
-        read: ['acct:someemail@localhost'],
-      },
-      {
-        read: ['something invalid'],
-      },
-    ].forEach(testCase => {
-      it('returns false if an annotation is not publicly readable', () => {
-        const annotation = Object.assign(fixtures.defaultAnnotation(), {
-          permissions: testCase,
-        });
-        assert.isFalse(annotationMetadata.isPublic(annotation));
+        assert.equal(annotationMetadata.annotationRole(reply, {}), 'Reply');
       });
     });
 
-    it('returns false if an annotation is missing permissions', () => {
-      const annot = fixtures.defaultAnnotation();
-      delete annot.permissions;
-      assert.isFalse(annotationMetadata.isPublic(annot));
+    it('returns "Comment" for page notes when comments mode is enabled', () => {
+      const pageNoteAnnotation = fixtures.newPageNote();
+
+      assert.equal(
+        annotationMetadata.annotationRole(pageNoteAnnotation, {
+          commentsMode: true,
+        }),
+        'Comment',
+      );
     });
   });
 
@@ -561,6 +461,110 @@ describe('sidebar/helpers/annotation-metadata', () => {
         ],
       };
       assert.equal(annotationMetadata.quote(ann), null);
+    });
+  });
+
+  describe('shape', () => {
+    [
+      {
+        selectors: [],
+        expected: null,
+      },
+      {
+        selectors: [
+          {
+            type: 'ShapeSelector',
+            shape: {
+              type: 'rect',
+              left: 0,
+              top: 10,
+              right: 10,
+              bottom: 0,
+            },
+          },
+        ],
+        expected: {
+          type: 'ShapeSelector',
+          shape: {
+            type: 'rect',
+            left: 0,
+            top: 10,
+            right: 10,
+            bottom: 0,
+          },
+        },
+      },
+    ].forEach(({ selectors, expected }) => {
+      it('returns shape selector', () => {
+        const annotation = {
+          target: [
+            {
+              source: 'https://example.org/dummy.pdf',
+              selector: selectors,
+            },
+          ],
+        };
+        const annShape = shape(annotation);
+        assert.deepEqual(annShape, expected);
+      });
+    });
+  });
+
+  describe('description', () => {
+    it('returns target description', () => {
+      const annotation = { target: [] };
+      assert.isUndefined(description(annotation));
+
+      const annotation2 = {
+        target: [
+          {
+            description: 'Two roads diverge in a wood',
+          },
+        ],
+      };
+      assert.equal(description(annotation2), 'Two roads diverge in a wood');
+    });
+  });
+
+  describe('pageLabel', () => {
+    it('returns page label for annotation', () => {
+      const ann = {
+        target: [
+          {
+            source: 'https://publisher.org/article.pdf',
+            selector: [{ type: 'PageSelector', index: 10, label: '11' }],
+          },
+        ],
+      };
+      assert.equal(pageLabel(ann), '11');
+    });
+
+    it('returns undefined if annotation has no `PageSelector` selector', () => {
+      const anns = [fixtures.newPageNote(), fixtures.newAnnotation()];
+      for (const ann of anns) {
+        assert.isUndefined(pageLabel(ann));
+      }
+    });
+  });
+
+  describe('cfi', () => {
+    it('returns CFI for annotation', () => {
+      const ann = {
+        target: [
+          {
+            source: 'https://publisher.org/article.pdf',
+            selector: [{ type: 'EPUBContentSelector', cfi: '/2/4' }],
+          },
+        ],
+      };
+      assert.equal(cfi(ann), '/2/4');
+    });
+
+    it('returns undefined if annotation has no `EPUBContentSelector` selector', () => {
+      const anns = [fixtures.newPageNote(), fixtures.newAnnotation()];
+      for (const ann of anns) {
+        assert.isUndefined(pageLabel(ann));
+      }
     });
   });
 

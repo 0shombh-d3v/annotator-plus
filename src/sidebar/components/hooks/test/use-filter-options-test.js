@@ -1,4 +1,4 @@
-import { mount } from 'enzyme';
+import { mount } from '@hypothesis/frontend-testing';
 
 import { useUserFilterOptions, $imports } from '../use-filter-options';
 
@@ -9,10 +9,10 @@ describe('sidebar/components/hooks/use-user-filter-options', () => {
   let lastUserOptions;
 
   // Mock `annotationDisplayName` as if it's returning display names
-  let fakeAnnotationUserDisplay = annotation =>
+  const fakeAnnotationUserDisplay = annotation =>
     annotation.user_info.display_name;
   // Mock `annotationDisplayName` as if it's returning usernames
-  let fakeAnnotationUserUsername = annotation => annotation.user;
+  const fakeAnnotationUserUsername = annotation => annotation.user;
 
   // Mount a dummy component to be able to use the hook
   function DummyComponent() {
@@ -123,7 +123,7 @@ describe('sidebar/components/hooks/use-user-filter-options', () => {
     it('should add focused-user filter information', () => {
       fakeStore.allAnnotations.returns(annotationFixtures());
       fakeAnnotationUser.annotationDisplayName.callsFake(
-        fakeAnnotationUserDisplay
+        fakeAnnotationUserDisplay,
       );
 
       mount(<DummyComponent />);
@@ -154,7 +154,7 @@ describe('sidebar/components/hooks/use-user-filter-options', () => {
 
     it('sorts the current user to the front with " (Me)" suffix', () => {
       fakeAnnotationUser.annotationDisplayName.callsFake(
-        fakeAnnotationUserDisplay
+        fakeAnnotationUserDisplay,
       );
       fakeStore.allAnnotations.returns(annotationFixtures());
       fakeStore.profile.returns({
@@ -174,7 +174,7 @@ describe('sidebar/components/hooks/use-user-filter-options', () => {
     it('does not add (Me)" suffix if user has no annotations', () => {
       fakeStore.allAnnotations.returns(annotationFixtures());
       fakeAnnotationUser.annotationDisplayName.callsFake(
-        fakeAnnotationUserDisplay
+        fakeAnnotationUserDisplay,
       );
       fakeStore.profile.returns({
         userid: 'fakeid',

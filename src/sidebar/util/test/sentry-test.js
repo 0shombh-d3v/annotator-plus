@@ -59,7 +59,7 @@ describe('sidebar/util/sentry', () => {
           dsn: 'test-dsn',
           environment: 'dev',
           release: '1.0.0-dummy-version',
-        })
+        }),
       );
     });
 
@@ -76,7 +76,7 @@ describe('sidebar/util/sentry', () => {
         fakeSentry.init,
         sinon.match({
           allowUrls: ['https://cdn.hypothes.is'],
-        })
+        }),
       );
     });
 
@@ -90,7 +90,7 @@ describe('sidebar/util/sentry', () => {
         fakeSentry.init,
         sinon.match({
           ignoreErrors: sinon.match.array,
-        })
+        }),
       );
     });
 
@@ -106,7 +106,7 @@ describe('sidebar/util/sentry', () => {
         fakeSentry.init,
         sinon.match({
           allowUrls: undefined,
-        })
+        }),
       );
     });
 
@@ -133,7 +133,7 @@ describe('sidebar/util/sentry', () => {
         .getCalls()
         .find(call => call.args[0] === 'loaded_scripts').args[1];
       assert.isTrue(urls.length > 0);
-      urls.forEach(url => assert.match(url, /<inline>|http:.*\.js/));
+      urls.forEach(url => assert.match(url, /<inline>|http:.*/));
     });
 
     function getBeforeSendHook() {

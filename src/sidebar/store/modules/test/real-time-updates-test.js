@@ -1,3 +1,5 @@
+import sinon from 'sinon';
+
 import { createStore } from '../../create-store';
 import { annotationsModule } from '../annotations';
 import { groupsModule } from '../groups';
@@ -11,7 +13,9 @@ describe('sidebar/store/modules/real-time-updates', () => {
   let fakeAnnotationExists;
   let fakeFocusedGroupId;
   let fakeRoute;
-  let fakeSettings = {};
+  let fakeProfile;
+  let fakeAllAnnotations;
+  const fakeSettings = {};
   let store;
 
   beforeEach(() => {
@@ -30,15 +34,21 @@ describe('sidebar/store/modules/real-time-updates', () => {
       return 'sidebar';
     });
 
+    fakeProfile = sinon.stub().returns({ userid: 'current_user_id' });
+    fakeAllAnnotations = sinon.stub().returns([]);
+
     store = createStore(
       [realTimeUpdatesModule, annotationsModule, selectionModule],
-      [fakeSettings]
+      [fakeSettings],
     );
 
     $imports.$mock({
       './annotations': {
         annotationsModule: {
-          selectors: { annotationExists: fakeAnnotationExists },
+          selectors: {
+            annotationExists: fakeAnnotationExists,
+            allAnnotations: fakeAllAnnotations,
+          },
         },
       },
       './groups': {
@@ -49,6 +59,11 @@ describe('sidebar/store/modules/real-time-updates', () => {
       './route': {
         routeModule: {
           selectors: { route: fakeRoute },
+        },
+      },
+      './session': {
+        sessionModule: {
+          selectors: { profile: fakeProfile },
         },
       },
     });
@@ -139,7 +154,7 @@ describe('sidebar/store/modules/real-time-updates', () => {
       const deletes = addPendingDeletions(store);
       assert.deepEqual(
         store.pendingUpdateCount(),
-        updates.length + deletes.length
+        updates.length + deletes.length,
       );
     });
   });
@@ -180,6 +195,122 @@ describe('sidebar/store/modules/real-time-updates', () => {
     it('returns true if there are pending deletions', () => {
       addPendingDeletions(store);
       assert.equal(store.hasPendingDeletion('deleted-ann'), true);
+    });
+  });
+
+  describe('hasPendingUpdates', () => {
+    it('returns false if there are no pending updates', () => {
+      assert.equal(store.hasPendingUpdates(), false);
+    });
+
+    it('returns true if there are pending updates', () => {
+      addPendingUpdates(store);
+      assert.equal(store.hasPendingUpdates(), true);
+    });
+  });
+
+  describe('hasPendingUpdatesOrDeletions', () => {
+    it('returns false if there are no pending updates nor deletions', () => {
+      assert.isFalse(store.hasPendingUpdatesOrDeletions());
+    });
+
+    it('returns true if there are pending updates', () => {
+      addPendingUpdates(store);
+      assert.isTrue(store.hasPendingUpdatesOrDeletions());
+    });
+
+    it('returns true if there are pending deletions', () => {
+      addPendingDeletions(store);
+      assert.isTrue(store.hasPendingUpdatesOrDeletions());
+    });
+  });
+
+  describe('pendingMentionCount', () => {
+    [
+      // New annotations with no mentions or mentions of other users are ignored
+      {
+        updatedAnnotations: [
+          {
+            id: 'new_anno_1',
+            group: 'group-1',
+            mentions: [],
+          },
+          {
+            id: 'new_anno_2',
+            group: 'group-1',
+            mentions: [{ userid: 'someone_else' }],
+          },
+        ],
+        expectedMentionCount: 0,
+      },
+
+      // New annotations with mentions of current user are always counted.
+      // Existing annotations which didn't have a mention of current user but
+      // now do, are also counted.
+      {
+        updatedAnnotations: [
+          {
+            id: 'new_anno_3',
+            group: 'group-1',
+            mentions: [{ userid: 'current_user_id' }],
+          },
+          {
+            id: 'existing_anno_1',
+            group: 'group-1',
+            mentions: [{ userid: 'current_user_id' }],
+          },
+        ],
+        expectedMentionCount: 2,
+      },
+
+      // Existing annotations which already had a mention to current user are
+      // not counted again.
+      {
+        updatedAnnotations: [
+          {
+            id: 'existing_anno_2',
+            group: 'group-1',
+            mentions: [{ userid: 'current_user_id' }],
+          },
+        ],
+        expectedMentionCount: 0,
+      },
+
+      // Existing annotation which now mentions another user are ignored
+      {
+        updatedAnnotations: [
+          {
+            id: 'existing_anno_3',
+            group: 'group-1',
+            mentions: [{ userid: 'someone_else_two' }],
+          },
+        ],
+        expectedMentionCount: 0,
+      },
+    ].forEach(({ updatedAnnotations, expectedMentionCount }) => {
+      it('counts new annos with mentions and existing annos with added mentions', () => {
+        fakeAllAnnotations.returns([
+          {
+            // This annotation does not yet have a mention of current user
+            id: 'existing_anno_1',
+            mentions: [],
+          },
+          {
+            // This annotation already has a mention of current user
+            id: 'existing_anno_2',
+            mentions: [{ userid: 'current_user_id' }],
+          },
+          {
+            // This annotation has a mention of other user
+            id: 'existing_anno_3',
+            mentions: [{ userid: 'someone_else' }],
+          },
+        ]);
+
+        store.receiveRealTimeUpdates({ updatedAnnotations });
+
+        assert.equal(store.pendingMentionCount(), expectedMentionCount);
+      });
     });
   });
 });

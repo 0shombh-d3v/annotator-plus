@@ -1,23 +1,27 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
+import sinon from 'sinon';
 
 import LoginPromptPanel, { $imports } from '../LoginPromptPanel';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('LoginPromptPanel', () => {
   let fakeOnLogin;
   let fakeOnSignUp;
 
   let fakeStore;
+  let fakeSettings;
 
   function createComponent(props) {
     return mount(
       <LoginPromptPanel
         onLogin={fakeOnLogin}
         onSignUp={fakeOnSignUp}
+        settings={fakeSettings}
         {...props}
-      />
+      />,
     );
   }
 
@@ -25,6 +29,7 @@ describe('LoginPromptPanel', () => {
     fakeStore = {
       isLoggedIn: sinon.stub().returns(false),
     };
+    fakeSettings = { commentsMode: false };
 
     fakeOnLogin = sinon.stub();
     fakeOnSignUp = sinon.stub();
@@ -53,10 +58,29 @@ describe('LoginPromptPanel', () => {
     assert.isFalse(wrapper.find('SidebarPanel').exists());
   });
 
+  it.each([
+    { commentsMode: true, expectedText: 'Please log in to write a comment.' },
+    {
+      commentsMode: false,
+      expectedText: 'Please log in to create annotations or highlights.',
+    },
+  ])(
+    'shows different text for comments mode',
+    ({ commentsMode, expectedText }) => {
+      fakeSettings.commentsMode = commentsMode;
+      const wrapper = createComponent();
+
+      assert.equal(
+        wrapper.find('[data-testid="main-text"]').text(),
+        expectedText,
+      );
+    },
+  );
+
   it(
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponent(),
-    })
+    }),
   );
 });

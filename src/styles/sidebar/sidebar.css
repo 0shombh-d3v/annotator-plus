@@ -1,0 +1,179 @@
+@import 'tailwindcss' source(none);
+
+@source '../../{shared,sidebar}/components/**/*.{js,ts,tsx}';
+@source '../../../node_modules/@hypothesis/annotation-ui/lib/**/*.js';
+@source '../../../node_modules/@hypothesis/frontend-shared/lib/**/*.js';
+
+@import '@hypothesis/frontend-shared/tailwind-config.css';
+
+@theme {
+  --animate-fade-in-slow: fade-in 1s ease-in;
+
+  --animate-pulse-fade-out: pulse-fade-out 5s ease-in-out forwards;
+  @keyframes pulse-fade-out {
+    0% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    8% {
+      transform: scale(1);
+    }
+    90% {
+      opacity: 0.8;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
+  --animate-updates-notification-slide-in: updates-notification-slide-in 0.3s
+    ease-in;
+  @keyframes updates-notification-slide-in {
+    0% {
+      opacity: 0;
+      right: -15px;
+    }
+    100% {
+      opacity: 1;
+      right: 0;
+    }
+  }
+
+  --breakpoint-sm: 360px;
+  --breakpoint-lg: 768px;
+
+  --color-blue-quote: #58cef4;
+
+  --font-mono: 'Open Sans Mono', Menlo, 'DejaVu Sans Mono', monospace;
+  --font-sans: 'Helvetica Neue', Helvetica, Arial, 'Lucida Grande', sans-serif;
+
+  /* A more prominent shadow than the one used by tailwind, intended for
+     popovers and menus. */
+  --shadow-intense: 0px 2px 10px 0px rgb(0 0 0 / 0.25);
+  --shadow-focus-inner: inset 0 0 0 2px #59a7e8;
+
+  --text-xs: 11px;
+  --text-xs--line-height: 1.4;
+
+  --text-sm: 13px;
+  --text-sm--line-height: 1.4;
+
+  --text-base: 13px;
+  --text-base--line-height: 1.4;
+
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+
+  /* Used for inputs on mobile devices. */
+  --text-touch-base: 16px;
+  --text-touch-base--line-height: 1.4;
+}
+
+/* Add a custom variant such that the `theme-clean:` modifier is available
+   for all tailwind utility classes. e.g. `.theme-clean:bg-white` would
+   only apply (set the element's background color to white) if a parent
+   element had the `.theme-clean` class. */
+@custom-variant theme-clean {
+  .theme-clean & {
+    @slot;
+  }
+}
+
+@layer base {
+  html,
+  body {
+    @apply h-full;
+  }
+
+  /* Set text styles except for font-family and font-size, which are defined separately. */
+  body {
+    @apply bg-white text-color-text;
+  }
+
+  /* See https://tailwindcss.com/docs/upgrade-guide#default-border-color. */
+  * {
+    border-color: #dbdbdb;
+  }
+
+  /* TODO: Find all component-src uses of <a> elements directly and update to
+     use `Link` component (for styling) or verify that they don't rely on this
+     element style. */
+  a {
+    /* Ensure the tag has width in order for :focus styling to render correctly. */
+    @apply inline-block;
+    /* Give links a radius to allow :focus styling to appear similar to that of buttons. */
+    @apply rounded;
+    @apply text-brand no-underline;
+  }
+
+  a:active,
+  a:focus {
+    @apply no-underline;
+  }
+
+  a:hover {
+    @apply text-brand-dark no-underline;
+  }
+
+  /* TODO: Research history of this and whether it's still appropriate. */
+  p {
+    @apply hyphens-auto;
+  }
+}
+
+/* See https://tailwindcss.com/docs/upgrade-guide#default-ring-width-and-color. */
+@theme {
+  --default-ring-width: 2px;
+  --default-ring-color: #59a7e8;
+}
+
+@import '@hypothesis/annotation-ui/StyledText.css';
+
+@layer components {
+  /* Style a background to contain a vertical dashed line, horizontally-
+     centered, that gets darker on hover.
+  
+     Linear gradient, sizing and positioning derived from
+     https://css-tricks.com/more-control-over-css-borders-with-background-image/ */
+  .bg-thread-line {
+    /* Use TW gradient stops to color the line. These set --tw-gradient-from CSS properties. */
+    @apply from-grey-3 hover:from-grey-4;
+    @apply bg-no-repeat bg-center;
+
+    background-image: repeating-linear-gradient(
+      180deg,
+      var(--tw-gradient-from),
+      var(--tw-gradient-from) 4px,
+      transparent 4px,
+      transparent 6px,
+      var(--tw-gradient-from) 6px
+    );
+    background-size: 1px 100%;
+  }
+
+  /* Applies to any text: strikeout effect. */
+  .p-redacted-text {
+    @apply line-through grayscale contrast-50 text-color-text-light;
+  }
+
+  /* Disable scroll anchoring as it interferes with `ThreadList` and
+	   `visible-threads` calculations and can cause a render loop. */
+  .js-thread-list-scroll-root {
+    overflow-anchor: none;
+  }
+}
+
+@utility container {
+  @apply m-auto px-[9px] max-w-[768px];
+}
+
+/* Set the main font-family and font-size.
+
+   These are defined in unlayered styles rather than the base layer so that
+   they take precedence over default styles that Chrome sets in all pages
+   served from an extension. See https://stackoverflow.com/a/72050395/434243
+   and https://source.chromium.org/chromium/chromium/src/+/main:extensions/renderer/resources/extension_fonts.css;drc=60039d4d4bd70512e21a2dfe586602aca1d9d35e. */
+body {
+  @apply font-sans text-base;
+}

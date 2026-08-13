@@ -1,8 +1,10 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 import { ResultSizeError } from '../../search-client';
 import NotebookView, { $imports } from '../NotebookView';
 
@@ -18,7 +20,9 @@ describe('NotebookView', () => {
       load: sinon.stub(),
     };
 
-    fakeUseRootThread = sinon.stub().returns({});
+    fakeUseRootThread = sinon.stub().returns({
+      rootThread: { children: [] },
+    });
 
     fakeScrollIntoView = sinon.stub();
 
@@ -31,13 +35,11 @@ describe('NotebookView', () => {
       isLoading: sinon.stub().returns(false),
       annotationResultCount: sinon.stub().returns(0),
       setSortKey: sinon.stub(),
-      pendingUpdateCount: sinon.stub().returns(0),
       hasFetchedProfile: sinon.stub().returns(true),
     };
 
     fakeStreamer = {
       connect: sinon.stub(),
-      applyPendingUpdates: sinon.stub(),
     };
 
     $imports.$mock(mockImportedComponents());
@@ -57,7 +59,7 @@ describe('NotebookView', () => {
       <NotebookView
         loadAnnotationsService={fakeLoadAnnotationsService}
         streamer={fakeStreamer}
-      />
+      />,
     );
   }
 
@@ -73,9 +75,9 @@ describe('NotebookView', () => {
         sortBy: 'updated',
         sortOrder: 'desc',
         onError: sinon.match.func,
-      })
+      }),
     );
-    assert.calledWith(fakeStore.setSortKey, 'Newest');
+    assert.calledWith(fakeStore.setSortKey, 'newest');
   });
 
   it('loads annotations for the direct-linked group if there is no focused group', () => {
@@ -92,7 +94,7 @@ describe('NotebookView', () => {
         sortBy: 'updated',
         sortOrder: 'desc',
         onError: sinon.match.func,
-      })
+      }),
     );
   });
 
@@ -125,7 +127,7 @@ describe('NotebookView', () => {
 
     assert.equal(
       wrapper.find('[data-testid="notebook-group-name"]').text(),
-      'Hallo'
+      'Hallo',
     );
   });
 
@@ -135,7 +137,7 @@ describe('NotebookView', () => {
 
     assert.equal(
       wrapper.find('[data-testid="notebook-group-name"]').text(),
-      '…'
+      '…',
     );
   });
 
@@ -147,38 +149,6 @@ describe('NotebookView', () => {
   it('renders filters', () => {
     const wrapper = createComponent();
     assert.isTrue(wrapper.find('NotebookFilters').exists());
-  });
-
-  describe('synchronization of annotations', () => {
-    beforeEach(() => {
-      fakeStore.focusedGroup.returns({ id: 'hallothere', name: 'Hallo' });
-      fakeStore.pendingUpdateCount.returns(3);
-    });
-
-    it("doesn't display button to synchronize annotations if filters are applied", () => {
-      fakeStore.hasAppliedFilter.returns(true);
-      const wrapper = createComponent();
-
-      const button = wrapper.find('IconButton[icon="refresh"]');
-      assert.isFalse(button.exists());
-    });
-
-    it('shows button to synchronize annotations if no filters are applied', () => {
-      const wrapper = createComponent();
-
-      const button = wrapper.find('IconButton[icon="refresh"]');
-      assert.isTrue(button.exists());
-      assert.include(button.prop('title'), 'Show 3 new or updated annotations');
-    });
-
-    it('synchronizes pending annotations', () => {
-      const wrapper = createComponent();
-
-      const button = wrapper.find('IconButton[icon="refresh"]');
-      assert.isTrue(button.exists());
-      button.prop('onClick')();
-      assert.called(fakeStreamer.applyPendingUpdates);
-    });
   });
 
   describe('pagination', () => {
@@ -254,6 +224,6 @@ describe('NotebookView', () => {
           return createComponent();
         },
       },
-    ])
+    ]),
   );
 });

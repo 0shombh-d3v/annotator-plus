@@ -1,9 +1,10 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import LoggedOutMessage, { $imports } from '../LoggedOutMessage';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('LoggedOutMessage', () => {
   let fakeStore;
@@ -49,6 +50,6 @@ describe('LoggedOutMessage', () => {
     'should pass a11y checks',
     checkAccessibility({
       content: () => createLoggedOutMessage(),
-    })
+    }),
   );
 });

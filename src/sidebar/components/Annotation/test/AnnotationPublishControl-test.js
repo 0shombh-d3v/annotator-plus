@@ -1,7 +1,14 @@
-import { mount } from 'enzyme';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
+import {
+  GlobeIcon,
+  GroupsIcon,
+  LockFilledIcon,
+} from '@hypothesis/frontend-shared';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
+import sinon from 'sinon';
 
 import AnnotationPublishControl, {
   $imports,
@@ -11,6 +18,7 @@ describe('AnnotationPublishControl', () => {
   let fakeGroup;
   let fakeSettings;
   let fakeApplyTheme;
+  let fakeUseContentTruncated;
 
   let fakeOnSave;
   let fakeOnCancel;
@@ -27,7 +35,7 @@ describe('AnnotationPublishControl', () => {
         onSetPrivate={fakeOnSetPrivate}
         settings={fakeSettings}
         {...props}
-      />
+      />,
     );
   };
 
@@ -48,11 +56,15 @@ describe('AnnotationPublishControl', () => {
     };
 
     fakeApplyTheme = sinon.stub();
+    fakeUseContentTruncated = sinon.stub().returns(false);
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
       '../../helpers/theme': {
         applyTheme: fakeApplyTheme,
+      },
+      '../../hooks/use-content-truncated': {
+        useContentTruncated: fakeUseContentTruncated,
       },
     });
   });
@@ -62,7 +74,7 @@ describe('AnnotationPublishControl', () => {
   });
 
   const getPublishButton = wrapper =>
-    wrapper.find('LabeledButton[data-testid="publish-control-button"]');
+    wrapper.find('Button[data-testid="publish-control-button"]');
 
   describe('theming', () => {
     it('should apply theme styles', () => {
@@ -74,7 +86,7 @@ describe('AnnotationPublishControl', () => {
       assert.calledWith(
         fakeApplyTheme,
         ['ctaTextColor', 'ctaBackgroundColor'],
-        fakeSettings
+        fakeSettings,
       );
       assert.include(btnPrimary.prop('style'), fakeStyle);
     });
@@ -140,7 +152,7 @@ describe('AnnotationPublishControl', () => {
           const wrapper = createAnnotationPublishControl();
           const shareMenuItem = wrapper.find('MenuItem').first();
 
-          assert.equal(shareMenuItem.prop('icon'), 'groups');
+          assert.equal(shareMenuItem.props().icon, GroupsIcon);
         });
       });
 
@@ -153,7 +165,7 @@ describe('AnnotationPublishControl', () => {
           const wrapper = createAnnotationPublishControl();
           const shareMenuItem = wrapper.find('MenuItem').first();
 
-          assert.equal(shareMenuItem.prop('icon'), 'public');
+          assert.equal(shareMenuItem.props().icon, GlobeIcon);
         });
       });
     });
@@ -173,7 +185,7 @@ describe('AnnotationPublishControl', () => {
         const wrapper = createAnnotationPublishControl();
         const privateMenuItem = wrapper.find('MenuItem').at(1);
 
-        assert.equal(privateMenuItem.prop('icon'), 'lock');
+        assert.equal(privateMenuItem.prop('icon'), LockFilledIcon);
       });
 
       it('should have an "Only me" label', () => {
@@ -188,9 +200,7 @@ describe('AnnotationPublishControl', () => {
   describe('cancel button', () => {
     it('should invoke the `onCancel` callback when cancel button clicked', () => {
       const wrapper = createAnnotationPublishControl();
-      const cancelBtn = wrapper
-        .find('LabeledButton')
-        .filter({ icon: 'cancel' });
+      const cancelBtn = wrapper.find('Button[data-testid="cancel-button"]');
 
       cancelBtn.props().onClick();
 
@@ -198,10 +208,20 @@ describe('AnnotationPublishControl', () => {
     });
   });
 
+  [true, false].forEach(isTruncated => {
+    it('adds title to publish button when its content is truncated', () => {
+      fakeUseContentTruncated.returns(isTruncated);
+
+      const wrapper = createAnnotationPublishControl();
+
+      assert.equal(!!getPublishButton(wrapper).prop('title'), isTruncated);
+    });
+  });
+
   it(
     'should pass a11y checks',
     checkAccessibility({
       content: () => createAnnotationPublishControl(),
-    })
+    }),
   );
 });

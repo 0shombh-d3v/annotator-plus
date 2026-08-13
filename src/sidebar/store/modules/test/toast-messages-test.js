@@ -66,27 +66,6 @@ describe('store/modules/toast-messages', () => {
         assert.lengthOf(store.getToastMessages(), 2);
       });
     });
-
-    describe('updateToastMessage', () => {
-      it('should update the message object', () => {
-        const updatedMessage = {
-          id: 'myToast',
-          type: 'whatever',
-          message: 'updated',
-        };
-        store.addToastMessage(fakeToastMessage);
-        store.updateToastMessage(updatedMessage);
-
-        assert.deepEqual(store.getToastMessage('myToast'), updatedMessage);
-      });
-
-      it('should be OK if there is no matching message object', () => {
-        store.addToastMessage(fakeToastMessage);
-        store.updateToastMessage({ id: 'random' });
-
-        assert.lengthOf(store.getToastMessages(), 1);
-      });
-    });
   });
 
   describe('selectors', () => {
@@ -134,10 +113,10 @@ describe('store/modules/toast-messages', () => {
         store.addToastMessage(fakeToastMessage);
 
         assert.isFalse(
-          store.hasToastMessage('anotherType', 'This is a message')
+          store.hasToastMessage('anotherType', 'This is a message'),
         );
         assert.isFalse(
-          store.hasToastMessage('anyType', 'This is another message')
+          store.hasToastMessage('anyType', 'This is another message'),
         );
       });
     });

@@ -1,13 +1,13 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+  waitFor,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
 
-import AnnotationActionBar, { $imports } from '../AnnotationActionBar';
-
 import * as fixtures from '../../../test/annotation-fixtures';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
-import { waitFor } from '../../../../test-util/wait';
+import AnnotationActionBar, { $imports } from '../AnnotationActionBar';
 
 describe('AnnotationActionBar', () => {
   let fakeAnnotation;
@@ -21,7 +21,6 @@ describe('AnnotationActionBar', () => {
   let fakePermits;
   let fakeSettings;
   // Fake dependencies
-  let fakeAnnotationSharingLink;
   let fakeSharingEnabled;
   let fakeStore;
 
@@ -34,7 +33,7 @@ describe('AnnotationActionBar', () => {
         onReply={fakeOnReply}
         settings={fakeSettings}
         {...props}
-      />
+      />,
     );
   }
 
@@ -52,7 +51,9 @@ describe('AnnotationActionBar', () => {
   };
 
   const getButton = (wrapper, iconName) => {
-    return wrapper.find('IconButton').filter({ icon: iconName });
+    return wrapper
+      .find('IconButton')
+      .filterWhere(n => n.find(iconName).exists());
   };
 
   beforeEach(() => {
@@ -77,11 +78,9 @@ describe('AnnotationActionBar', () => {
     fakeSettings = {};
 
     fakeSharingEnabled = sinon.stub().returns(true);
-    fakeAnnotationSharingLink = sinon.stub().returns('http://share.me');
 
     fakeStore = {
       createDraft: sinon.stub(),
-      getGroup: sinon.stub().returns({}),
       isLoggedIn: sinon.stub(),
       openSidebarPanel: sinon.stub(),
       profile: sinon.stub().returns(fakeUserProfile),
@@ -91,13 +90,12 @@ describe('AnnotationActionBar', () => {
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
+      '@hypothesis/frontend-shared': { confirm: fakeConfirm },
       '../../helpers/annotation-sharing': {
         sharingEnabled: fakeSharingEnabled,
-        annotationSharingLink: fakeAnnotationSharingLink,
       },
       '../../helpers/permissions': { permits: fakePermits },
       '../../store': { useSidebarStore: () => fakeStore },
-      '../../../shared/prompts': { confirm: fakeConfirm },
     });
   });
 
@@ -109,13 +107,14 @@ describe('AnnotationActionBar', () => {
     it('shows edit button if permissions allow', () => {
       allowOnly('update');
       const wrapper = createComponent();
-
-      assert.isTrue(getButton(wrapper, 'edit').exists());
+      assert.isTrue(getButton(wrapper, 'EditIcon').exists());
     });
 
     it('creates a new draft when `Edit` button clicked', () => {
+      fakeAnnotation.target[0].description = 'Image description';
+
       allowOnly('update');
-      const button = getButton(createComponent(), 'edit');
+      const button = getButton(createComponent(), 'EditIcon');
 
       button.props().onClick();
 
@@ -125,6 +124,7 @@ describe('AnnotationActionBar', () => {
       assert.include(call.args[1], {
         isPrivate: false,
         text: fakeAnnotation.text,
+        description: 'Image description',
       });
       assert.isArray(call.args[1].tags);
     });
@@ -134,7 +134,7 @@ describe('AnnotationActionBar', () => {
 
       const wrapper = createComponent();
 
-      assert.isFalse(getButton(wrapper, 'edit').exists());
+      assert.isFalse(getButton(wrapper, 'EditIcon').exists());
     });
   });
 
@@ -143,12 +143,12 @@ describe('AnnotationActionBar', () => {
       allowOnly('delete');
       const wrapper = createComponent();
 
-      assert.isTrue(getButton(wrapper, 'trash').exists());
+      assert.isTrue(getButton(wrapper, 'TrashIcon').exists());
     });
 
     it('asks for confirmation before deletion', async () => {
       allowOnly('delete');
-      const button = getButton(createComponent(), 'trash');
+      const button = getButton(createComponent(), 'TrashIcon');
 
       await act(async () => {
         await button.props().onClick();
@@ -161,7 +161,7 @@ describe('AnnotationActionBar', () => {
     it('invokes delete on service when confirmed', async () => {
       allowOnly('delete');
       fakeConfirm.resolves(true);
-      const button = getButton(createComponent(), 'trash');
+      const button = getButton(createComponent(), 'TrashIcon');
 
       await act(async () => {
         await button.props().onClick();
@@ -173,7 +173,7 @@ describe('AnnotationActionBar', () => {
     it('sets a visually-hidden message when deletion succeeds', async () => {
       allowOnly('delete');
       fakeConfirm.resolves(true);
-      const button = getButton(createComponent(), 'trash');
+      const button = getButton(createComponent(), 'TrashIcon');
 
       await act(async () => {
         await button.props().onClick();
@@ -192,7 +192,7 @@ describe('AnnotationActionBar', () => {
       fakeConfirm.resolves(true);
       fakeAnnotationsService.delete.rejects();
 
-      const button = getButton(createComponent(), 'trash');
+      const button = getButton(createComponent(), 'TrashIcon');
       await act(async () => {
         await button.props().onClick();
       });
@@ -207,7 +207,7 @@ describe('AnnotationActionBar', () => {
 
       const wrapper = createComponent();
 
-      assert.isFalse(getButton(wrapper, 'trash').exists());
+      assert.isFalse(getButton(wrapper, 'TrashIcon').exists());
     });
   });
 
@@ -215,13 +215,13 @@ describe('AnnotationActionBar', () => {
     it('shows the reply button (in all cases)', () => {
       const wrapper = createComponent();
 
-      assert.isTrue(getButton(wrapper, 'reply').exists());
+      assert.isTrue(getButton(wrapper, 'ReplyIcon').exists());
     });
 
     describe('when clicked', () => {
       it('shows login prompt if user is not logged in', () => {
         fakeStore.isLoggedIn.returns(false);
-        const button = getButton(createComponent(), 'reply');
+        const button = getButton(createComponent(), 'ReplyIcon');
 
         act(() => {
           button.props().onClick();
@@ -233,7 +233,7 @@ describe('AnnotationActionBar', () => {
 
       it('invokes `onReply` callback if user is logged in', () => {
         fakeStore.isLoggedIn.returns(true);
-        const button = getButton(createComponent(), 'reply');
+        const button = getButton(createComponent(), 'ReplyIcon');
 
         act(() => {
           button.props().onClick();
@@ -258,13 +258,6 @@ describe('AnnotationActionBar', () => {
 
       assert.isFalse(wrapper.find('AnnotationShareControl').exists());
     });
-
-    it('does not show share action button if annotation lacks sharing URI', () => {
-      fakeAnnotationSharingLink.returns(undefined);
-      const wrapper = createComponent();
-
-      assert.isFalse(wrapper.find('AnnotationShareControl').exists());
-    });
   });
 
   describe('flag action button', () => {
@@ -275,7 +268,7 @@ describe('AnnotationActionBar', () => {
 
       const wrapper = createComponent();
 
-      assert.isFalse(getButton(wrapper, 'flag').exists());
+      assert.isFalse(getButton(wrapper, 'FlagIcon').exists());
     });
 
     it('hides flag button if user is author', () => {
@@ -283,24 +276,24 @@ describe('AnnotationActionBar', () => {
 
       const wrapper = createComponent();
 
-      assert.isFalse(getButton(wrapper, 'flag').exists());
+      assert.isFalse(getButton(wrapper, 'FlagIcon').exists());
     });
 
     it('hides flag button if flagging is disabled in the settings', () => {
       fakeSettings = { services: [{ allowFlagging: false }] };
       const wrapper = createComponent();
 
-      assert.isFalse(getButton(wrapper, 'flag').exists());
+      assert.isFalse(getButton(wrapper, 'FlagIcon').exists());
     });
 
     it('shows flag button if user is not author', () => {
       const wrapper = createComponent();
 
-      assert.isTrue(getButton(wrapper, 'flag').exists());
+      assert.isTrue(getButton(wrapper, 'FlagIcon').exists());
     });
 
     it('invokes flag on service when clicked', () => {
-      const button = getButton(createComponent(), 'flag');
+      const button = getButton(createComponent(), 'FlagIcon');
 
       act(() => {
         button.props().onClick();
@@ -312,7 +305,7 @@ describe('AnnotationActionBar', () => {
     it('sets flash error message if flagging fails on service', async () => {
       fakeAnnotationsService.flag.rejects();
 
-      const button = getButton(createComponent(), 'flag');
+      const button = getButton(createComponent(), 'FlagIcon');
 
       act(() => {
         button.props().onClick();
@@ -329,11 +322,11 @@ describe('AnnotationActionBar', () => {
       it('renders an active-state flag action button', () => {
         const wrapper = createComponent();
 
-        assert.isTrue(getButton(wrapper, 'flag--active').exists());
+        assert.isTrue(getButton(wrapper, 'FlagFilledIcon').exists());
       });
 
       it('does not set an `onClick` property for the flag action button', () => {
-        const button = getButton(createComponent(), 'flag--active');
+        const button = getButton(createComponent(), 'FlagFilledIcon');
 
         assert.isUndefined(button.props().onClick);
       });
@@ -344,6 +337,6 @@ describe('AnnotationActionBar', () => {
     'should pass a11y checks',
     checkAccessibility({
       content: () => createComponent(),
-    })
+    }),
   );
 });

@@ -1,5 +1,4 @@
 import * as fixtures from '../../test/annotation-fixtures';
-
 import { AnnotationActivityService, $imports } from '../annotation-activity';
 
 describe('AnnotationActivityService', () => {
@@ -56,7 +55,7 @@ describe('AnnotationActivityService', () => {
         fakePostMessageJsonRpc.notify,
         window,
         'https://www.example.com',
-        'remoteMethod'
+        'remoteMethod',
       );
     });
 
@@ -136,12 +135,12 @@ describe('AnnotationActivityService', () => {
       let clock;
       let now;
 
-      before(() => {
+      beforeAll(() => {
         now = new Date();
         clock = sinon.useFakeTimers(now);
       });
 
-      after(() => {
+      afterAll(() => {
         clock.restore();
       });
 
@@ -155,6 +154,31 @@ describe('AnnotationActivityService', () => {
         const data = fakePostMessageJsonRpc.notify.getCall(0).args[3][1];
         assert.equal(data.date, now.toISOString());
       });
+    });
+  });
+
+  describe('#notifyUnsavedChanges', () => {
+    [true, false].forEach(unsaved => {
+      it('sends reportUnsavedChanges notification with unsaved state', () => {
+        const svc = new AnnotationActivityService(fakeSettings);
+
+        svc.notifyUnsavedChanges(unsaved);
+
+        assert.calledOnce(fakePostMessageJsonRpc.notify);
+        assert.calledWith(
+          fakePostMessageJsonRpc.notify,
+          window,
+          'https://www.example.com',
+          'reportUnsavedChanges',
+          [{ unsaved }],
+        );
+      });
+    });
+
+    it('does not send notification if RPC is not configured', () => {
+      const svc = new AnnotationActivityService({});
+      svc.notifyUnsavedChanges(true);
+      assert.notCalled(fakePostMessageJsonRpc.notify);
     });
   });
 });

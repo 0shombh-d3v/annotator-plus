@@ -1,10 +1,9 @@
- /**
-  * Because the code in this file is not transpiled by Babel, it must be compatible
-  * with all the supported browsers version (see `browserlist` in `package.json`)
-  * without transpilation. Do not include latest EcmaScript features as these
-  * will cause exceptions while working on dev (`localhost:3000`) on slightly
-  * older, yet supported browser versions.
-  */
+// Global functions exposed on all pages on the dev server where the client
+// is embedded.
+//
+// Ideally this would be an ES module and we'd avoid the globals. However ES
+// modules do not work in XHTML documents in all browsers. This mainly affects
+// our EPUB test cases. See https://github.com/hypothesis/client/pull/4353.
 
 /** @type {string|null} */
 let activeClientUrl;
@@ -27,7 +26,9 @@ function loadClient(clientUrl) {
  * This uses the same method as the browser extension does to deactivate the client.
  */
 function unloadClient() {
-  let annotatorLink = document.querySelector('link[type="application/annotator+html"]');
+  let annotatorLink = document.querySelector(
+    'link[type="application/annotator+html"]',
+  );
 
   if (annotatorLink) {
     annotatorLink.dispatchEvent(new Event('destroy'));

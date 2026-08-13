@@ -1,4 +1,5 @@
-import { delay } from '../../../test-util/wait';
+import { delay } from '@hypothesis/frontend-testing';
+
 import { PortProvider, $imports } from '../port-provider';
 
 describe('PortProvider', () => {
@@ -128,7 +129,20 @@ describe('PortProvider', () => {
           requestId: 'abcdef',
         },
         source: null,
-        reason: 'comes from invalid source',
+        reason: 'source frame went away',
+      },
+      {
+        data: {
+          frame1: 'sidebar',
+          frame2: 'host',
+          type: 'request',
+          requestId: 'abcdef',
+        },
+        // In reality a non-Window sender of a message to a window is most
+        // likely to be a worker of some kind, but a MessagePort is easier to
+        // construct.
+        source: new MessageChannel().port1,
+        reason: 'source is not a window',
       },
       {
         data: {
@@ -158,6 +172,7 @@ describe('PortProvider', () => {
         frame2: 'host',
         type: 'request',
         requestId: 'abcdef',
+        sourceId: undefined,
       };
 
       await sendPortFinderRequest({
@@ -168,8 +183,43 @@ describe('PortProvider', () => {
         window.postMessage,
         { ...data, type: 'offer' },
         window.location.origin,
-        [sinon.match.instanceOf(MessagePort)]
+        [sinon.match.instanceOf(MessagePort)],
       );
+    });
+
+    it('ignores a second request from sidebar frame for sidebar <-> host connection', async () => {
+      const warnStub = sinon.stub(console, 'warn');
+      try {
+        const data = {
+          frame1: 'sidebar',
+          frame2: 'host',
+          type: 'request',
+          sourceId: undefined,
+        };
+        await sendPortFinderRequest({
+          data: { ...data, requestId: 'first' },
+        });
+        window.postMessage.resetHistory();
+
+        await sendPortFinderRequest({
+          data: { ...data, requestId: 'second' },
+        });
+        assert.calledWith(
+          window.postMessage,
+          sinon.match({
+            ...data,
+            type: 'offer',
+            error: 'Received duplicate port request',
+          }),
+          window.location.origin,
+        );
+        assert.calledWith(
+          warnStub,
+          'Ignoring second request from Hypothesis sidebar to connect to host frame',
+        );
+      } finally {
+        warnStub.restore();
+      }
     });
 
     it('responds to a valid port request from a source with an opaque origin', async () => {
@@ -178,6 +228,7 @@ describe('PortProvider', () => {
         frame2: 'sidebar',
         type: 'request',
         requestId: 'abcdef',
+        sourceId: undefined,
       };
 
       await sendPortFinderRequest({ data, origin: 'null' });
@@ -193,6 +244,7 @@ describe('PortProvider', () => {
         frame2: 'sidebar',
         type: 'request',
         requestId: 'abcdef',
+        sourceId: undefined,
       };
 
       for (let i = 0; i < 4; ++i) {
@@ -205,7 +257,7 @@ describe('PortProvider', () => {
         window.postMessage,
         { ...data, type: 'offer' },
         window.location.origin,
-        [sinon.match.instanceOf(MessagePort)]
+        [sinon.match.instanceOf(MessagePort)],
       );
     });
 
@@ -228,6 +280,7 @@ describe('PortProvider', () => {
         frame2: 'sidebar',
         type: 'request',
         requestId: 'ghijkl',
+        sourceId: 'test-frame',
       };
       await sendPortFinderRequest({
         data,
@@ -237,7 +290,7 @@ describe('PortProvider', () => {
         handler,
         sinon.match({
           data: { ...data, type: 'offer' },
-        })
+        }),
       );
     });
 
@@ -256,7 +309,7 @@ describe('PortProvider', () => {
       assert.calledWith(
         handler,
         'sidebar',
-        sinon.match.instanceOf(MessagePort)
+        sinon.match.instanceOf(MessagePort),
       );
 
       handler.resetHistory();

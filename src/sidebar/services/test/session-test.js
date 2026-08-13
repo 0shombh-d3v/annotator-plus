@@ -1,10 +1,10 @@
-import EventEmitter from 'tiny-emitter';
-
+import { EventEmitter } from '../../../shared/event-emitter';
 import { SessionService, $imports } from '../session';
 
 describe('SessionService', () => {
   let fakeApi;
   let fakeAuth;
+  let fakeSetAllShortcuts;
   let fakeSentry;
   let fakeServiceConfig;
   let fakeSettings;
@@ -26,6 +26,7 @@ describe('SessionService', () => {
       login: sinon.stub().returns(Promise.resolve()),
       logout: sinon.stub().resolves(),
     });
+    fakeSetAllShortcuts = sinon.stub();
     fakeSentry = {
       setUserInfo: sinon.spy(),
     };
@@ -55,6 +56,9 @@ describe('SessionService', () => {
     };
 
     $imports.$mock({
+      '../../shared/shortcut-config': {
+        setAllShortcuts: fakeSetAllShortcuts,
+      },
       '../config/service-config': { serviceConfig: fakeServiceConfig },
       '../util/retry': { retryPromiseOperation },
       '../util/sentry': fakeSentry,
@@ -71,7 +75,7 @@ describe('SessionService', () => {
       fakeApi,
       fakeAuth,
       fakeSettings,
-      fakeToastMessenger
+      fakeToastMessenger,
     );
   }
 
@@ -85,7 +89,7 @@ describe('SessionService', () => {
         fakeApi.profile.read.returns(
           Promise.resolve({
             userid: 'acct:user@publisher.org',
-          })
+          }),
         );
       });
 
@@ -113,7 +117,7 @@ describe('SessionService', () => {
         fakeApi.profile.read.returns(
           Promise.resolve({
             userid: 'acct:user@hypothes.is',
-          })
+          }),
         );
       });
 
@@ -198,6 +202,61 @@ describe('SessionService', () => {
         id: 'anne',
       });
     });
+
+    it('applies shortcut preferences from the profile', () => {
+      const session = createService();
+      const shortcuts = { applyUpdates: 'c' };
+
+      session.update({
+        userid: 'anne',
+        preferences: { shortcuts_preferences: shortcuts },
+      });
+
+      assert.calledWith(fakeSetAllShortcuts, shortcuts);
+    });
+
+    it('clears shortcuts when no preferences exist', () => {
+      const session = createService();
+
+      session.update({
+        userid: 'anne',
+      });
+
+      assert.calledWith(fakeSetAllShortcuts, {});
+    });
+  });
+
+  describe('#updateShortcutPreferences', () => {
+    it('persists shortcut overrides and updates the profile', async () => {
+      const updatedProfile = {
+        userid: 'acct:user@hypothes.is',
+        preferences: {
+          shortcuts_preferences: { applyUpdates: 'c' },
+        },
+      };
+      fakeApi.profile.update.resolves(updatedProfile);
+
+      const session = createService();
+      await session.updateShortcutPreferences(
+        updatedProfile.preferences.shortcuts_preferences,
+      );
+
+      assert.calledWith(
+        fakeApi.profile.update,
+        {},
+        {
+          preferences: {
+            shortcuts_preferences:
+              updatedProfile.preferences.shortcuts_preferences,
+          },
+        },
+      );
+      assert.calledWith(fakeStore.updateProfile, updatedProfile);
+      assert.calledWith(
+        fakeSetAllShortcuts,
+        updatedProfile.preferences.shortcuts_preferences,
+      );
+    });
   });
 
   describe('#dismissSidebarTutorial', () => {
@@ -205,7 +264,7 @@ describe('SessionService', () => {
       fakeApi.profile.update.returns(
         Promise.resolve({
           preferences: {},
-        })
+        }),
       );
     });
 
@@ -215,7 +274,7 @@ describe('SessionService', () => {
       assert.calledWith(
         fakeApi.profile.update,
         {},
-        { preferences: { show_sidebar_tutorial: false } }
+        { preferences: { show_sidebar_tutorial: false } },
       );
     });
 
@@ -230,13 +289,56 @@ describe('SessionService', () => {
     });
   });
 
+  describe('#dismissYoutubeDisclaimer', () => {
+    beforeEach(() => {
+      fakeApi.profile.update.returns(
+        Promise.resolve({
+          preferences: {},
+        }),
+      );
+    });
+
+    it('calls H backend with show_youtube_gdpr_banner: false to persist dismiss', () => {
+      const session = createService();
+      session.dismissYoutubeDisclaimer();
+      assert.calledWith(
+        fakeApi.profile.update,
+        {},
+        {
+          preferences: { show_youtube_gdpr_banner: false },
+        },
+      );
+    });
+
+    it('updates the session with the response from the API', () => {
+      const session = createService();
+      const updatedProfile = { preferences: {} };
+      fakeApi.profile.update.resolves(updatedProfile);
+      return session.dismissYoutubeDisclaimer().then(() => {
+        assert.calledWith(fakeStore.updateProfile, updatedProfile);
+      });
+    });
+
+    it('shows toast and rethrows when profile update fails', async () => {
+      const apiError = new Error('API error');
+      fakeApi.profile.update.rejects(apiError);
+      const session = createService();
+
+      await assert.rejects(session.dismissYoutubeDisclaimer(), 'API error');
+      assert.calledWith(
+        fakeToastMessenger.error,
+        'Unable to dismiss YouTube disclaimer. Please try again.',
+      );
+    });
+  });
+
   describe('#reload', () => {
     beforeEach(() => {
       // Load the initial profile data, as the client will do on startup.
       fakeApi.profile.read.returns(
         Promise.resolve({
           userid: 'acct:user_a@hypothes.is',
-        })
+        }),
       );
       const session = createService();
       return session.load();
@@ -246,7 +348,7 @@ describe('SessionService', () => {
       fakeApi.profile.read.returns(
         Promise.resolve({
           userid: 'acct:user_b@hypothes.is',
-        })
+        }),
       );
 
       fakeStore.updateProfile.resetHistory();
@@ -294,7 +396,7 @@ describe('SessionService', () => {
       const session = createService();
       try {
         await session.logout();
-      } catch (e) {
+      } catch {
         // Ignored.
       }
       assert.calledWith(fakeToastMessenger.error, 'Log out failed');
@@ -306,7 +408,7 @@ describe('SessionService', () => {
       fakeApi.profile.read.returns(
         Promise.resolve({
           userid: 'acct:initial_user@hypothes.is',
-        })
+        }),
       );
 
       const session = createService();
@@ -317,7 +419,7 @@ describe('SessionService', () => {
           fakeApi.profile.read.returns(
             Promise.resolve({
               userid: 'acct:different_user@hypothes.is',
-            })
+            }),
           );
           fakeAuth.emit('oauthTokensChanged');
 

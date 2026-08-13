@@ -10,7 +10,7 @@
  * e.g. await rejects(someAsyncFunction(), /expected error/g);
  *
  * @param {Promise} promiseResult - The returned promise a function to test
- * @param {RegEx|String} errorMessage - A string or regex that matches the error
+ * @param {RegExp|string} errorMessage - A string or regex that matches the error
  * which is expected to be thrown.
  */
 
@@ -23,7 +23,7 @@ const rejects = async (promiseResult, errorMessage) => {
   } catch (e) {
     if (e.name === 'ErrorNotCaught') {
       throw new Error(
-        'Expected to catch the rejected promise but it was not thrown'
+        'Expected to catch the rejected promise but it was not thrown',
       );
     }
     if (errorMessage instanceof RegExp) {

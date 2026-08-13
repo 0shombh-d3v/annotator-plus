@@ -1,4 +1,5 @@
-import { delay, waitFor } from '../../test-util/wait';
+import { delay, waitFor } from '@hypothesis/frontend-testing';
+
 import {
   FrameObserver,
   onDocumentReady,
@@ -36,7 +37,7 @@ describe('annotator/frame-observer', () => {
 
     function createAnnotatableIFrame(
       attribute = 'enable-annotation',
-      value = ''
+      value = '',
     ) {
       const iframe = document.createElement('iframe');
       iframe.setAttribute(attribute, value);
@@ -46,7 +47,7 @@ describe('annotator/frame-observer', () => {
 
     function waitForIFrameUnload(iframe) {
       return new Promise(resolve =>
-        iframe.contentWindow.addEventListener('unload', resolve)
+        iframe.contentWindow.addEventListener('unload', resolve),
       );
     }
 
@@ -62,7 +63,7 @@ describe('annotator/frame-observer', () => {
       frameObserver = new FrameObserver(
         container,
         onFrameAdded,
-        onFrameRemoved
+        onFrameRemoved,
       );
     });
 
@@ -145,6 +146,22 @@ describe('annotator/frame-observer', () => {
       assert.notCalled(onFrameAdded);
       assert.calledOnce(console.warn);
     });
+
+    it('does not add frame again if it is already in _annotatableFrames set', async () => {
+      createAnnotatableIFrame();
+      await waitForCall(onFrameAdded);
+      assert.calledOnce(onFrameAdded);
+      onFrameAdded.resetHistory();
+
+      // Call _discoverFrames again - frame is already in _annotatableFrames
+      // So the condition at line 91 (!this._annotatableFrames.has(frame)) is false
+      // and _addFrame should not be called again
+      frameObserver._discoverFrames();
+      await delay(10);
+
+      // Should not call onFrameAdded again since frame is already in the set
+      assert.notCalled(onFrameAdded);
+    });
   });
 
   function createFrame(src) {
@@ -156,13 +173,24 @@ describe('annotator/frame-observer', () => {
 
   const sameOriginURL = new URL(
     '/base/annotator/test/empty.html',
-    document.location.href
+    document.location.href,
   ).href;
 
   // A cross-origin local URL that "loads" fast (whether the load succeeds or
   // fails doesn't matter for these tests). We assume that nothing else is
   // listening on the port.
   const crossOriginURL = 'http://localhost:12345/test.html';
+
+  function assertCalledOnceWithError(callback, message) {
+    assert.calledOnce(callback);
+    assertCalledWithError(callback, message);
+  }
+
+  function assertCalledWithError(callback, message) {
+    assert.calledWith(callback, sinon.match.instanceOf(Error));
+    const error = callback.args[0][0];
+    assert.equal(error.message, message);
+  }
 
   describe('onDocumentReady', () => {
     it('invokes callback with current document if it is already ready', async () => {
@@ -200,6 +228,27 @@ describe('annotator/frame-observer', () => {
       assert.equal(doc.location.href, docURL);
     });
 
+    it('skips callback when document is blank and will navigate (hasBlankDocumentThatWillNavigate)', async () => {
+      const callback = sinon.stub();
+      // Create frame without src first, so it starts as about:blank
+      const frame = document.createElement('iframe');
+      container.append(frame);
+
+      // Call onDocumentReady while frame is still about:blank with src set
+      // This tests the branch where hasBlankDocumentThatWillNavigate returns true
+      frame.src = sameOriginURL;
+      const unsubscribe = onDocumentReady(frame, callback, { pollInterval: 1 });
+
+      // Wait for frame to load - callback should be called after navigation
+      await waitForEvent(frame, 'load');
+      await waitForCall(callback);
+
+      // Callback should eventually be called after navigation completes
+      assert.calledWith(callback, null);
+
+      unsubscribe();
+    });
+
     it('invokes callback for subsequent navigations to same-origin documents', async () => {
       const callback = sinon.stub();
       const frame = createFrame(sameOriginURL);
@@ -214,18 +263,102 @@ describe('annotator/frame-observer', () => {
       assert.calledTwice(callback);
     });
 
+    it('does not add unload listener when frame.contentDocument is null in pollOnUnload', async () => {
+      const callback = sinon.stub();
+      const frame = createFrame(sameOriginURL);
+      await waitForEvent(frame, 'load');
+
+      // Remove frame from DOM to make contentDocument null
+      frame.remove();
+
+      // Call onDocumentReady after frame is removed
+      // This tests the branch at line 183 where frame.contentDocument is null
+      // pollOnUnload should return early without adding event listener
+      onDocumentReady(frame, callback, { pollInterval: 1 });
+
+      // Wait a bit to ensure pollOnUnload was called
+      await delay(20);
+
+      // Callback should eventually be called with error
+      await waitForCall(callback);
+      assertCalledWithError(callback, 'Frame is disconnected');
+    });
+
+    it('skips processing document that is already in WeakSet', async () => {
+      const callback = sinon.stub();
+      const frame = createFrame(sameOriginURL);
+      await waitForEvent(frame, 'load');
+
+      // First call to onDocumentReady - document will be added to WeakSet
+      const unsubscribe1 = onDocumentReady(frame, callback);
+      await waitForCall(callback);
+      assert.calledOnce(callback);
+      callback.resetHistory();
+
+      // Trigger pollForDocumentChange by dispatching unload event
+      // This will call checkForDocumentChange, which should find the document
+      // already in the WeakSet and return early (line 202 branch: documents.has(currentDocument) === true)
+      frame.contentWindow.dispatchEvent(new Event('unload'));
+
+      // Wait for any polling to occur
+      await delay(50);
+
+      // Callback should not be called again since document is already in WeakSet
+      assert.notCalled(callback);
+
+      unsubscribe1();
+    });
+
     it('invokes callback with error if document is cross-origin', async () => {
       const callback = sinon.stub();
       const frame = createFrame(crossOriginURL);
       await waitForEvent(frame, 'load');
 
-      onDocumentReady(frame, callback);
+      const pollInterval = 1;
+      onDocumentReady(frame, callback, { pollInterval });
       await waitForCall(callback);
 
+      assertCalledOnceWithError(callback, 'Frame is cross-origin');
+
+      await delay(pollInterval + 10);
       assert.calledOnce(callback);
-      assert.calledWith(callback, sinon.match.instanceOf(Error));
-      const error = callback.args[0][0];
-      assert.equal(error.message, 'Frame is cross-origin');
+    });
+
+    it('invokes callback with error for subsequent navigations to cross-origin document', async () => {
+      const callback = sinon.stub();
+      const frame = createFrame(sameOriginURL);
+      await waitForEvent(frame, 'load');
+
+      const pollInterval = 1;
+      onDocumentReady(frame, callback, { pollInterval });
+      await waitForCall(callback);
+      callback.resetHistory();
+
+      frame.src = crossOriginURL;
+      await waitForEvent(frame, 'load');
+      assertCalledWithError(callback, 'Frame is cross-origin');
+    });
+
+    it('invokes callback with error if frame is disconnected', async () => {
+      const callback = sinon.stub();
+      const frame = createFrame(sameOriginURL);
+      await waitForEvent(frame, 'load');
+
+      const pollInterval = 1;
+      onDocumentReady(frame, callback, { pollInterval });
+      await waitForCall(callback);
+      callback.resetHistory();
+
+      const frameUnloaded = waitForEvent(frame.contentWindow, 'unload');
+      frame.remove();
+      await frameUnloaded;
+
+      await delay(pollInterval);
+      assertCalledOnceWithError(callback, 'Frame is disconnected');
+
+      // Wait a moment to check that callback was only invoked once.
+      await delay(pollInterval);
+      assertCalledOnceWithError(callback, 'Frame is disconnected');
     });
 
     it('stops polling when subscription is canceled', async () => {

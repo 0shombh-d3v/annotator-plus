@@ -1,11 +1,12 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 import { act } from 'preact/test-utils';
+import sinon from 'sinon';
 
 import * as fixtures from '../../../test/annotation-fixtures';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
-
 import AnnotationBody, { $imports } from '../AnnotationBody';
 
 describe('AnnotationBody', () => {
@@ -36,7 +37,7 @@ describe('AnnotationBody', () => {
         annotation={fakeAnnotation}
         settings={fakeSettings}
         {...props}
-      />
+      />,
     );
   }
 
@@ -54,6 +55,7 @@ describe('AnnotationBody', () => {
       getLink: sinon
         .stub()
         .callsFake((linkPath, { tag }) => `http://www.example.com/${tag}`),
+      isFeatureEnabled: sinon.stub().returns(false),
     };
 
     $imports.$mock(mockImportedComponents());
@@ -61,6 +63,7 @@ describe('AnnotationBody', () => {
       '../../helpers/account-id': { isThirdPartyUser: fakeIsThirdPartyUser },
       '../../helpers/theme': { applyTheme: fakeApplyTheme },
       '../../store': { useSidebarStore: () => fakeStore },
+      '@hypothesis/annotation-ui': { MarkdownView: () => null },
     });
   });
 
@@ -125,11 +128,11 @@ describe('AnnotationBody', () => {
     });
     wrapper.update();
 
-    const button = wrapper.find('LabeledButton');
+    const button = wrapper.find('Button');
     assert.isOk(button.exists());
     assert.equal(
       button.props().title,
-      'Toggle visibility of full annotation text: Show More'
+      'Toggle visibility of full annotation text: Show More',
     );
     assert.isFalse(button.props().expanded);
   });
@@ -146,15 +149,15 @@ describe('AnnotationBody', () => {
     wrapper.update();
 
     act(() => {
-      wrapper.find('LabeledButton').props().onClick();
+      wrapper.find('Button').props().onClick();
     });
     wrapper.update();
 
-    const buttonProps = wrapper.find('LabeledButton').props();
+    const buttonProps = wrapper.find('Button').props();
 
     assert.equal(
       buttonProps.title,
-      'Toggle visibility of full annotation text: Show Less'
+      'Toggle visibility of full annotation text: Show Less',
     );
     assert.isTrue(buttonProps.expanded);
   });
@@ -209,6 +212,6 @@ describe('AnnotationBody', () => {
           return wrapper;
         },
       },
-    ])
+    ]),
   );
 });

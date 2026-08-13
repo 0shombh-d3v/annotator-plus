@@ -30,6 +30,13 @@
           "desc": "Remove the current user from a group."
         }
       },
+      "members": {
+        "read": {
+          "url": "https://example.com/api/groups/:pubid/members",
+          "method": "GET",
+          "desc": "Fetch a list of all members of a group"
+        }
+      },
       "read": {
         "url": "https://example.com/api/groups/:id",
         "method": "GET",
@@ -83,6 +90,20 @@
         "url": "https://example.com/api/annotations/:id",
         "method": "DELETE",
         "desc": "Delete an annotation"
+      },
+      "moderate": {
+        "url": "https://example.com/api/annotations/:id/moderation",
+        "method": "PATCH",
+        "desc": "Moderate an annotation"
+      }
+    },
+    "analytics": {
+      "events": {
+        "create": {
+          "url": "https://example.com/api/analytics/events",
+          "method": "POST",
+          "desc": "Create a new analytics event"
+        }
       }
     }
   }

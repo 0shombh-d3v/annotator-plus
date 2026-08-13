@@ -1,10 +1,10 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 
-import * as annotationFixtures from '../../test/annotation-fixtures';
-import { createSidebarStore, useSidebarStore } from '../index';
-import { immutable } from '../../util/immutable';
 import { ServiceContext } from '../../service-context';
+import * as annotationFixtures from '../../test/annotation-fixtures';
+import { immutable } from '../../util/immutable';
+import { createSidebarStore, useSidebarStore } from '../index';
 
 const defaultAnnotation = annotationFixtures.defaultAnnotation;
 const newAnnotation = annotationFixtures.newAnnotation;
@@ -70,7 +70,7 @@ describe('createSidebarStore', () => {
     it('sets `directLinkedGroupFetchFailed` to false', () => {
       store.clearSelection();
       assert.isFalse(
-        store.getState().directLinked.directLinkedGroupFetchFailed
+        store.getState().directLinked.directLinkedGroupFetchFailed,
       );
     });
 
@@ -87,7 +87,7 @@ describe('createSidebarStore', () => {
     it('sets `sortKey` to default annotation sort key if set to Orphans', () => {
       store.selectTab('orphan');
       store.clearSelection();
-      assert.equal(store.getState().selection.sortKey, 'Location');
+      assert.equal(store.getState().selection.sortKey, 'location');
     });
 
     it('does not change `selectedTab` if set to something other than Orphans', () => {
@@ -180,7 +180,7 @@ describe('useSidebarStore', () => {
         <ServiceContext.Provider value={services}>
           <AnnotationCard id={annot.id} />
         </ServiceContext.Provider>,
-        el
+        el,
       );
     });
     assert.equal(el.innerHTML, '<div>Initial text</div>');

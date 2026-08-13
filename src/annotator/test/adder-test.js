@@ -1,12 +1,7 @@
-import { act } from 'preact/test-utils';
 import { mount } from 'enzyme';
+import { act } from 'preact/test-utils';
 
-import {
-  Adder,
-  ARROW_POINTING_UP,
-  ARROW_POINTING_DOWN,
-  $imports,
-} from '../adder';
+import { Adder, ArrowDirection, $imports } from '../adder';
 
 function rect(left, top, width, height) {
   return { left, top, width, height };
@@ -62,7 +57,7 @@ describe('Adder', () => {
   }
 
   function getContent() {
-    return adder._shadowRoot;
+    return adder._container.element.shadowRoot;
   }
 
   function adderRect() {
@@ -75,13 +70,23 @@ describe('Adder', () => {
     assert.exists(shadowRoot.querySelector('[data-component="AdderToolbar"]'));
   });
 
+  it('positions adder correctly when container has a positioned ancestor', () => {
+    container.style.position = 'relative';
+    act(() => {
+      adder.show(rect(100, 200, 100, 20), false);
+    });
+    const pos = adderRect();
+    assert.isAbove(pos.top, 0);
+    assert.isAbove(pos.left, 0);
+  });
+
   describe('button and shortcut handling', () => {
     const getButton = label =>
       getContent(adder).querySelector(`button[title^="${label}"]`);
 
     const triggerShortcut = key =>
       document.body.dispatchEvent(
-        new KeyboardEvent('keydown', { key, bubbles: true })
+        new KeyboardEvent('keydown', { key, bubbles: true }),
       );
 
     const showAdder = () => {
@@ -148,7 +153,7 @@ describe('Adder', () => {
 
     it("calls onAnnotate callback when Annotate button's label is clicked", () => {
       const annotateLabel = getContent(adder).querySelector(
-        'button[title^="Annotate"] > span'
+        'button[title^="Annotate"] [data-testid="adder-button-label"]',
       );
       annotateLabel.dispatchEvent(new Event('click', { bubbles: true }));
       assert.called(adderCallbacks.onAnnotate);
@@ -199,32 +204,32 @@ describe('Adder', () => {
     it('positions the adder below the selection if the selection is forwards', () => {
       const target = adder._calculateTarget(rect(100, 200, 100, 20), false);
       assert.isAbove(target.top, 220);
-      assert.equal(target.arrowDirection, ARROW_POINTING_UP);
+      assert.equal(target.arrowDirection, ArrowDirection.UP);
     });
 
     it('positions the adder above the selection if the selection is backwards', () => {
       const target = adder._calculateTarget(rect(100, 200, 100, 20), true);
       assert.isBelow(target.top, 200);
-      assert.equal(target.arrowDirection, ARROW_POINTING_DOWN);
+      assert.equal(target.arrowDirection, ArrowDirection.DOWN);
     });
 
     it('does not position the adder above the top of the viewport', () => {
       const target = adder._calculateTarget(rect(100, -100, 100, 20), false);
       assert.isAtLeast(target.top, 0);
-      assert.equal(target.arrowDirection, ARROW_POINTING_UP);
+      assert.equal(target.arrowDirection, ArrowDirection.UP);
     });
 
     it('does not position the adder above the top of the viewport even when selection is backwards', () => {
       const target = adder._calculateTarget(rect(100, -100, 100, 20), true);
       assert.isAtLeast(target.top, 0);
-      assert.equal(target.arrowDirection, ARROW_POINTING_UP);
+      assert.equal(target.arrowDirection, ArrowDirection.UP);
     });
 
     it('does not position the adder below the bottom of the viewport', () => {
       const viewSize = windowSize();
       const target = adder._calculateTarget(
         rect(0, viewSize.height + 100, 10, 20),
-        false
+        false,
       );
       assert.isAtMost(target.top, viewSize.height - adderRect().height);
     });
@@ -233,7 +238,7 @@ describe('Adder', () => {
       const viewSize = windowSize();
       const target = adder._calculateTarget(
         rect(viewSize.width + 100, 100, 10, 20),
-        false
+        false,
       );
       assert.isAtMost(target.left, viewSize.width);
     });
@@ -252,7 +257,7 @@ describe('Adder', () => {
         });
         const target = adder._calculateTarget(rect(100, 200, 100, 20), true);
         assert.isAbove(target.top, 220);
-        assert.equal(target.arrowDirection, ARROW_POINTING_UP);
+        assert.equal(target.arrowDirection, ArrowDirection.UP);
       });
     });
   });
@@ -260,7 +265,7 @@ describe('Adder', () => {
   describe('adder Z index', () => {
     function getAdderZIndex(left, top) {
       adder._showAt(left, top);
-      return parseInt(adder._outerContainer.style.zIndex);
+      return parseInt(adder._container.element.style.zIndex);
     }
 
     it('returns hard coded value if `document.elementsFromPoint` is not available', () => {
@@ -270,12 +275,12 @@ describe('Adder', () => {
       document.elementsFromPoint = elementsFromPointBackup;
     });
 
-    it('returns value of 1 if not elements are found', () => {
+    it('returns value of 1 if no elements are found', () => {
       assert.strictEqual(getAdderZIndex(-100000, -100000), 1);
       assert.strictEqual(getAdderZIndex(100000, 100000), 1);
     });
 
-    it('returns the greatest zIndex', () => {
+    it('returns a z-index greater than any elements under the adder', () => {
       const createComponent = (left, top, zIndex, attachTo) =>
         mount(
           <div
@@ -288,7 +293,7 @@ describe('Adder', () => {
               zIndex,
             }}
           />,
-          { attachTo }
+          { attachTo },
         );
 
       const wrapper = createComponent(0, 0, 2, container);
@@ -313,7 +318,7 @@ describe('Adder', () => {
         initLeft + adderWidth / 2,
         initTop + adderHeight / 2,
         6,
-        wrapperDOMNode
+        wrapperDOMNode,
       );
       assert.strictEqual(getAdderZIndex(initLeft, initTop), 7);
 
@@ -326,18 +331,41 @@ describe('Adder', () => {
         initLeft + adderWidth,
         initTop + adderHeight,
         8,
-        wrapperDOMNode
+        wrapperDOMNode,
       );
       assert.strictEqual(getAdderZIndex(initLeft, initTop), 9);
 
       wrapper.unmount();
+    });
+
+    [
+      {
+        zIndex: '20',
+        adderZIndex: 21,
+      },
+      {
+        zIndex: 'auto',
+        adderZIndex: 1,
+      },
+    ].forEach(({ zIndex, adderZIndex }) => {
+      it('returns a z-index greater than any highlights', () => {
+        const fakeHighlight = document.createElement('hypothesis-highlight');
+        fakeHighlight.style.zIndex = zIndex;
+
+        try {
+          document.body.append(fakeHighlight);
+          assert.equal(getAdderZIndex(0, 0), adderZIndex);
+        } finally {
+          fakeHighlight.remove();
+        }
+      });
     });
   });
 
   describe('#_showAt', () => {
     context('when the document and body elements have no offset', () => {
       it('shows adder at target position', () => {
-        adder._showAt(100, 100, ARROW_POINTING_UP);
+        adder._showAt(100, 100, ArrowDirection.UP);
 
         const { left, top } = adderRect();
         assert.equal(left, 100);
@@ -355,7 +383,7 @@ describe('Adder', () => {
       });
 
       it('shows adder at target position', () => {
-        adder._showAt(100, 100, ARROW_POINTING_UP);
+        adder._showAt(100, 100, ArrowDirection.UP);
 
         const { left, top } = adderRect();
         assert.equal(left, 100);
@@ -373,7 +401,7 @@ describe('Adder', () => {
       });
 
       it('shows adder at target position when document element is offset', () => {
-        adder._showAt(100, 100, ARROW_POINTING_UP);
+        adder._showAt(100, 100, ArrowDirection.UP);
 
         const { left, top } = adderRect();
         assert.equal(left, 100);
@@ -392,14 +420,14 @@ describe('Adder', () => {
       adder.show(rect(200, 100, 100, 20), false);
       assert.strictEqual(
         document.elementFromPoint(250, 150).tagName,
-        'HYPOTHESIS-ADDER'
+        'HYPOTHESIS-ADDER',
       );
     });
   });
 
   describe('#hide', () => {
     it('shows the container in the correct location', () => {
-      adder._showAt(100, 100, ARROW_POINTING_UP);
+      adder._showAt(100, 100, ArrowDirection.UP);
 
       let pos = adderRect();
       assert.equal(pos.left, 100);

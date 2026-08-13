@@ -1,7 +1,8 @@
-import { mount } from 'enzyme';
-
-import { checkAccessibility } from '../../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../../test-util/mock-imported-components';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import EmptyAnnotation, { $imports } from '../EmptyAnnotation';
 
@@ -13,7 +14,7 @@ describe('EmptyAnnotation', () => {
         replyCount={0}
         threadIsCollapsed={true}
         {...props}
-      />
+      />,
     );
   };
 
@@ -59,7 +60,7 @@ describe('EmptyAnnotation', () => {
 
       assert.equal(
         wrapper.find('article').props()['aria-label'],
-        'Annotation with unavailable content'
+        'Annotation with unavailable content',
       );
       assert.equal(wrapper.text(), 'Message not available.');
     });
@@ -71,7 +72,7 @@ describe('EmptyAnnotation', () => {
 
       assert.equal(
         wrapper.find('article').props()['aria-label'],
-        'Reply with unavailable content'
+        'Reply with unavailable content',
       );
     });
   });
@@ -94,6 +95,6 @@ describe('EmptyAnnotation', () => {
           return createComponent({ isReply: true, threadIsCollapsed: true });
         },
       },
-    ])
+    ]),
   );
 });

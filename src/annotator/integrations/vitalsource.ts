@@ -1,0 +1,591 @@
+import { ListenerCollection } from '@hypothesis/frontend-shared';
+
+import { documentCFI, stripCFIAssertions } from '../../shared/cfi';
+import { EventEmitter } from '../../shared/event-emitter';
+import type {
+  Anchor,
+  AnnotationData,
+  AnnotationTool,
+  Integration,
+  IntegrationEvents,
+  SegmentInfo,
+  Shape,
+  SidebarLayout,
+} from '../../types/annotator';
+import type {
+  EPUBContentSelector,
+  PageSelector,
+  Selector,
+} from '../../types/api';
+import type {
+  ContentFrameGlobals,
+  MosaicBookElement,
+  PageBreakInfo,
+} from '../../types/vitalsource';
+import { FeatureFlags } from '../features';
+import { onDocumentReady } from '../frame-observer';
+import { injectClient } from '../hypothesis-injector';
+import type { InjectConfig } from '../hypothesis-injector';
+import { HTMLIntegration } from './html';
+import { preserveScrollPosition } from './html-side-by-side';
+import { ImageTextLayer } from './image-text-layer';
+
+// When activating side-by-side mode for VitalSource PDF documents, make sure
+// at least this much space (in pixels) is left for the PDF document. Any
+// smaller and it feels unreadable or too-zoomed-out
+const MIN_CONTENT_WIDTH = 480;
+
+/**
+ * Return the custom DOM element that contains the book content iframe.
+ */
+function findBookElement(document_ = document): MosaicBookElement | null {
+  return document_.querySelector('mosaic-book') as MosaicBookElement | null;
+}
+
+/**
+ * Return the role of the current frame in the VitalSource Bookshelf reader or
+ * `null` if the frame is not part of Bookshelf.
+ *
+ * @return `container` if this is the parent of the content frame, `content` if
+ *   this is the frame that contains the book content or `null` if the document is
+ *   not part of the Bookshelf reader.
+ */
+export function vitalSourceFrameRole(
+  window_ = window,
+): 'container' | 'content' | null {
+  if (findBookElement(window_.document)) {
+    return 'container';
+  }
+
+  const parentDoc = window_.frameElement?.ownerDocument;
+  if (parentDoc && findBookElement(parentDoc)) {
+    return 'content';
+  }
+
+  return null;
+}
+
+/**
+ * VitalSourceInjector runs in the book container frame and loads the client into
+ * book content frames.
+ *
+ * The frame structure of the VitalSource book reader looks like this:
+ *
+ * [VitalSource top frame - bookshelf.vitalsource.com]
+ *   |
+ *   [Book container frame - jigsaw.vitalsource.com]
+ *     |
+ *     [Book content frame - jigsaw.vitalsource.com]
+ *
+ * The Hypothesis client can be initially loaded in the container frame or the
+ * content frame. As the user navigates around the book, the container frame
+ * remains the same but the content frame is swapped out. When used in the
+ * container frame, this class handles initial injection of the client as a
+ * guest in the current content frame, and re-injecting the client into new
+ * content frames when they are created.
+ */
+export class VitalSourceInjector {
+  private _frameObserver: MutationObserver;
+
+  /**
+   * @param config - Configuration for injecting the client into
+   *   book content frames
+   */
+  constructor(config: InjectConfig) {
+    const bookElement = findBookElement();
+    if (!bookElement) {
+      throw new Error('Book container element not found');
+    }
+
+    const contentFrames = new WeakSet<HTMLIFrameElement>();
+
+    const shadowRoot = bookElement.shadowRoot!;
+    const injectClientIntoContentFrame = () => {
+      const frame = shadowRoot.querySelector('iframe');
+      if (!frame || contentFrames.has(frame)) {
+        // Either there is no content frame or we are already watching it.
+        return;
+      }
+      contentFrames.add(frame);
+      onDocumentReady(frame, (err, document_) => {
+        if (err) {
+          return;
+        }
+
+        // If `err` is null, then `document_` will be set.
+        const body = document_!.body;
+
+        const isBookContent =
+          body &&
+          // Check that this is not the temporary page containing encrypted and
+          // invisible book content, which is replaced with the real content after
+          // a form submission. These pages look something like:
+          //
+          // ```
+          // <html>
+          //   <title>content</title>
+          //   <body><div id="page-content">{ Base64 encoded data }</div></body>
+          // </html>
+          // ```
+          !body.querySelector('#page-content');
+
+        if (isBookContent) {
+          injectClient(frame, config, 'vitalsource-content');
+        }
+      });
+    };
+
+    injectClientIntoContentFrame();
+
+    // Re-inject client into content frame after a chapter navigation.
+    this._frameObserver = new MutationObserver(injectClientIntoContentFrame);
+    this._frameObserver.observe(shadowRoot, { childList: true, subtree: true });
+  }
+
+  destroy() {
+    this._frameObserver.disconnect();
+  }
+}
+
+function getPDFPageImage() {
+  return document.querySelector('img#pbk-page') as HTMLImageElement | null;
+}
+
+/**
+ * Fix how a VitalSource book content frame scrolls, so that various related
+ * Hypothesis behaviors (the bucket bar, scrolling annotations into view) work
+ * as intended.
+ *
+ * Some VitalSource books (PDFs) make content scrolling work by making the
+ * content iframe really tall and having the parent frame scroll. This stops the
+ * Hypothesis bucket bar and scrolling annotations into view from working.
+ */
+function makeContentFrameScrollable(frame: HTMLIFrameElement) {
+  if (frame.getAttribute('scrolling') !== 'no') {
+    // This is a book (eg. EPUB) where the workaround is not required.
+    return;
+  }
+
+  // Override inline styles of iframe (hence `!important`). The iframe lives
+  // in Shadow DOM, so the element styles won't affect the rest of the app.
+  const style = document.createElement('style');
+  style.textContent = `iframe { height: 100% !important; }`;
+  frame.insertAdjacentElement('beforebegin', style);
+
+  const removeScrollingAttr = () => frame.removeAttribute('scrolling');
+  removeScrollingAttr();
+
+  // Sometimes the attribute gets re-added by VS. Remove it if that
+  // happens.
+  const attrObserver = new MutationObserver(removeScrollingAttr);
+  attrObserver.observe(frame, { attributes: true });
+}
+
+/**
+ * Lookup options for fetching page metadata from VitalSource.
+ *
+ * Enabling this options involves some extra work, so should be skipped if
+ * the data is not needed.
+ */
+type PageInfoOptions = {
+  /** Whether to fetch the title. */
+  includeTitle?: boolean;
+
+  /**
+   * Whether to use a fallback strategy to get the page index if not available
+   * in the {@link MosaicBookElement.getCurrentPage} response.
+   */
+  includePageIndex?: boolean;
+};
+
+/**
+ * Return a copy of URL with the origin removed.
+ *
+ * eg. "https://jigsaw.vitalsource.com/books/123/chapter.html?foo" =>
+ * "/books/123/chapter.html"
+ */
+function stripOrigin(url: string) {
+  // Resolve input URL in case it doesn't already have an origin.
+  const parsed = new URL(url, document.baseURI);
+  return parsed.pathname + parsed.search;
+}
+
+/**
+ * Integration for the content frame in VitalSource's Bookshelf ebook reader.
+ *
+ * This integration delegates to the standard HTML integration for most
+ * functionality, but it adds logic to:
+ *
+ *  - Customize the document URI and metadata that is associated with annotations
+ *  - Prevent VitalSource's built-in selection menu from getting in the way
+ *    of the adder.
+ *  - Create a hidden text layer in PDF-based books, so the user can select text
+ *    in the PDF image. This is similar to what PDF.js does for us in PDFs.
+ */
+export class VitalSourceContentIntegration
+  extends EventEmitter<IntegrationEvents>
+  implements Integration
+{
+  private _bookElement: MosaicBookElement;
+  private _htmlIntegration: HTMLIntegration;
+  private _listeners: ListenerCollection;
+
+  /** Hidden text layer. Only used in PDF books. */
+  private _textLayer?: ImageTextLayer;
+
+  /**
+   * Whether side-by-side is active. Only used in PDF books. For EPUB books
+   * side-by-side delegates to the HTML integration.
+   */
+  private _sideBySideActive?: boolean;
+
+  constructor(
+    /* istanbul ignore next - defaults are overridden in tests */
+    container: HTMLElement = document.body,
+    /* istanbul ignore next - defaults are overridden in tests */
+    options: {
+      // Test seam
+      bookElement?: MosaicBookElement;
+    } = {},
+  ) {
+    super();
+
+    const bookElement =
+      options.bookElement ?? findBookElement(window.parent.document);
+    if (!bookElement) {
+      /* istanbul ignore next */
+      throw new Error(
+        'Failed to find <mosaic-book> element in container frame',
+      );
+    }
+    this._bookElement = bookElement;
+
+    const htmlFeatures = new FeatureFlags();
+
+    this._htmlIntegration = new HTMLIntegration({
+      container,
+      features: htmlFeatures,
+    });
+
+    this._listeners = new ListenerCollection();
+
+    // Prevent mouse events from reaching the window. This prevents VitalSource
+    // from showing its native selection menu, which obscures the client's
+    // annotation toolbar.
+    //
+    // To avoid interfering with the client's own selection handling, this
+    // event blocking must happen at the same level or higher in the DOM tree
+    // than where SelectionObserver listens.
+    const stopEvents = ['mouseup', 'mousedown', 'mouseout'];
+    for (const event of stopEvents) {
+      this._listeners.add(document.documentElement, event, e => {
+        e.stopPropagation();
+      });
+    }
+
+    // Install scrolling workaround for PDFs. We do this in the content frame
+    // so that it works whether Hypothesis is loaded directly into the content
+    // frame or injected by VitalSourceInjector from the parent frame.
+    const frame = window.frameElement as HTMLIFrameElement | null;
+    if (frame) {
+      makeContentFrameScrollable(frame);
+    }
+
+    // If this is a PDF, create the hidden text layer above the rendered PDF
+    // image.
+    const bookImage = getPDFPageImage();
+
+    const pageData = (window as ContentFrameGlobals).innerPageData;
+
+    if (bookImage && pageData) {
+      const charRects = pageData.glyphs.glyphs.map(glyph => {
+        const left = glyph.l / 100;
+        const right = glyph.r / 100;
+        const top = glyph.t / 100;
+        const bottom = glyph.b / 100;
+        return new DOMRect(left, top, right - left, bottom - top);
+      });
+
+      this._textLayer = new ImageTextLayer(
+        bookImage,
+        charRects,
+        pageData.words,
+      );
+
+      // VitalSource has several DOM elements in the page which are raised
+      // above the image using z-index. One of these is used to handle VS's
+      // own text selection functionality.
+      //
+      // Set a z-index on our text layer to raise it above VS's own one.
+      this._textLayer.container.style.zIndex = '100';
+
+      this._sideBySideActive = false;
+    }
+  }
+
+  getAnnotatableRange(range: Range) {
+    return this._htmlIntegration.getAnnotatableRange(range);
+  }
+
+  destroy() {
+    if (this._textLayer) {
+      this._textLayer.destroy();
+
+      // Turn off side-by-side for PDF books. For EPUBs this is handled by
+      // `this._htmlIntegration.destroy()`.
+      this.fitSideBySide({
+        // Dummy layout. Setting `expanded: false` disables side-by-side mode.
+        expanded: false,
+        height: window.innerHeight,
+        width: 0,
+        toolbarWidth: 0,
+      });
+    }
+    this._listeners.removeAll();
+    this._htmlIntegration.destroy();
+    super.destroy();
+  }
+
+  anchor(root: HTMLElement, selectors: Selector[]) {
+    return this._htmlIntegration.anchor(root, selectors);
+  }
+
+  async describe(root: HTMLElement, region: Range | Shape) {
+    const selectors: Selector[] = this._htmlIntegration.describe(root, region);
+
+    const {
+      cfi,
+      index: pageIndex,
+      page: pageLabel,
+      title,
+      url,
+    } = await this._getPageInfo({ includeTitle: true, includePageIndex: true });
+
+    // We generate an "EPUBContentSelector" with a CFI for all VS books,
+    // although for PDF-based books the CFI is a string generated from the
+    // page number.
+    const cfiSelector: EPUBContentSelector = {
+      type: 'EPUBContentSelector',
+      cfi,
+      url,
+      title,
+    };
+    const extraSelectors: Selector[] = [cfiSelector];
+
+    // Add page number if available. PDF-based books always have them.
+    // Publishers are encouraged to provide page numbers for EPUB-based books,
+    // but not all do. See mentions of page numbers in the "VitalSource ePub3
+    // Submission Guide" [1].
+    //
+    // [1] https://www.vitalsource.com/en-uk/products/vitalsource-epub3-implementation-guide-vitalsource-vvstdocsepub3implementguide?term=VST-DOCS-EPUB3IMPLEMENTGUIDE
+    if (typeof pageIndex === 'number') {
+      const pageSelector: PageSelector = {
+        type: 'PageSelector',
+        index: pageIndex,
+        label: pageLabel,
+      };
+      extraSelectors.push(pageSelector);
+    }
+
+    selectors.push(...extraSelectors);
+
+    return selectors;
+  }
+
+  contentContainer() {
+    return this._htmlIntegration.contentContainer();
+  }
+
+  fitSideBySide(layout: SidebarLayout) {
+    // For PDF books, handle side-by-side mode in this integration. For EPUBs,
+    // delegate to the HTML integration.
+    const bookImage = getPDFPageImage();
+    if (bookImage && this._textLayer) {
+      const bookContainer = bookImage.parentElement as HTMLElement;
+      const textLayer = this._textLayer;
+
+      // Update the PDF image size and alignment to fit alongside the sidebar.
+      // `ImageTextLayer` will handle adjusting the text layer to match.
+      const newWidth = window.innerWidth - layout.width;
+
+      this._sideBySideActive = false;
+      preserveScrollPosition(() => {
+        if (layout.expanded && newWidth > MIN_CONTENT_WIDTH) {
+          // The VS book viewer sets `text-align: center` on the <body> element
+          // by default, which centers the book image in the page. When the sidebar
+          // is open we need the image to be left-aligned.
+          bookContainer.style.textAlign = 'left';
+          bookImage.style.width = `${newWidth}px`;
+          this._sideBySideActive = true;
+        } else {
+          bookContainer.style.textAlign = '';
+          bookImage.style.width = '';
+        }
+
+        // Update text layer to match new image dimensions immediately. This
+        // is needed so that `preserveScrollPosition` can see how the content
+        // has shifted when this callback returns.
+        textLayer.updateSync();
+      });
+
+      return this._sideBySideActive;
+    } else {
+      return this._htmlIntegration.fitSideBySide(layout);
+    }
+  }
+
+  sideBySideActive() {
+    if (typeof this._sideBySideActive === 'boolean') {
+      return this._sideBySideActive;
+    } else {
+      return this._htmlIntegration.sideBySideActive();
+    }
+  }
+
+  /* istanbul ignore next */
+  supportedTools(): AnnotationTool[] {
+    return ['selection'];
+  }
+
+  async getMetadata() {
+    const bookInfo = this._bookElement.getBookInfo();
+    return {
+      title: bookInfo.title,
+      link: [],
+    };
+  }
+
+  navigateToSegment(ann: AnnotationData) {
+    const selector = ann.target[0].selector?.find(
+      s => s.type === 'EPUBContentSelector',
+    ) as EPUBContentSelector | undefined;
+    if (selector?.cfi) {
+      this._bookElement.goToCfi(selector.cfi);
+    } else if (selector?.url) {
+      this._bookElement.goToURL(stripOrigin(selector.url));
+    } else {
+      throw new Error('No segment information available');
+    }
+  }
+
+  persistFrame() {
+    // Hint to the sidebar that it should not unload annotations when the
+    // guest frame using this integration unloads.
+    return true;
+  }
+
+  /**
+   * Retrieve information about the currently displayed content document or
+   * page.
+   */
+  async _getPageInfo({
+    includeTitle = false,
+    includePageIndex = false,
+  }: PageInfoOptions = {}) {
+    const [pageInfo, toc, pages] = await Promise.all([
+      this._bookElement.getCurrentPage(),
+      includeTitle ? this._bookElement.getTOC() : undefined,
+      includePageIndex ? this._bookElement.getPages() : undefined,
+    ]);
+
+    // If changes in VitalSource ever mean that critical chapter/page metadata
+    // fields are missing, fail loudly. Otherwise we might create annotations
+    // that cannot be re-anchored in future.
+    const requiredFields = ['absoluteURL', 'cfi'];
+    for (const field of requiredFields) {
+      // nb. We intentionally allow properties anywhere on the prototype chain,
+      // rather than requiring `hasOwnProperty`.
+      if (!(field in pageInfo)) {
+        throw new Error(`Page metadata field "${field}" is missing`);
+      }
+    }
+
+    let title;
+    if (toc) {
+      title = pageInfo.chapterTitle;
+
+      // Find the first table of contents entry that corresponds to the current page,
+      // and use its title instead of `pageInfo.chapterTitle`. This works around
+      // https://github.com/hypothesis/client/issues/4986.
+      const pageCFI = documentCFI(pageInfo.cfi);
+      const tocEntry = toc.data?.find(
+        entry => documentCFI(entry.cfi) === pageCFI,
+      );
+      if (tocEntry) {
+        title = tocEntry.title;
+      }
+    }
+
+    // For PDF-based books, the `pageInfo.index` property should be populated.
+    // For EPUB-based books, it may not be. In that case we try to find a
+    // page number in the complete page list instead.
+    let pageIndex = pageInfo.index;
+    if (pageIndex === undefined && pages) {
+      const index = pages.data?.findIndex(page => page.cfi === pageInfo.cfi);
+      if (index !== -1) {
+        pageIndex = index;
+      }
+    }
+
+    return {
+      cfi: pageInfo.cfi,
+      index: pageIndex,
+      page: pageInfo.page,
+      title,
+
+      // The `pageInfo.absoluteURL` URL is an absolute path that does not
+      // include the origin of VitalSource's CDN.
+      url: new URL(pageInfo.absoluteURL, document.baseURI).toString(),
+    };
+  }
+
+  /**
+   * Get the page range for the current segment.
+   */
+  private async _getPageRange(
+    cfi: string,
+  ): Promise<{ start: string; end: string } | undefined> {
+    let pageBreaks: PageBreakInfo[] = [];
+    try {
+      const pageBreaksResponse = await this._bookElement.getPageBreaks();
+      if (pageBreaksResponse.ok && pageBreaksResponse.data) {
+        pageBreaks = pageBreaksResponse.data;
+      }
+    } catch (err) {
+      /* istanbul ignore next */
+      console.error('Failed to get page breaks', err);
+    }
+
+    const cfiWithoutAssertions = stripCFIAssertions(cfi);
+    const segmentPageBreaks = pageBreaks.filter(
+      page => page.cfiWithoutAssertions.split('!')[0] === cfiWithoutAssertions,
+    );
+
+    let pages;
+    if (segmentPageBreaks.length > 0) {
+      const start = segmentPageBreaks[0].label;
+      const end = segmentPageBreaks[segmentPageBreaks.length - 1].label;
+      pages = { start, end };
+    }
+    return pages;
+  }
+
+  async segmentInfo(): Promise<SegmentInfo> {
+    const { cfi, url } = await this._getPageInfo();
+    const pages = await this._getPageRange(cfi);
+    return { cfi, pages, url };
+  }
+
+  async uri() {
+    const bookInfo = this._bookElement.getBookInfo();
+    const bookId = bookInfo.isbn;
+    if (!bookId) {
+      throw new Error('Unable to get book ID from VitalSource');
+    }
+    return `https://bookshelf.vitalsource.com/reader/books/${bookId}`;
+  }
+
+  async scrollToAnchor(anchor: Anchor) {
+    return this._htmlIntegration.scrollToAnchor(anchor);
+  }
+}

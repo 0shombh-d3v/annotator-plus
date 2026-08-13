@@ -1,8 +1,39 @@
 version: 2
 updates:
-- package-ecosystem: npm
-  directory: "/"
-  schedule:
-    interval: weekly
-    time: "10:00"
-  open-pull-requests-limit: 10
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      time: '10:00'
+    open-pull-requests-limit: 10
+    groups:
+      babel:
+        patterns:
+          - '@babel/*'
+      eslint:
+        patterns:
+          - 'eslint*'
+          - 'typescript-eslint'
+      rollup:
+        patterns:
+          - 'rollup'
+          - '@rollup/*'
+      sentry:
+        patterns:
+          - '@sentry/*'
+      tailwind:
+        patterns:
+          - 'tailwindcss'
+          - '@tailwindcss/*'
+      typescript-types:
+        patterns:
+          - '@types/*'
+      redux:
+        patterns:
+          - 'redux'
+          - 'redux-thunk'
+          - 'reselect'
+      vitest:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'

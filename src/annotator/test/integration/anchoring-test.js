@@ -1,6 +1,5 @@
 // Tests that the expected parts of the page are highlighted when annotations
 // with various combinations of selector are anchored.
-
 import { Guest, $imports as guestImports } from '../../guest';
 import testPageHTML from './test-page.html';
 
@@ -31,7 +30,7 @@ function highlightedPhrases(container) {
   return Array.from(container.querySelectorAll('.hypothesis-highlight')).map(
     el => {
       return el.textContent;
-    }
+    },
   );
 }
 
@@ -106,7 +105,7 @@ describe('anchoring', () => {
           : assert.deepEqual;
         assertFn(
           normalize(highlightedPhrases(container)),
-          normalize(testCase.quotes)
+          normalize(testCase.quotes),
         );
       });
     });

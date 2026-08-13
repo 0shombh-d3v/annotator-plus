@@ -58,6 +58,26 @@ Client Behavior
 These settings configure the behavior and initial state of the client when it
 loads.
 
+.. option:: commentsMode
+
+   ``Boolean``. Controls whether the sidebar should work in comments mode.
+   (Default: ``false``.).
+
+   When comments mode is enabled, some things will behave differently:
+
+   1. The adder is not displayed when text is selected in the host frame.
+   2. Only page notes can be created.
+   3. The "Annotations" tab is hidden, and the "Page notes" tab is renamed to "Comments".
+   4. Annotations are sorted from newer to older by default.
+   5. Wording is changed to use the "comment" terminology, instead of annotation.
+
+.. option:: groupsAllowlist
+
+   ``String[]``. A list of group IDs to allow from the list of groups that would be normally available.
+
+   The user still needs to be able to see those groups either because they are members, or because it is featured in the
+   document
+
 .. option:: openSidebar
 
    ``Boolean``. Controls whether the sidebar opens automatically on startup.
@@ -187,7 +207,7 @@ loads.
       
       ``boolean``. A flag indicating whether users should be able to leave groups 
       of which they are a member. When `false`, the controls for users to leave
-      groups will not be provided. (Default: `true`).
+      groups will not be provided. (Default: `false`).
 
    .. option:: enableShareLinks
 
@@ -352,6 +372,14 @@ loads.
     of that text when it is being viewed as well as the font-family of the
     editor as the annotation is being written.
 
+.. option:: contentReady
+
+  ``Promise``. A promise that signals to Hypothesis when the document's content
+  is ready. In web applications where the content loads asynchronously, this
+  allows Hypothesis to be loaded concurrently with the content, while making
+  sure that Hypothesis waits for the content to be ready before attempting to
+  locate annotated content in the document.
+
 .. option:: onLayoutChange
 
   ``function``. This function will be a registered callback to be invoked when the sidebar
@@ -450,6 +478,49 @@ loads.
                               // relative from the receiving iframe.
     }
 
+.. option:: sideBySide
+
+  ``Object``. This option lets you customize how side-by-side mode behaves.
+
+  .. note::
+
+    Side-by-side mode allows the space used by the web page's main content
+    area to be adapted while the sidebar is open, ensuring it does not overlap
+    with annotatable content.
+
+  For example:
+
+  .. code-block:: javascript
+
+     window.hypothesisConfig = () => ({
+       sideBySide: {
+         mode: 'manual'
+         isActive: () => {
+          // Return true if side-by-side is active.
+         }
+       }
+     });
+
+  The following keys are supported in the :option:`sideBySide` object.
+
+  .. option:: mode
+
+    ``auto`` or ``manual``. Auto is the default value, where the main page
+    content will be automatically resized to fit alongside the sidebar, while manual
+    indicates the web page wants to take full control of handling side-by-side.
+    This disables automatic resizing of the content.
+
+    When setting it to ``manual``, you should
+    `listen for layout changes </publishers/events/#cmdoption-arg-hypothesis-layoutchange>`_
+    and adapt content to fit alongside the sidebar, if it is reasonable to do so.
+
+  .. option:: isActive
+
+    When ``mode`` is set to ``manual``, Hypothesis will invoke this to determine
+    if side-by-side is active or not. This is called, for example, when the
+    user clicks somewhere in the document outside of the sidebar, so the client
+    can determine whether it should close the sidebar or not.
+
 Asset and Sidebar App Location
 ##############################
 
@@ -465,7 +536,7 @@ These settings configure where the client's assets are loaded from.
    the URL where the contents of the hypothesis package are hosted, including
    the trailing slash. (Default: for production builds:
    ``"https://cdn.hypothes.is/hypothesis/X.Y.Z/"``, for development builds:
-   ``"http://localhost:3001/hypothesis/X.Y.Z/""`.
+   ``"http://localhost:3001/hypothesis/X.Y.Z/"``.
    ``X.Y.Z`` is the package version from ``package.json``).
 
 .. option:: sidebarAppUrl
@@ -475,3 +546,7 @@ These settings configure where the client's assets are loaded from.
 .. option:: notebookAppUrl
 
    ``String``. The URL for the notebook application (Default: ``"https://hypothes.is/notebook"``).
+
+.. option:: profileAppUrl
+
+   ``String``. The URL for the user profile application (Default: ``"https://hypothes.is/user-profile"``).

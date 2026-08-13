@@ -1,4 +1,4 @@
-import { PortRPC, installPortCloseWorkaroundForSafari } from '../port-rpc';
+import { PortRPC } from '../port-rpc';
 
 describe('PortRPC', () => {
   let port1;
@@ -79,11 +79,12 @@ describe('PortRPC', () => {
     sinon.restore();
   });
 
-  it('should call the method `plusOne` on rpc2', done => {
-    rpc1.call('plusOne', 1, 2, 3, value => {
-      assert.deepEqual(value, [2, 3, 4]);
-      done();
-    });
+  it('should call the method `plusOne` on rpc2', async () => {
+    const { promise, resolve } = Promise.withResolvers();
+    rpc1.call('plusOne', 1, 2, 3, resolve);
+
+    const value = await promise;
+    assert.deepEqual(value, [2, 3, 4]);
   });
 
   it('should not call the method `plusOne` if rpc1 is destroyed', () => {
@@ -102,15 +103,18 @@ describe('PortRPC', () => {
     assert.notCalled(plusOne);
   });
 
-  it('should call the method `concat` on rpc1', done => {
-    rpc2.call('concat', 'hello', ' ', 'world', value => {
-      assert.equal(value, 'hello world');
-    });
+  it('should call the method `concat` on rpc1', async () => {
+    const { promise: promiseOne, resolve: resolvePromiseOne } =
+      Promise.withResolvers();
+    rpc2.call('concat', 'hello', ' ', 'world', resolvePromiseOne);
+    const valueOne = await promiseOne;
+    assert.equal(valueOne, 'hello world');
 
-    rpc2.call('concat', [1], [2], [3], value => {
-      assert.deepEqual(value, [1, 2, 3]);
-      done();
-    });
+    const { promise: promiseTwo, resolve: resolvePromiseTwo } =
+      Promise.withResolvers();
+    rpc2.call('concat', [1], [2], [3], resolvePromiseTwo);
+    const valueTwo = await promiseTwo;
+    assert.deepEqual(valueTwo, [1, 2, 3]);
   });
 
   it('should call method on valid message', async () => {
@@ -176,7 +180,7 @@ describe('PortRPC', () => {
 
       await waitForMessageDelivery();
       assert.notCalled(plusOne);
-    })
+    }),
   );
 
   it('throws an error if `on` is called after `connect`', () => {
@@ -243,7 +247,7 @@ describe('PortRPC', () => {
 
   it('should send "close" event when window is unloaded', async () => {
     const { port1, port2 } = new MessageChannel();
-    const sender = new PortRPC();
+    const sender = new PortRPC({ forceUnloadListener: true });
     const receiver = new PortRPC();
     const closeHandler = sinon.stub();
 
@@ -255,6 +259,45 @@ describe('PortRPC', () => {
     assert.notCalled(closeHandler);
     window.dispatchEvent(new Event('unload'));
     await waitForMessage(port2, 'close');
+
+    assert.calledOnce(closeHandler);
+    assert.calledWith(closeHandler);
+  });
+
+  // See https://github.com/hypothesis/support/issues/161#issuecomment-2454560641
+  it('ignores "fake" window unload events', async () => {
+    const { port1, port2 } = new MessageChannel();
+    const sender = new PortRPC({ forceUnloadListener: true });
+    const receiver = new PortRPC();
+    const closeHandler = sinon.stub();
+
+    receiver.on('close', closeHandler);
+    receiver.connect(port2);
+    sender.connect(port1);
+    await waitForMessageDelivery();
+
+    assert.notCalled(closeHandler);
+    window.dispatchEvent(new CustomEvent('unload'));
+    await waitForMessageDelivery();
+
+    assert.notCalled(closeHandler);
+  });
+
+  it('should send "close" event when MessagePort emits "close" event', async () => {
+    const { port1, port2 } = new MessageChannel();
+    const sender = new PortRPC();
+    const receiver = new PortRPC();
+    const closeHandler = sinon.stub();
+
+    receiver.on('close', closeHandler);
+    receiver.connect(port2);
+    sender.connect(port1);
+    await waitForMessageDelivery();
+
+    assert.notCalled(closeHandler);
+    const closed = waitForMessage(port2, 'close');
+    port2.dispatchEvent(new Event('close'));
+    await closed;
 
     assert.calledOnce(closeHandler);
     assert.calledWith(closeHandler);
@@ -278,88 +321,5 @@ describe('PortRPC', () => {
     await waitForMessage(port2, 'close');
 
     assert.calledOnce(closeHandler);
-  });
-
-  /** Transfer a MessagePort to another frame and return the transferred port. */
-  async function transferPort(port, targetWindow) {
-    const transferredPort = new Promise(resolve => {
-      targetWindow.addEventListener('message', e => {
-        if (e.ports[0]) {
-          resolve(e.ports[0]);
-        }
-      });
-    });
-    targetWindow.postMessage({}, '*', [port]);
-    return transferredPort;
-  }
-
-  describe('Safari <= 15 workaround', () => {
-    const safariUserAgent =
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.2 Safari/605.1.15';
-
-    let removeWorkaround;
-    let childFrame;
-
-    beforeEach(() => {
-      childFrame = document.createElement('iframe');
-      document.body.append(childFrame);
-
-      removeWorkaround = installPortCloseWorkaroundForSafari(safariUserAgent);
-    });
-
-    afterEach(() => {
-      removeWorkaround();
-      childFrame.remove();
-    });
-
-    it('transfers port to parent frame and sends "close" event from there when window is unloaded', async () => {
-      const { port1, port2 } = new MessageChannel();
-      const transferredPort = await transferPort(
-        port1,
-        childFrame.contentWindow
-      );
-
-      const sender = new PortRPC({
-        userAgent: safariUserAgent,
-        currentWindow: childFrame.contentWindow,
-      });
-      const receiver = new PortRPC();
-      const closeHandler = sinon.stub();
-
-      receiver.on('close', closeHandler);
-      receiver.connect(port2);
-      sender.connect(transferredPort);
-      await waitForMessageDelivery();
-
-      assert.notCalled(closeHandler);
-
-      // Emulate the Safari bug by disabling `postMessage` on the sending port
-      // in the original frame. When the port is transferred to the "parent"
-      // frame, it will reconstituted as a new MessagePort instance.
-      transferredPort.postMessage = () => {};
-
-      // Unload the child frame. The "unload" handler will transfer the port to
-      // the parent frame and the "close" event will be sent from there.
-      childFrame.remove();
-
-      await waitForMessage(port2, 'close');
-
-      assert.called(closeHandler);
-    });
-  });
-
-  [
-    // Chrome 100
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4867.0 Safari/537.36',
-
-    // Firefox 96
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:96.0) Gecko/20100101 Firefox/96.0',
-  ].forEach(userAgent => {
-    it('does not use workaround in unaffected browsers', () => {
-      sinon.stub(window, 'addEventListener');
-      const removeWorkaround = installPortCloseWorkaroundForSafari(userAgent);
-      removeWorkaround();
-      assert.notCalled(window.addEventListener);
-    });
   });
 });

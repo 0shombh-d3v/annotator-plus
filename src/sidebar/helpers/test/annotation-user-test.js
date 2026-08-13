@@ -21,6 +21,10 @@ describe('sidebar/helpers/annotation-user', () => {
     });
   });
 
+  afterEach(() => {
+    $imports.$restore();
+  });
+
   const fakeAnnotations = {
     withDisplayName: {
       user: 'acct:albert@victoriana.com',
@@ -54,7 +58,7 @@ describe('sidebar/helpers/annotation-user', () => {
         it('should return author username if display-names feature flag is not enabled', () => {
           assert.equal(
             annotationDisplayName(testcase.annotation, 'firstparty.com', false),
-            testcase.expected
+            testcase.expected,
           );
         });
       });
@@ -76,7 +80,7 @@ describe('sidebar/helpers/annotation-user', () => {
         it('should return author display name when available if display-names feature flag is enabled', () => {
           assert.equal(
             annotationDisplayName(testcase.annotation, 'firstparty.com', true),
-            testcase.expected
+            testcase.expected,
           );
         });
       });
@@ -103,7 +107,7 @@ describe('sidebar/helpers/annotation-user', () => {
           // even if feature-flag is not enabled
           assert.equal(
             annotationDisplayName(testcase.annotation, 'thirdparty.com', false),
-            testcase.expected
+            testcase.expected,
           );
         });
       });
@@ -118,9 +122,9 @@ describe('sidebar/helpers/annotation-user', () => {
           fakeAnnotations.withDisplayName,
           fakeSettings,
           'firstparty.com',
-          'http://www.example.com/user/'
+          'http://www.example.com/user/',
         ),
-        'http://www.example.com/user/'
+        'http://www.example.com/user/',
       );
     });
 
@@ -131,9 +135,9 @@ describe('sidebar/helpers/annotation-user', () => {
           fakeAnnotations.withDisplayName,
           fakeSettings,
           'thirdparty.com',
-          'http://www.example.com/user/'
+          'http://www.example.com/user/',
         ),
-        'http://foo.bar/albert'
+        'http://foo.bar/albert',
       );
     });
 
@@ -144,8 +148,8 @@ describe('sidebar/helpers/annotation-user', () => {
           fakeAnnotations.withDisplayName,
           {},
           'thirdparty.com',
-          'http://www.example.com/user/'
-        )
+          'http://www.example.com/user/',
+        ),
       );
     });
   });

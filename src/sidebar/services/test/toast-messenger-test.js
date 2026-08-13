@@ -1,8 +1,8 @@
 import { ToastMessengerService } from '../toast-messenger';
 
 describe('ToastMessengerService', () => {
-  let clock;
   let fakeStore;
+  let fakeWindow;
   let service;
 
   beforeEach(() => {
@@ -11,15 +11,13 @@ describe('ToastMessengerService', () => {
       getToastMessage: sinon.stub(),
       hasToastMessage: sinon.stub(),
       removeToastMessage: sinon.stub(),
-      updateToastMessage: sinon.stub(),
+    };
+    fakeWindow = new EventTarget();
+    fakeWindow.document = {
+      hasFocus: sinon.stub().returns(true),
     };
 
-    clock = sinon.useFakeTimers();
-    service = new ToastMessengerService(fakeStore);
-  });
-
-  afterEach(() => {
-    clock.restore();
+    service = new ToastMessengerService(fakeStore, fakeWindow);
   });
 
   describe('#success', () => {
@@ -31,7 +29,7 @@ describe('ToastMessengerService', () => {
       assert.calledWith(
         fakeStore.hasToastMessage,
         'success',
-        'This is my message'
+        'This is my message',
       );
       assert.notCalled(fakeStore.addToastMessage);
     });
@@ -47,37 +45,22 @@ describe('ToastMessengerService', () => {
           type: 'success',
           message: 'hooray',
           visuallyHidden: true,
-        })
+        }),
       );
     });
 
-    it('passes along `moreInfoURL` when present', () => {
+    it('emits "toastMessageAdded" event', () => {
       fakeStore.hasToastMessage.returns(false);
 
-      service.success('hooray', { moreInfoURL: 'http://www.example.com' });
+      const fakeHandler = sinon.stub();
+      service.on('toastMessageAdded', fakeHandler);
+
+      service.success('hooray', {});
 
       assert.calledWith(
-        fakeStore.addToastMessage,
-        sinon.match({
-          type: 'success',
-          message: 'hooray',
-          moreInfoURL: 'http://www.example.com',
-        })
+        fakeHandler,
+        sinon.match({ message: 'hooray', type: 'success' }),
       );
-    });
-
-    it('dismisses the message after timeout fires', () => {
-      fakeStore.hasToastMessage.returns(false);
-      fakeStore.getToastMessage.returns(undefined);
-
-      service.success('hooray');
-
-      // Move to the first scheduled timeout, which should invoke the
-      // `dismiss` method
-      clock.next();
-
-      assert.calledOnce(fakeStore.getToastMessage);
-      assert.notCalled(fakeStore.updateToastMessage);
     });
   });
 
@@ -89,7 +72,7 @@ describe('ToastMessengerService', () => {
 
       assert.calledWith(
         fakeStore.addToastMessage,
-        sinon.match({ type: 'notice', message: 'boo' })
+        sinon.match({ type: 'notice', message: 'boo' }),
       );
     });
   });
@@ -103,47 +86,30 @@ describe('ToastMessengerService', () => {
       assert.calledWith(
         fakeStore.hasToastMessage,
         'error',
-        'This is my message'
+        'This is my message',
       );
       assert.notCalled(fakeStore.addToastMessage);
     });
 
-    it('adds a new error toast message to the store', () => {
-      fakeStore.hasToastMessage.returns(false);
+    [
+      { autoDismiss: undefined, expectedAutoDismiss: true },
+      { autoDismiss: true, expectedAutoDismiss: true },
+      { autoDismiss: false, expectedAutoDismiss: false },
+    ].forEach(({ autoDismiss, expectedAutoDismiss }) => {
+      it('adds a new error toast message to the store', () => {
+        fakeStore.hasToastMessage.returns(false);
 
-      service.error('boo');
+        service.error('boo', { autoDismiss });
 
-      assert.calledWith(
-        fakeStore.addToastMessage,
-        sinon.match({ type: 'error', message: 'boo' })
-      );
-    });
-
-    it('dismisses the message after timeout fires', () => {
-      fakeStore.hasToastMessage.returns(false);
-      fakeStore.getToastMessage.returns(undefined);
-
-      service.error('boo');
-
-      // Move to the first scheduled timeout, which should invoke the
-      // `dismiss` method
-      clock.next();
-
-      assert.calledOnce(fakeStore.getToastMessage);
-      assert.notCalled(fakeStore.updateToastMessage);
-    });
-
-    it('does not dismiss the message if `autoDismiss` is false', () => {
-      fakeStore.hasToastMessage.returns(false);
-      fakeStore.getToastMessage.returns(undefined);
-
-      service.error('boo', { autoDismiss: false });
-
-      // Move to the first scheduled timeout.
-      clock.next();
-
-      assert.notCalled(fakeStore.getToastMessage);
-      assert.notCalled(fakeStore.updateToastMessage);
+        assert.calledWith(
+          fakeStore.addToastMessage,
+          sinon.match({
+            type: 'error',
+            message: 'boo',
+            autoDismiss: expectedAutoDismiss,
+          }),
+        );
+      });
     });
   });
 
@@ -153,22 +119,10 @@ describe('ToastMessengerService', () => {
 
       service.dismiss('someid');
 
-      assert.notCalled(fakeStore.updateToastMessage);
+      assert.notCalled(fakeStore.removeToastMessage);
     });
 
-    it('does not dismiss a message if it is already dismissed', () => {
-      fakeStore.getToastMessage.returns({
-        type: 'success',
-        message: 'yay',
-        isDismissed: true,
-      });
-
-      service.dismiss('someid');
-
-      assert.notCalled(fakeStore.updateToastMessage);
-    });
-
-    it('updates the message object to set `isDimissed` to `true`', () => {
+    it('removes the message from the store', () => {
       fakeStore.getToastMessage.returns({
         type: 'success',
         message: 'yay',
@@ -176,27 +130,53 @@ describe('ToastMessengerService', () => {
       });
 
       service.dismiss('someid');
-
-      assert.calledWith(
-        fakeStore.updateToastMessage,
-        sinon.match({ isDismissed: true })
-      );
-    });
-
-    it('removes the message from the store after timeout fires', () => {
-      fakeStore.getToastMessage.returns({
-        type: 'success',
-        message: 'yay',
-        isDismissed: false,
-      });
-
-      service.dismiss('someid');
-
-      // Advance the clock to fire the timeout that will remove the message
-      clock.next();
 
       assert.calledOnce(fakeStore.removeToastMessage);
       assert.calledWith(fakeStore.removeToastMessage, 'someid');
+    });
+
+    it('emits "toastMessageDismissed" event', () => {
+      fakeStore.getToastMessage.returns({
+        id: 'someid',
+        type: 'success',
+        message: 'yay',
+        isDismissed: false,
+      });
+
+      const fakeHandler = sinon.stub();
+      service.on('toastMessageDismissed', fakeHandler);
+
+      service.dismiss('someid');
+      assert.calledWith(fakeHandler, 'someid');
+    });
+  });
+
+  context('when the message is delayed', () => {
+    it('behaves same as non-delayed message if document is focused', () => {
+      fakeWindow.document.hasFocus.returns(true);
+      service.notice('foo', { delayed: true });
+
+      assert.calledWith(
+        fakeStore.addToastMessage,
+        sinon.match({ type: 'notice', message: 'foo' }),
+      );
+    });
+
+    it('defers adding message if the document is not focused', () => {
+      fakeWindow.document.hasFocus.returns(false);
+      service.notice('foo', { delayed: true });
+
+      assert.notCalled(fakeStore.addToastMessage);
+    });
+
+    it('dispatches all deferred messages when the document is focused', () => {
+      fakeWindow.document.hasFocus.returns(false);
+      service.notice('foo', { delayed: true });
+      service.notice('bar', { delayed: true });
+
+      assert.notCalled(fakeStore.addToastMessage);
+      fakeWindow.dispatchEvent(new Event('focus'));
+      assert.calledTwice(fakeStore.addToastMessage);
     });
   });
 });

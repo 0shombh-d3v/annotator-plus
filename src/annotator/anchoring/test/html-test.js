@@ -1,5 +1,4 @@
 import * as html from '../html';
-
 import fixture from './html-anchoring-fixture.html';
 import { htmlBaselines } from './html-baselines';
 
@@ -28,7 +27,7 @@ function findNode(context, query) {
     context,
     null,
     XPathResult.FIRST_ORDERED_NODE_TYPE,
-    null
+    null,
   );
   return result.singleNodeValue;
 }
@@ -372,6 +371,30 @@ describe('HTML anchoring', () => {
     });
   });
 
+  it('anchors "MediaTimeSelector" selectors', async () => {
+    const container = document.createElement('div');
+    container.innerHTML = `<p data-time-start="0" data-time-end="10">One</p>
+<p data-time-start="10" data-time-end="20">Two</p>`;
+    const range = new Range();
+    range.setStart(container.querySelector('p').firstChild, 0);
+    range.setEnd(container.querySelector('p:nth-of-type(2)').firstChild, 3);
+
+    const selectors = html.describe(container, range);
+
+    const mediaTimeSelector = selectors.find(
+      s => s.type === 'MediaTimeSelector',
+    );
+    assert.ok(mediaTimeSelector);
+    assert.deepEqual(mediaTimeSelector, {
+      type: 'MediaTimeSelector',
+      start: 0,
+      end: 20,
+    });
+
+    const anchored = await html.anchor(container, [mediaTimeSelector]);
+    assert.equal(anchored.toString(), 'One\nTwo');
+  });
+
   describe('When anchoring fails', () => {
     const validQuoteSelector = {
       type: 'TextQuoteSelector',
@@ -385,7 +408,7 @@ describe('HTML anchoring', () => {
       };
       await assert.rejects(
         html.anchor(container, [quoteSelector]),
-        'Quote not found'
+        'Quote not found',
       );
     });
 
@@ -419,12 +442,12 @@ describe('HTML anchoring', () => {
   describe('Web page baselines', () => {
     let frame;
 
-    before(() => {
+    beforeAll(() => {
       frame = document.createElement('iframe');
       document.body.appendChild(frame);
     });
 
-    after(() => {
+    afterAll(() => {
       frame.remove();
     });
 

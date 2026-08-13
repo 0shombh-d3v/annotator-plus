@@ -1,4 +1,4 @@
-import { mount } from 'enzyme';
+import { mount } from '@hypothesis/frontend-testing';
 import { useReducer } from 'preact/hooks';
 import { act } from 'preact/test-utils';
 
@@ -62,7 +62,7 @@ describe('integration: annotation threading', () => {
     // Do things that cause `useRootThread` to recalculate in the store and
     // test them (hint: use `act`)
     function DummyComponent() {
-      lastRootThread = useRootThread();
+      lastRootThread = useRootThread().rootThread;
       [, forceUpdate] = useReducer(x => x + 1, 0);
     }
 
@@ -71,7 +71,7 @@ describe('integration: annotation threading', () => {
     mount(
       <ServiceContext.Provider value={container}>
         <DummyComponent />
-      </ServiceContext.Provider>
+      </ServiceContext.Provider>,
     );
   });
 
@@ -121,11 +121,11 @@ describe('integration: annotation threading', () => {
 
   [
     {
-      sortKey: 'Oldest',
+      sortKey: 'oldest',
       expectedOrder: ['1', '2'],
     },
     {
-      sortKey: 'Newest',
+      sortKey: 'newest',
       expectedOrder: ['2', '1'],
     },
   ].forEach(testCase => {
@@ -136,7 +136,7 @@ describe('integration: annotation threading', () => {
       });
 
       const actualOrder = lastRootThread.children.map(
-        thread => thread.annotation.id
+        thread => thread.annotation.id,
       );
       assert.deepEqual(actualOrder, testCase.expectedOrder);
     });

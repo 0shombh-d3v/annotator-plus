@@ -1,16 +1,19 @@
-import * as fixtures from '../../test/annotation-fixtures';
+import sinon from 'sinon';
 
+import * as fixtures from '../../test/annotation-fixtures';
 import { AnnotationsService, $imports } from '../annotations';
 
 describe('AnnotationsService', () => {
   let fakeAnnotationActivity;
   let fakeApi;
   let fakeMetadata;
+  let fakeSettings;
   let fakeStore;
 
   let fakeDefaultPermissions;
   let fakePrivatePermissions;
   let fakeSharedPermissions;
+  let fakeIsPrivate;
 
   let svc;
 
@@ -22,16 +25,27 @@ describe('AnnotationsService', () => {
     fakeStore.isLoggedIn.returns(loggedIn);
   }
 
+  // The minimal data needed for a `create` call.
+  const emptyAnnotationData = {
+    target: [
+      {
+        source: 'https://example.com',
+      },
+    ],
+  };
+
   beforeEach(() => {
     fakeAnnotationActivity = {
       reportActivity: sinon.stub(),
     };
     fakeApi = {
       annotation: {
+        read: sinon.stub().resolves(fixtures.defaultAnnotation()),
         create: sinon.stub().resolves(fixtures.defaultAnnotation()),
         delete: sinon.stub().resolves(),
         flag: sinon.stub().resolves(),
         update: sinon.stub().resolves(fixtures.defaultAnnotation()),
+        moderate: sinon.stub().resolves(fixtures.defaultAnnotation()),
       },
     };
 
@@ -44,8 +58,11 @@ describe('AnnotationsService', () => {
       isHighlight: sinon.stub(),
       isSaved: sinon.stub(),
       isPageNote: sinon.stub(),
-      isPublic: sinon.stub(),
     };
+
+    fakeIsPrivate = sinon.stub();
+
+    fakeSettings = {};
 
     fakeStore = {
       addAnnotations: sinon.stub(),
@@ -65,6 +82,8 @@ describe('AnnotationsService', () => {
       selectTab: sinon.stub(),
       setExpanded: sinon.stub(),
       updateFlagStatus: sinon.stub(),
+      defaultAuthority: sinon.stub().returns('hypothes.is'),
+      isFeatureEnabled: sinon.stub().returns(false),
     };
 
     setLoggedIn(true);
@@ -75,10 +94,16 @@ describe('AnnotationsService', () => {
         defaultPermissions: fakeDefaultPermissions,
         privatePermissions: fakePrivatePermissions,
         sharedPermissions: fakeSharedPermissions,
+        isPrivate: fakeIsPrivate,
       },
     });
 
-    svc = new AnnotationsService(fakeAnnotationActivity, fakeApi, fakeStore);
+    svc = new AnnotationsService(
+      fakeAnnotationActivity,
+      fakeApi,
+      fakeSettings,
+      fakeStore,
+    );
   });
 
   afterEach(() => {
@@ -105,7 +130,7 @@ describe('AnnotationsService', () => {
     it('extends the provided annotation object with defaults', () => {
       fakeStore.focusedGroupId.returns('mygroup');
 
-      svc.create({}, now);
+      svc.create(emptyAnnotationData, now);
 
       const annotation = getLastAddedAnnotation();
 
@@ -119,6 +144,21 @@ describe('AnnotationsService', () => {
       assert.equal(annotation.user, 'acct:foo@bar.com');
       assert.isOk(annotation.$tag);
       assert.isString(annotation.$tag);
+
+      // `annotationMetadata` config not set, so this field should also not be set.
+      assert.isUndefined(annotation.metadata);
+    });
+
+    it('adds metadata from `annotationMetadata` setting to annotation', () => {
+      fakeStore.focusedGroupId.returns('mygroup');
+      fakeSettings.annotationMetadata = {
+        lms: { assignment_id: '1234' },
+      };
+
+      svc.create(emptyAnnotationData, now);
+
+      const annotation = getLastAddedAnnotation();
+      assert.deepEqual(annotation.metadata, fakeSettings.annotationMetadata);
     });
 
     describe('annotation permissions', () => {
@@ -126,7 +166,7 @@ describe('AnnotationsService', () => {
         fakeStore.getDefault.returns('private');
         fakeDefaultPermissions.returns('private-permissions');
 
-        svc.create({}, now);
+        svc.create(emptyAnnotationData, now);
         const annotation = getLastAddedAnnotation();
 
         assert.calledOnce(fakeDefaultPermissions);
@@ -134,7 +174,7 @@ describe('AnnotationsService', () => {
           fakeDefaultPermissions,
           'acct:foo@bar.com',
           'mygroup',
-          'private'
+          'private',
         );
         assert.equal(annotation.permissions, 'private-permissions');
       });
@@ -143,7 +183,7 @@ describe('AnnotationsService', () => {
         fakeStore.getDefault.returns('shared');
         fakeDefaultPermissions.returns('default permissions');
 
-        svc.create({}, now);
+        svc.create(emptyAnnotationData, now);
         const annotation = getLastAddedAnnotation();
 
         assert.calledOnce(fakeDefaultPermissions);
@@ -151,7 +191,7 @@ describe('AnnotationsService', () => {
           fakeDefaultPermissions,
           'acct:foo@bar.com',
           'mygroup',
-          'shared'
+          'shared',
         );
         assert.equal(annotation.permissions, 'default permissions');
       });
@@ -161,7 +201,7 @@ describe('AnnotationsService', () => {
         fakePrivatePermissions.returns('private permissions');
         fakeDefaultPermissions.returns('default permissions');
 
-        svc.create({}, now);
+        svc.create(emptyAnnotationData, now);
         const annotation = getLastAddedAnnotation();
 
         assert.calledOnce(fakePrivatePermissions);
@@ -274,14 +314,22 @@ describe('AnnotationsService', () => {
       assert.isNull(getLastAddedAnnotation());
     });
 
-    it('should create a new unsaved annotation with page note defaults', () => {
-      svc.createPageNote();
+    it.each([undefined, { title: 'foo' }])(
+      'should create a new unsaved annotation with page note defaults',
+      document => {
+        svc.createPageNote(document);
 
-      const annotation = getLastAddedAnnotation();
+        const annotation = getLastAddedAnnotation();
 
-      assert.equal(annotation.uri, 'http://www.example.com');
-      assert.deepEqual(annotation.target, []);
-    });
+        assert.equal(annotation.uri, 'http://www.example.com');
+        assert.deepEqual(annotation.target, [
+          {
+            source: 'http://www.example.com',
+          },
+        ]);
+        assert.deepEqual(annotation.document, document);
+      },
+    );
   });
 
   describe('delete', () => {
@@ -368,7 +416,7 @@ describe('AnnotationsService', () => {
 
       assert.equal(
         reply.references[reply.references.length - 1],
-        annotation.id
+        annotation.id,
       );
       assert.equal(reply.group, annotation.group);
       assert.equal(reply.target[0].source, annotation.target[0].source);
@@ -376,7 +424,7 @@ describe('AnnotationsService', () => {
     });
 
     it('uses public permissions if annotation is public', () => {
-      fakeMetadata.isPublic.returns(true);
+      fakeIsPrivate.returns(false);
       fakeSharedPermissions.returns('public');
 
       const annotation = filledAnnotation();
@@ -388,7 +436,7 @@ describe('AnnotationsService', () => {
     });
 
     it('uses private permissions if annotation is private', () => {
-      fakeMetadata.isPublic.returns(false);
+      fakeIsPrivate.returns(true);
       fakePrivatePermissions.returns('private');
 
       const annotation = filledAnnotation();
@@ -424,7 +472,7 @@ describe('AnnotationsService', () => {
       assert.calledWith(
         fakeAnnotationActivity.reportActivity,
         'create',
-        savedAnnotation
+        savedAnnotation,
       );
     });
 
@@ -449,11 +497,11 @@ describe('AnnotationsService', () => {
       assert.calledWith(
         fakeAnnotationActivity.reportActivity,
         'update',
-        savedAnnotation
+        savedAnnotation,
       );
     });
 
-    it('calls the relevant API service with an object that has any draft changes integrated', () => {
+    it('calls the relevant API service with an object that has any draft changes integrated', async () => {
       fakeMetadata.isSaved.returns(false);
       fakePrivatePermissions.returns({ read: ['foo'] });
       const annotation = fixtures.defaultAnnotation();
@@ -464,21 +512,95 @@ describe('AnnotationsService', () => {
         tags: ['one', 'two'],
         text: 'my text',
         isPrivate: true,
+        description: 'Image description',
         annotation: fixtures.defaultAnnotation(),
       });
 
-      return svc.save(fixtures.defaultAnnotation()).then(() => {
-        const annotationWithChanges =
-          fakeApi.annotation.create.getCall(0).args[1];
-        assert.equal(annotationWithChanges.text, 'my text');
-        assert.sameMembers(annotationWithChanges.tags, ['one', 'two']);
-        // Permissions converted to "private"
-        assert.include(annotationWithChanges.permissions.read, 'foo');
-        assert.notInclude(annotationWithChanges.permissions.read, [
-          'group:__world__',
-        ]);
-      });
+      await svc.save(fixtures.defaultAnnotation());
+
+      const annotationWithChanges =
+        fakeApi.annotation.create.getCall(0).args[1];
+      assert.equal(annotationWithChanges.text, 'my text');
+      assert.sameMembers(annotationWithChanges.tags, ['one', 'two']);
+      // Permissions converted to "private"
+      assert.include(annotationWithChanges.permissions.read, 'foo');
+      assert.notInclude(annotationWithChanges.permissions.read, [
+        'group:__world__',
+      ]);
+      assert.equal(
+        annotationWithChanges.target[0].description,
+        'Image description',
+      );
     });
+
+    [
+      {
+        profile: { userid: 'acct:foo@bar.com' },
+        mentionsEnabled: false,
+        text: 'hello @bob',
+        expectedText: 'hello @bob',
+        mentionMode: 'username',
+      },
+      {
+        profile: { userid: 'acct:foo@bar.com' },
+        mentionsEnabled: false,
+        text: 'hello @[John Doe]',
+        expectedText: 'hello @[John Doe]',
+        mentionMode: 'display-name',
+      },
+      {
+        profile: { userid: 'acct:foo@bar.com' },
+        mentionsEnabled: true,
+        text: 'hello @bob',
+        expectedText:
+          'hello <a data-hyp-mention="" data-userid="acct:bob@bar.com">@bob</a>',
+        mentionMode: 'username',
+      },
+      {
+        profile: { userid: 'acct:foo@bar.com' },
+        mentionsEnabled: true,
+        text: 'hello @[John Doe]',
+        expectedText:
+          'hello <a data-hyp-mention="" data-userid="acct:john_doe@hypothes.is">@John Doe</a>',
+        mentionMode: 'display-name',
+      },
+      {
+        profile: { userid: 'acct:foo' },
+        mentionsEnabled: true,
+        text: 'hello @bob',
+        expectedText:
+          'hello <a data-hyp-mention="" data-userid="acct:bob@hypothes.is">@bob</a>',
+        mentionMode: 'username',
+      },
+      {
+        profile: { userid: 'acct:foo@bar.com' },
+        mentionsEnabled: true,
+        text: 'hello @[Unknown Display Name]',
+        expectedText: 'hello @[Unknown Display Name]',
+        mentionMode: 'display-name',
+      },
+    ].forEach(
+      ({ profile, mentionsEnabled, text, expectedText, mentionMode }) => {
+        it('wraps mentions in tags when feature is enabled', async () => {
+          fakeStore.isFeatureEnabled.returns(mentionsEnabled);
+          fakeStore.profile.returns(profile);
+          fakeStore.getDraft.returns({ text });
+
+          await svc.save(fixtures.defaultAnnotation(), {
+            mentionMode,
+            usersMap: new Map([
+              ['John Doe', { userid: 'acct:john_doe@hypothes.is' }],
+            ]),
+          });
+
+          assert.calledWith(
+            fakeApi.annotation.create,
+            {},
+            sinon.match({ text: expectedText }),
+          );
+        });
+      },
+    );
 
     context('successful save', () => {
       it('copies over internal app-specific keys to the annotation object', () => {
@@ -545,6 +667,53 @@ describe('AnnotationsService', () => {
           assert.notCalled(fakeStore.addAnnotations);
         });
       });
+    });
+  });
+
+  describe('moderate', () => {
+    it('calls the `moderate` API service', async () => {
+      const annotation = {
+        ...fixtures.defaultAnnotation(),
+        moderation_status: 'PENDING',
+      };
+      await svc.moderate(annotation, 'APPROVED');
+
+      assert.calledWith(
+        fakeApi.annotation.moderate,
+        { id: annotation.id },
+        {
+          moderation_status: 'APPROVED',
+          current_moderation_status: annotation.moderation_status,
+          annotation_updated: annotation.updated,
+        },
+      );
+    });
+
+    it('updates annotation in store', async () => {
+      const annotation = fixtures.defaultAnnotation();
+      await svc.moderate(annotation, 'APPROVED');
+
+      const savedAnnotation =
+        await fakeApi.annotation.moderate.lastCall.returnValue;
+      assert.calledWith(fakeStore.addAnnotations, [savedAnnotation]);
+    });
+  });
+
+  describe('loadAnnotation', () => {
+    it('calls the `read` API service', async () => {
+      const annotation = fixtures.defaultAnnotation();
+      await svc.loadAnnotation(annotation.id);
+
+      assert.calledWith(fakeApi.annotation.read, { id: annotation.id });
+    });
+
+    it('updates annotation in store', async () => {
+      const annotation = fixtures.defaultAnnotation();
+      await svc.loadAnnotation(annotation.id);
+
+      const savedAnnotation =
+        await fakeApi.annotation.read.lastCall.returnValue;
+      assert.calledWith(fakeStore.addAnnotations, [savedAnnotation]);
     });
   });
 });

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-
-'use strict';
-
-const fs = require('fs');
-const { extname } = require('path');
-
-const commander = require('commander');
-const packlist = require('npm-packlist');
-const AWS = require('aws-sdk');
+import {
+  S3Client,
+  PutObjectCommand,
+  GetBucketLocationCommand,
+} from '@aws-sdk/client-s3';
+import Arborist from '@npmcli/arborist';
+import { program } from 'commander';
+import * as fs from 'node:fs';
+import { extname } from 'node:path';
+import packlist from 'npm-packlist';
 
 /**
  * File extension / mime type associations for file types we actually use.
@@ -51,7 +52,9 @@ function contentTypeFromFilename(path) {
 
 class S3Uploader {
   constructor(bucket) {
-    this.s3 = new AWS.S3();
+    // Set an initial region that we'll use for the call to get the bucket's
+    // location. We'll create a new client for the bucket's region later.
+    this.s3 = new S3Client({ region: 'us-west-1' });
     this.bucket = bucket;
     this.region = null;
   }
@@ -59,13 +62,15 @@ class S3Uploader {
   async upload(destPath, srcFile, { cacheControl }) {
     if (!this.region) {
       // Find out where the S3 bucket is.
-      const regionResult = await this.s3
-        .getBucketLocation({
-          Bucket: this.bucket,
-        })
-        .promise();
-      this.region = regionResult.LocationConstraint;
-      this.s3 = new AWS.S3({ region: this.region });
+      const command = new GetBucketLocationCommand({
+        Bucket: this.bucket,
+      });
+      const regionResult = await this.s3.send(command);
+
+      // LocationConstraint is omitted for us-east-1.
+      // See https://github.com/aws/aws-sdk-js-v3/pull/844
+      this.region = regionResult.LocationConstraint ?? 'us-east-1';
+      this.s3 = new S3Client({ region: this.region });
     }
 
     const fileContent = fs.readFileSync(srcFile);
@@ -77,7 +82,8 @@ class S3Uploader {
       CacheControl: cacheControl,
       ContentType: contentTypeFromFilename(srcFile),
     };
-    return this.s3.putObject(params).promise();
+    const putObjectCommand = new PutObjectCommand(params);
+    return this.s3.send(putObjectCommand);
   }
 }
 
@@ -99,10 +105,14 @@ class S3Uploader {
 async function uploadPackageToS3(bucket, options) {
   // Get list of files that are distributed with the package, respecting
   // the `files` field in `package.json`, `.npmignore` etc.
-  const files = await packlist({ path: '.' });
+  const arb = new Arborist({ path: '.' });
+  const tree = await arb.loadActual();
+  const files = await packlist(tree);
 
   // Get name, version and main module of the package.
-  const packageJson = require(`${process.cwd()}/package.json`);
+  const packageJson = JSON.parse(
+    fs.readFileSync(`${process.cwd()}/package.json`),
+  );
   const packageName = packageJson.name;
   const version = packageJson.version;
   const entryPoint = packageJson.main;
@@ -115,7 +125,7 @@ async function uploadPackageToS3(bucket, options) {
   const uploads = files.map(file =>
     uploader.upload(`${packageName}/${version}/${file}`, file, {
       cacheControl: cacheForever,
-    })
+    }),
   );
   await Promise.all(uploads);
 
@@ -148,13 +158,13 @@ async function uploadPackageToS3(bucket, options) {
   });
 }
 
-commander
+program
   .option('--bucket [bucket]', 'S3 bucket name')
   .option('--tag [tag]', 'Version tag')
   .option('--no-cache-entry', 'Prevent CDN/browser caching of entry point')
   .parse(process.argv);
 
-const cliOpts = commander.opts();
+const cliOpts = program.opts();
 
 const options = {
   tag: cliOpts.tag,

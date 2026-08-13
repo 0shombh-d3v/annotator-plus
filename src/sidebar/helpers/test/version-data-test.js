@@ -46,7 +46,7 @@ describe('sidebar/helpers/version-data', () => {
             userid: 'acct:foo@bar.com',
             displayName: 'Fred Hubert',
           },
-          []
+          [],
         );
         assert.equal(versionData.account, 'Fred Hubert (acct:foo@bar.com)');
       });
@@ -79,6 +79,27 @@ describe('sidebar/helpers/version-data', () => {
           { metadata: { documentFingerprint: 'DEADBEEF' } },
         ]);
         assert.equal(versionData.fingerprint, 'DEADBEEF');
+      });
+
+      it('sets `segment` property if `segment` is present in frame details', () => {
+        const versionData = new VersionData({}, [
+          {
+            segment: {
+              cfi: '/2',
+              url: '/chapters/02.xhtml',
+              pages: { start: '4', end: '9' },
+            },
+          },
+        ]);
+        assert.equal(
+          versionData.segment,
+          ['CFI: /2', 'Pages: 4-9', 'URL: /chapters/02.xhtml'].join(', '),
+        );
+      });
+
+      it('does not set `segment` property if `segment` is not present in frame details', () => {
+        const versionData = new VersionData({}, []);
+        assert.isUndefined(versionData.segment);
       });
     });
   });
@@ -114,7 +135,7 @@ describe('sidebar/helpers/version-data', () => {
         const versionData = new VersionData({}, []);
         const encoded = versionData.asEncodedURLString();
         const subStr = encodeURIComponent(
-          `${prop[0]}: ${versionData[prop[1]]}\n`
+          `${prop[0]}: ${versionData[prop[1]]}\n`,
         );
         assert.include(encoded, subStr);
       });

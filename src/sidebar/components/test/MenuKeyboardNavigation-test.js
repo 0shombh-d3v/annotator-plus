@@ -1,19 +1,16 @@
-import { mount } from 'enzyme';
+import {
+  checkAccessibility,
+  mockImportedComponents,
+} from '@hypothesis/frontend-testing';
+import { mount } from '@hypothesis/frontend-testing';
 
 import MenuKeyboardNavigation, { $imports } from '../MenuKeyboardNavigation';
-
-import { checkAccessibility } from '../../../test-util/accessibility';
-import { mockImportedComponents } from '../../../test-util/mock-imported-components';
 
 describe('MenuKeyboardNavigation', () => {
   let fakeCloseMenu;
   let clock;
-  let containers = [];
 
   const createMenuItem = props => {
-    let newContainer = document.createElement('div');
-    containers.push(newContainer);
-    document.body.appendChild(newContainer);
     return mount(
       <MenuKeyboardNavigation
         closeMenu={fakeCloseMenu}
@@ -26,8 +23,8 @@ describe('MenuKeyboardNavigation', () => {
         <button role="menuitem">Item 3</button>
       </MenuKeyboardNavigation>,
       {
-        attachTo: newContainer,
-      }
+        connected: true,
+      },
     );
   };
 
@@ -38,10 +35,6 @@ describe('MenuKeyboardNavigation', () => {
 
   afterEach(() => {
     $imports.$restore();
-    containers.forEach(container => {
-      container.remove();
-    });
-    containers = [];
   });
 
   it('renders the provided class name', () => {
@@ -122,7 +115,6 @@ describe('MenuKeyboardNavigation', () => {
   it(
     'should pass a11y checks',
     checkAccessibility({
-      // eslint-disable-next-line react/display-name
       content: () => (
         <div>
           <MenuKeyboardNavigation>
@@ -130,6 +122,6 @@ describe('MenuKeyboardNavigation', () => {
           </MenuKeyboardNavigation>
         </div>
       ),
-    })
+    }),
   );
 });
