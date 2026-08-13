@@ -1,0 +1,6 @@
+pip-tools
+pip-sync-faster
+myst-parser
+sphinx-autobuild
+sphinx
+sphinx_rtd_theme

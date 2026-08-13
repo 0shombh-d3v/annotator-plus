@@ -1,0 +1,41 @@
+<script>
+  window.hypothesisConfig = function() {
+    return {
+      // enableExperimentalNewNoteButton: true,
+      // showHighlights: 'always',
+      // theme: 'clean',
+
+      // Example branding:
+      // branding: {
+      //  appBackgroundColor: 'white',
+      //  ctaBackgroundColor: 'rgba(3, 11, 16, 1)',
+      //  ctaTextColor: '#eee',
+      //  selectionFontFamily: 'helvetica, arial, sans serif'
+      //},
+
+      // Example focused user mode
+      // focus: {
+      //   user: {
+      //     username: 'devdata_user',
+      //     displayName: 'Freddy Potato',
+      //   }
+      // },
+
+      // Example services config
+      // services: [{
+      //   apiUrl: 'http://localhost:5000/api',
+      //   authority: 'partner.org',
+      //   allowLeavingGroups: false,
+      //   groups: ['a-group-id', 'another-group-id'],
+      // }],
+
+      // Open the sidebar when the page loads
+      openSidebar: true,
+
+      {{#exampleConfig}}
+      // Additional configuration for the current test document
+      ...{{{exampleConfig}}},
+      {{/exampleConfig}}
+    };
+  };
+</script>
