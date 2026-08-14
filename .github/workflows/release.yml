@@ -27,7 +27,7 @@ jobs:
       - run: npm run check
       - run: npm run check:vendor
       - run: npm audit --audit-level=high
-      - run: npm run build
+      - run: npm run quick-build
       - run: npm run release:verify
       - run: npm run release:package
       - name: Publish GitHub release
