@@ -85,9 +85,11 @@ const pdfViewer = await resources.file('pdfjs/web/viewer.mjs').async('string');
 if (!pdfViewer.includes('const annotationEditorMode = AnnotationEditorType.DISABLE;')) {
   throw new Error('PDF.js editing tools must remain disabled in the Annotator+ reader');
 }
+if (!pdfViewer.includes('const supportsDownloading = false;')) {
+  throw new Error('PDF.js Save controls must remain disabled in the Annotator+ reader');
+}
 for (const marker of [
   'print: document.getElementById("printButton")',
-  'download: document.getElementById("downloadButton")',
   'toggleButton: document.getElementById("secondaryToolbarToggleButton")'
 ]) {
   if (!pdfViewer.includes(marker)) throw new Error(`PDF reader is missing ${marker}`);

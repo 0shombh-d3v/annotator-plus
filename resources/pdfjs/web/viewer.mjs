@@ -18867,7 +18867,7 @@ const PDFViewerApplication = {
       externalLinkRel: AppOptions.get("externalLinkRel"),
       ignoreDestinationZoom: AppOptions.get("ignoreDestinationZoom")
     });
-    const supportsDownloading = AppOptions.get("supportsDownloading");
+    const supportsDownloading = false;
     const downloadManager = this.downloadManager = supportsDownloading ? new DownloadManager() : null;
     if (appConfig.secondaryToolbar?.downloadButton) {
       appConfig.secondaryToolbar.downloadButton.hidden = !supportsDownloading;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.7 — 2026-08-14
+
+- Removed the nonfunctional PDF Save action, which could not include Annotator+ highlights or notes.
+- Kept PDF Print and Tools actions available.
+
 ## 0.4.6 — 2026-08-14
 
 - Removed PDF.js's competing Highlight, Text, Draw, and Image editing controls from the reader toolbar.
