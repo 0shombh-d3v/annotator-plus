@@ -27,12 +27,13 @@ function highlight(
 
 test('PDF note underlines decorate only the exact note-bearing highlight fragments', async () => {
     document.body.innerHTML = `
-        <div class="page">
+        <div class="page" data-page-number="1">
             <div class="canvasWrapper"><canvas></canvas><svg class="hypothesis-highlight-layer"></svg></div>
             <div class="textLayer"></div>
         </div>`;
     const page = document.querySelector('.page');
     const canvas = document.querySelector('canvas');
+    const textLayer = document.querySelector<HTMLElement>('.textLayer');
     const svgLayer = document.querySelector<SVGSVGElement>('.hypothesis-highlight-layer');
     canvas.getBoundingClientRect = () => ({ left: 10, top: 20 } as DOMRect);
     let xOffset = 0;
@@ -42,7 +43,9 @@ test('PDF note underlines decorate only the exact note-bearing highlight fragmen
     const plainHighlight = highlight('t2', [{ type: 'TextPositionSelector', start: 30, end: 40 }]);
     [firstFragment, finalFragment, plainHighlight].forEach((fragment, index) => {
         fragment.getBoundingClientRect = () =>
-            ({ left: 30 + index * 30 + xOffset, top: 40, width: 20, height: 10 } as DOMRect);
+            textLayer.hidden
+                ? ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect)
+                : ({ left: 30 + index * 30 + xOffset, top: 40, width: 20, height: 10 } as DOMRect);
         const svgHighlight = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         svgLayer.appendChild(svgHighlight);
         fragment.svgHighlight = svgHighlight;
@@ -52,9 +55,11 @@ test('PDF note underlines decorate only the exact note-bearing highlight fragmen
     document.querySelector('.textLayer').append(firstFragment, finalFragment, plainHighlight);
     page.append(staleIndicator);
 
-    let scaleListener: () => void;
+    const listeners = new Map<string, (event?: { pageNumber?: number }) => void>();
     const eventBus = {
-        on: jest.fn((_name: string, listener: () => void) => (scaleListener = listener)),
+        on: jest.fn((name: string, listener: (event?: { pageNumber?: number }) => void) =>
+            listeners.set(name, listener)
+        ),
         off: jest.fn()
     };
     (window as typeof window & { PDFViewerApplication?: unknown }).PDFViewerApplication = { eventBus };
@@ -63,6 +68,9 @@ test('PDF note underlines decorate only the exact note-bearing highlight fragmen
     const style = document.getElementById('obsidian-annotator-note-indicator-styles');
     expect(style.textContent).toContain('stroke: #991b1b');
     expect(style.textContent).toContain('stroke-width: 2.5px');
+    expect(style.textContent).toContain('.page:has(.textLayer[hidden]) .hypothesis-highlight-layer');
+    expect(style.textContent).toContain('.page.obsidian-annotator-note-refreshing .hypothesis-highlight-layer');
+    expect(style.textContent).toContain('visibility: hidden');
     expect(style.textContent).not.toContain('linear-gradient');
     expect(document.querySelectorAll('.obsidian-annotator-note-indicator')).toHaveLength(2);
     expect(firstFragment.classList.contains('obsidian-annotator-note-highlight')).toBe(true);
@@ -75,10 +83,25 @@ test('PDF note underlines decorate only the exact note-bearing highlight fragmen
     expect(document.body.textContent).not.toContain('annotation note');
 
     xOffset = 100;
-    scaleListener();
+    textLayer.hidden = true;
+    listeners.get('scalechanging')();
+    xOffset = 200;
+    listeners.get('scalechanging')();
     await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
-    expect(firstFragment.svgHighlight.getAttribute('x')).toBe('120');
-    expect(document.querySelector('.obsidian-annotator-note-indicator').getAttribute('x1')).toBe('120');
+    expect(firstFragment.svgHighlight.getAttribute('x')).toBe('20');
+    expect(document.querySelector('.page:has(.textLayer[hidden]) .hypothesis-highlight-layer')).toBe(svgLayer);
+
+    textLayer.hidden = false;
+    listeners.get('pagerendered')();
+    expect(firstFragment.svgHighlight.getAttribute('x')).toBe('20');
+    listeners.get('textlayerrendered')({ pageNumber: 1 });
+    expect(page.classList.contains('obsidian-annotator-note-refreshing')).toBe(true);
+    expect(firstFragment.svgHighlight.getAttribute('x')).toBe('20');
+    await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+    expect(page.classList.contains('obsidian-annotator-note-refreshing')).toBe(false);
+    expect(firstFragment.svgHighlight.getAttribute('x')).toBe('220');
+    expect(document.querySelector('.obsidian-annotator-note-indicator').getAttribute('x1')).toBe('220');
+    expect(document.querySelector('.page:has(.textLayer[hidden]) .hypothesis-highlight-layer')).toBeNull();
 
     annotations = [{ ...annotation, text: '   ' }];
     controller.refresh();
@@ -112,9 +135,10 @@ test('PDF note underlines decorate only the exact note-bearing highlight fragmen
     expect(replacementFragment.hasAttribute('role')).toBe(false);
 
     controller.disconnect();
-    expect(eventBus.off).toHaveBeenCalledWith('scalechanging', scaleListener);
-    expect(eventBus.off).toHaveBeenCalledWith('rotationchanging', scaleListener);
-    expect(eventBus.off).toHaveBeenCalledWith('pagerendered', scaleListener);
+    expect(eventBus.off).toHaveBeenCalledWith('scalechanging', listeners.get('scalechanging'));
+    expect(eventBus.off).toHaveBeenCalledWith('rotationchanging', listeners.get('rotationchanging'));
+    expect(eventBus.off).toHaveBeenCalledWith('pagerendered', listeners.get('pagerendered'));
+    expect(eventBus.off).toHaveBeenCalledWith('textlayerrendered', listeners.get('textlayerrendered'));
     delete (window as typeof window & { PDFViewerApplication?: unknown }).PDFViewerApplication;
     expect(document.getElementById('obsidian-annotator-note-indicator-styles')).toBeNull();
 });
