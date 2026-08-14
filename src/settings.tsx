@@ -9,11 +9,6 @@ export interface AnnotatorSettings {
         contrast: number;
         sepia: number;
     };
-    customDefaultPath: string;
-    epubSettings: {
-        readingMode: 'scroll' | 'pagination';
-        fontSize: number;
-    };
     annotationMarkdownSettings: {
         annotationModeByDefault: boolean;
         includePrefix: boolean;
@@ -31,11 +26,6 @@ export const DEFAULT_SETTINGS: AnnotatorSettings = {
         sepia: 0
     },
     debugLogging: false,
-    customDefaultPath: '',
-    epubSettings: {
-        readingMode: 'pagination',
-        fontSize: 100
-    },
     annotationMarkdownSettings: {
         annotationModeByDefault: true,
         includePrefix: true,
@@ -62,56 +52,6 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
         containerEl.empty();
 
         containerEl.createEl('h2', { text: 'Annotator+ Settings' });
-
-        containerEl.createEl('h3', { text: 'Annotation Target Settings' });
-
-        new Setting(containerEl)
-            .setName('Custom Default Path')
-            .setDesc(
-                [
-                    'If the provided annotation target is not found, ',
-                    'Annotator will try prepending this string to the path. ',
-                    'This can be useful if, for example, all your notes are ',
-                    'located at a specific remote location.'
-                ].join('')
-            )
-            .addText(text =>
-                text.setValue(this.plugin.settings.customDefaultPath).onChange(async value => {
-                    this.plugin.settings.customDefaultPath = value;
-                    await this.plugin.saveSettings();
-                })
-            );
-
-        containerEl.createEl('h3', { text: 'Epub Reader Settings' });
-
-        new Setting(containerEl).setName('Epub reader mode').addDropdown(dropdown =>
-            dropdown
-                .addOption('scroll', 'Scroll')
-                .addOption('pagination', 'Pagination')
-                .setValue(this.plugin.settings.epubSettings.readingMode)
-                .onChange(async value => {
-                    this.plugin.settings.epubSettings.readingMode = value as 'scroll' | 'pagination';
-                    await this.plugin.saveSettings();
-                })
-        );
-
-        const epubFontSize = new Setting(containerEl)
-            .setName('Font Size')
-            .setDesc(`Base font size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`);
-
-        epubFontSize.addSlider(slider =>
-            slider
-                .setLimits(50, 200, 5)
-                .setValue(this.plugin.settings.epubSettings.fontSize)
-                .onChange(async value => {
-                    this.plugin.settings.epubSettings.fontSize = value;
-                    epubFontSize.setDesc(
-                        `Base font size in percents. Current: ${this.plugin.settings.epubSettings.fontSize}%`
-                    );
-                    slider.setDynamicTooltip();
-                    await this.plugin.saveSettings();
-                })
-        );
 
         containerEl.createEl('h3', { text: 'Annotation Markdown Settings' });
 

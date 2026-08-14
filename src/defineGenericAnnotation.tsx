@@ -1,7 +1,7 @@
-import { SAMPLE_PDF_URL, SAMPLE_PDF_URL_BASE64, SAMPLE_EPUB_URL } from './constants';
+import { SAMPLE_PDF_URL, SAMPLE_PDF_URL_BASE64 } from './constants';
 import { OfflineIframe } from 'react-offline-iframe';
 import React, { useEffect, useRef } from 'react';
-import { SpecificAnnotationProps } from 'types';
+import { PdfAnnotationProps } from 'types';
 import { b64_to_utf8, utf8_to_b64 } from 'utils';
 import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
 import { Annotation } from './types';
@@ -23,19 +23,16 @@ import {
     resourceUrls
 } from 'resourcesFolder';
 import { PdfNoteIndicatorController, setupPdfNoteIndicatorsInFrame } from 'pdfNoteIndicators';
-import { AnnotationTarget } from './types';
 import { targetMatchesRequest } from './targetResolver';
-import { fetchHttpsTarget } from './secureFetch';
-import { promises as fs } from 'fs';
+import { isLocalAnnotationApiUrl, shouldBlockExternalHref } from './offlinePolicy';
+import { normalizeIframeFetch } from './iframeFetch';
 
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
-
-const annotationTarget = (props: SpecificAnnotationProps): AnnotationTarget =>
-    'pdf' in props ? props.pdf : props.epub;
+const BLOCKED_RESOURCE_URL = 'junk:/blocked';
 
 export default (vault: Vault, plugin: AnnotatorPlugin) => {
     const GenericAnnotation = (
-        props: SpecificAnnotationProps & {
+        props: PdfAnnotationProps & {
             baseSrc: string;
             onIframePatch?: (iframe: HTMLIFrameElement) => Promise<void>;
         }
@@ -48,7 +45,6 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
         const sidebarCleanups = useRef(new Set<() => void>()).current;
 
         const refreshPdfNoteIndicators = (annotations?: Annotation[]) => {
-            if (!('pdf' in props)) return;
             if (annotations) pdfAnnotations.current = annotations;
             pdfNoteIndicatorController.current?.refresh();
         };
@@ -74,21 +70,17 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                     const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
                     const url = new URL(href);
                     let res = null;
-                    if (href == `junk:/ignore`) {
-                        return new Response(JSON.stringify({}, null, 2), {
-                            status: 200,
-                            statusText: 'ok'
+                    if (href.startsWith('junk:')) {
+                        return new Response(null, {
+                            status: 403,
+                            statusText: 'Blocked by Annotator+ offline policy'
                         });
                     }
                     if (isBundledResourceUrl(href)) return fetch(href);
-                    const localApi = url.origin === 'http://localhost:8001';
+                    const localApi = isLocalAnnotationApiUrl(url);
                     if (localApi && url.pathname === '/api/search') {
                         try {
-                            res = await loadAnnotations(
-                                'epub' in props ? new URL(href) : null,
-                                vault,
-                                props.annotationFile
-                            );
+                            res = await loadAnnotations(null, vault, props.annotationFile);
                             refreshPdfNoteIndicators(res.rows);
                         } catch (e) {
                             console.error('failed to load annotations', { error: e });
@@ -162,31 +154,20 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             return new Response(null, { status: 404, statusText: 'file not found' });
                         }
                     }
-                    const target = annotationTarget(props);
-                    if (!targetMatchesRequest(target, url)) {
+                    if (!targetMatchesRequest(props.pdf, url)) {
                         return new Response(null, { status: 403, statusText: 'Blocked by Annotator+ target policy' });
                     }
-                    if (target.kind === 'vault') {
-                        const file = vault.getAbstractFileByPath(target.path);
-                        if (!(file instanceof TFile)) return new Response(null, { status: 404 });
-                        return new Response(await vault.readBinary(file), { status: 200 });
-                    }
-                    if (target.kind === 'file') return new Response(await fs.readFile(target.path), { status: 200 });
-                    return fetchHttpsTarget(requestInfo, requestInit);
+                    const file = vault.getAbstractFileByPath(props.pdf.path);
+                    if (!(file instanceof TFile)) return new Response(null, { status: 404 });
+                    return new Response(await vault.readBinary(file), { status: 200 });
                 }}
                 htmlPostProcessFunction={(html: string) => {
-                    if ('pdf' in props) {
-                        const workerUrl = resourceUrls.get('pdfjs/build/pdf.worker.mjs');
-                        if (!workerUrl) throw new Error('Bundled PDF worker is unavailable');
-                        html = html
-                            .replaceAll(SAMPLE_PDF_URL_BASE64, utf8_to_b64(props.pdf.url))
-                            .replaceAll(SAMPLE_PDF_URL, props.pdf.url)
-                            .replaceAll('__ANNOTATOR_PLUS_PDF_WORKER_URL__', workerUrl);
-                    }
-                    if ('epub' in props) {
-                        html = html.replaceAll(SAMPLE_EPUB_URL, props.epub.url);
-                    }
-                    return html;
+                    const workerUrl = resourceUrls.get('pdfjs/build/pdf.worker.mjs');
+                    if (!workerUrl) throw new Error('Bundled PDF worker is unavailable');
+                    return html
+                        .replaceAll(SAMPLE_PDF_URL_BASE64, utf8_to_b64(props.pdf.url))
+                        .replaceAll(SAMPLE_PDF_URL, props.pdf.url)
+                        .replaceAll('__ANNOTATOR_PLUS_PDF_WORKER_URL__', workerUrl);
                 }}
                 postMessagePatchStrategy={null}
                 tagPatchStrategy="prototype"
@@ -194,6 +175,8 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 onMessagePatchStrategy={null}
                 onIframePatch={async iframe => {
                     if (!iframe.contentWindow || !iframe.contentDocument) return;
+                    normalizeIframeFetch(iframe.contentWindow);
+                    blockExternalNavigation(iframe);
                     const cleanupSidebar = patchSidebarMarkdownRendering(
                         iframe,
                         props.annotationFile,
@@ -279,18 +262,16 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 onload={async iframe => {
                     await props.onload(iframe);
                     if (disposed.current) return;
-                    if ('pdf' in props) {
-                        pdfNoteIndicatorController.current?.disconnect();
-                        pdfNoteIndicatorController.current = setupPdfNoteIndicatorsInFrame(
-                            iframe,
-                            () => pdfAnnotations.current
-                        );
-                    }
+                    pdfNoteIndicatorController.current?.disconnect();
+                    pdfNoteIndicatorController.current = setupPdfNoteIndicatorsInFrame(
+                        iframe,
+                        () => pdfAnnotations.current
+                    );
                 }}
                 outerIframeProps={{
                     height: '100%',
                     width: '100%',
-                    sandbox: 'allow-same-origin allow-scripts allow-presentation allow-modals'
+                    sandbox: 'allow-same-origin allow-scripts allow-modals'
                 }}
             />
         );
@@ -311,12 +292,45 @@ async function loadDarkReader(iframe: HTMLIFrameElement, moduleUrl?: string): Pr
         iframe.contentWindow.addEventListener(readyEvent, onReady, { once: true });
         const script = iframe.contentDocument.createElement('script');
         script.type = 'module';
-        script.textContent = `import * as DarkReader from ${JSON.stringify(moduleUrl)};
+        const wrapperUrl = URL.createObjectURL(
+            new Blob(
+                [
+                    `import * as DarkReader from ${JSON.stringify(moduleUrl)};
 window.${resultKey}=DarkReader;
-window.dispatchEvent(new Event(${JSON.stringify(readyEvent)}));`;
-        script.onerror = () => resolve(null);
+window.dispatchEvent(new Event(${JSON.stringify(readyEvent)}));`
+                ],
+                { type: 'text/javascript' }
+            )
+        );
+        script.src = wrapperUrl;
+        script.onload = () => URL.revokeObjectURL(wrapperUrl);
+        script.onerror = () => {
+            URL.revokeObjectURL(wrapperUrl);
+            resolve(null);
+        };
         iframe.contentDocument.head.appendChild(script);
     });
+}
+
+function blockExternalNavigation(iframe: HTMLIFrameElement): void {
+    iframe.contentDocument?.addEventListener(
+        'click',
+        event => {
+            const target = event.target;
+            const link =
+                target && typeof (target as Element).closest === 'function' ? (target as Element).closest('a') : null;
+            if (
+                !link ||
+                link.classList.contains('internal-link') ||
+                !shouldBlockExternalHref(link.getAttribute('href'))
+            ) {
+                return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+        },
+        true
+    );
 }
 
 function patchSidebarMarkdownRendering(
@@ -461,13 +475,13 @@ function patchSidebarMarkdownRendering(
     };
 }
 
-export const getProxiedUrl = (url: URL | string, props: SpecificAnnotationProps): string => {
+export const getProxiedUrl = (url: URL | string, props: PdfAnnotationProps): string => {
     const proxiedUrl = proxy(url, props);
     if (proxiedUrl.protocol == 'zip:') {
         const pathName = proxiedUrl.pathname.replace(/^\//, '');
         const res = resourceUrls.get(pathName) || resourceUrls.get(`${pathName}.html`);
         if (res) return res;
-        return 'junk:/ignore';
+        return BLOCKED_RESOURCE_URL;
     }
     return proxiedUrl.toString();
 };
@@ -488,24 +502,22 @@ function patchIframeEventBubbling(iframe: HTMLIFrameElement, container: HTMLElem
     }
 }
 
-function proxy(url: URL | string, props: SpecificAnnotationProps): URL {
+function proxy(url: URL | string, props: PdfAnnotationProps): URL {
     const href = typeof url == 'string' ? url : url.href;
     const parsedUrl = typeof url == 'string' ? new URL(url) : url;
 
+    if (isBundledResourceUrl(href) || parsedUrl.protocol === 'blob:' || parsedUrl.protocol === 'data:') {
+        return parsedUrl;
+    }
     if (
         href == SAMPLE_PDF_URL ||
-        ('pdf' in props && props.pdf.url == href) ||
+        targetMatchesRequest(props.pdf, parsedUrl) ||
         ((href.startsWith(`https://via.hypothes.is/proxy/static/xP1ZVAo-CVhW7kwNneW_oQ/1628964000/`) ||
             href.startsWith(`https://via.hypothes.is/proxy/static/UsvswpbIZv6ZUQTERtj1CA/1641646800/`) ||
             href.startsWith(`https://via.hypothes.is/proxy/static/VpXumaaWJSJVxmHv4EqN2g/1641916800/`)) &&
             !href.endsWith('.html'))
     ) {
-        if (!('pdf' in props)) return new URL('junk:/ignore');
         return new URL(props.pdf.url);
-    }
-    if (href == SAMPLE_EPUB_URL || ('epub' in props && props.epub.url == href)) {
-        if (!('epub' in props)) return new URL('junk:/ignore');
-        return new URL(props.epub.url);
     }
     if (href == `https://hypothes.is/api/`) {
         return new URL(`zip:/fake-service/api.json`);
@@ -515,6 +527,9 @@ function proxy(url: URL | string, props: SpecificAnnotationProps): URL {
     }
     if (href.startsWith(`https://hypothes.is/api/`)) {
         return new URL(href.replace(`https://hypothes.is/api/`, `http://localhost:8001/api/`));
+    }
+    if (isLocalAnnotationApiUrl(parsedUrl)) {
+        return parsedUrl;
     }
     if (href == `http://localhost:8001/api/profile`) {
         return new URL(`zip:/fake-service/api/profile.json`);
@@ -528,24 +543,23 @@ function proxy(url: URL | string, props: SpecificAnnotationProps): URL {
     if (parsedUrl.pathname === '/annotator-plus/sidebar.html' && parsedUrl.protocol === 'app:') {
         return new URL('zip:/hypothes.is/app.html');
     }
-    if (typeof url == 'string') return parsedUrl;
     if (
-        url.pathname === '/annotator-plus/sidebar.html' &&
-        (url.hostname === 'via.hypothes.is' || url.protocol === 'app:')
+        parsedUrl.pathname === '/annotator-plus/sidebar.html' &&
+        (parsedUrl.hostname === 'via.hypothes.is' || parsedUrl.protocol === 'app:')
     ) {
         return new URL('zip:/hypothes.is/app.html');
     }
-    if (url.hostname === 'via.hypothes.is' && url.pathname.startsWith('/pdfjs/')) {
-        return new URL(`zip:${url.pathname}`);
+    if (parsedUrl.hostname === 'via.hypothes.is' && parsedUrl.pathname.startsWith('/pdfjs/')) {
+        return new URL(`zip:${parsedUrl.pathname}`);
     }
-    switch (url.hostname) {
+    switch (parsedUrl.hostname) {
         case 'via.hypothes.is':
-            return new URL(`zip:/via.hypothes.is${url.pathname}`);
+            return new URL(`zip:/via.hypothes.is${parsedUrl.pathname}`);
         case 'hypothes.is':
-            return new URL(`zip:/hypothes.is${url.pathname}`);
+            return new URL(`zip:/hypothes.is${parsedUrl.pathname}`);
         case 'cdn.hypothes.is':
-            return new URL(`zip:/cdn.hypothes.is${url.pathname}`);
+            return new URL(`zip:/cdn.hypothes.is${parsedUrl.pathname}`);
         default:
-            return url;
+            return new URL(BLOCKED_RESOURCE_URL);
     }
 }

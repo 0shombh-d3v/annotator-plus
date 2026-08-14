@@ -23,66 +23,14 @@ See https://github.com/adobe-type-tools/cmap-resources
 <html dir="ltr" mozdisallowselectionprint>
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src blob: 'sha256-bMI8+uWjjmaPVFlRb5DExAZ0DqOdHzlHyh3WrP/VNwo='; style-src blob: 'unsafe-inline'; img-src blob: data:; font-src blob: data: app:; connect-src 'none'; worker-src blob: data:; child-src blob: app:; frame-src blob: app:; media-src blob: data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
     <meta name="google" content="notranslate" />
     <title>PDF.js viewer</title>
 
 <!-- This snippet is used in production (included from viewer.html) -->
 <link rel="resource" type="application/l10n" href="locale/locale.json" />
-<script>
-  if (!Map.prototype.getOrInsertComputed) {
-    Map.prototype.getOrInsertComputed = function (key, callback) {
-      if (!this.has(key)) this.set(key, callback(key));
-      return this.get(key);
-    };
-    Map.prototype.getOrInsert = function (key, value) {
-      if (!this.has(key)) this.set(key, value);
-      return this.get(key);
-    };
-  }
-  parent.document.addEventListener('webviewerloaded', () => {
-    const options = window.PDFViewerApplicationOptions;
-    const encodedTarget = 'aHR0cHM6Ly9hcnhpdi5vcmcvcGRmLzE3MDIuMDg3MzQucGRm';
-    let target = '';
-    try { target = decodeURIComponent(escape(atob(encodedTarget))); } catch {}
-    options.set('disablePreferences', true);
-    options.set('defaultUrl', target);
-    options.set('workerSrc', '__ANNOTATOR_PLUS_PDF_WORKER_URL__');
-    options.set('enableScripting', false);
-    options.set('enableAltTextModelDownload', false);
-    options.set('enableGuessAltText', false);
-    options.set('enableWebGPU', false);
-  }, { once: true });
-  document.addEventListener('DOMContentLoaded', async () => {
-    await window.PDFViewerApplication.initializedPromise;
-    const script = document.createElement('script');
-    script.src = 'https://cdn.hypothes.is/hypothesis/build/boot.js';
-    document.head.append(script);
-  }, { once: true });
-  window.hypothesisConfig = () => ({
-    appType: 'via',
-    openSidebar: true,
-    showHighlights: 'always',
-    assetRoot: 'https://cdn.hypothes.is/hypothesis/',
-    sidebarAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
-    notebookAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
-    profileAppUrl: 'app://obsidian.md/annotator-plus/sidebar.html',
-    services: [{
-      apiUrl: 'https://hypothes.is/api/',
-      authority: 'partner.org',
-      groups: ['__world__'],
-      allowFlagging: false,
-      allowLeavingGroups: false,
-      enableShareLinks: false,
-      enableShareImportExportPanel: false,
-      enableAccountMenu: false,
-      enableHelpPanel: false
-    }]
-  });
-</script>
-<script class="js-hypothesis-config" type="application/json">
-  {"assetRoot":"https://cdn.hypothes.is/hypothesis/","sidebarAppUrl":"app://obsidian.md/annotator-plus/sidebar.html","notebookAppUrl":"app://obsidian.md/annotator-plus/sidebar.html","profileAppUrl":"app://obsidian.md/annotator-plus/sidebar.html"}
-</script>
+<script src="annotator-plus-bootstrap.js" data-worker-src="__ANNOTATOR_PLUS_PDF_WORKER_URL__" data-target-base64="aHR0cHM6Ly9hcnhpdi5vcmcvcGRmLzE3MDIuMDg3MzQucGRm"></script>
 <script src="../build/pdf.mjs" type="module"></script>
 
     <link rel="stylesheet" href="viewer.css" />
@@ -990,9 +938,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                     <div>
                       <span data-l10n-id="pdfjs-editor-new-alt-text-disclaimer1"></span>
                       <a
-                        href="https://support.mozilla.org/en-US/kb/pdf-alt-text"
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href="#"
                         id="newAltTextLearnMore"
                         data-l10n-id="pdfjs-editor-new-alt-text-disclaimer-learn-more-url"
                         tabindex="0"
@@ -1060,9 +1006,7 @@ See https://github.com/adobe-type-tools/cmap-resources
                   <div id="createModelDescription" class="description">
                     <span data-l10n-id="pdfjs-editor-alt-text-settings-create-model-description"></span>
                     <a
-                      href="https://support.mozilla.org/en-US/kb/pdf-alt-text"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href="#"
                       id="altTextSettingsLearnMore"
                       data-l10n-id="pdfjs-editor-new-alt-text-disclaimer-learn-more-url"
                       tabindex="0"

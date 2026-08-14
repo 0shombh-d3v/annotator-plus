@@ -11,6 +11,9 @@ if (manifest.id !== 'annotator-plus' || manifest.name !== 'Annotator+') {
 if (manifest.version !== pkg.version || versions[pkg.version] !== manifest.minAppVersion) {
   throw new Error('package.json, manifest.json, and versions.json disagree');
 }
+if (pkg.dependencies?.epubjs || pkg.keywords?.includes('epub') || /EPUB/i.test(manifest.description)) {
+  throw new Error('Release metadata must describe the PDF-only product');
+}
 
 await access('main.js');
 if ((await stat('main.js')).size < 5_000_000) {
@@ -26,12 +29,17 @@ if (bundle.includes('Annotator++')) {
 for (const marker of [
   'https://via.hypothes.is/pdfjs/web/viewer.html',
   'obsidian-annotator-note-indicator-styles',
-  'follow-obsidian'
+  'follow-obsidian',
+  'Blocked by Annotator+ offline policy',
+  'vault-relative PDF path'
 ]) {
   if (!bundle.includes(marker)) throw new Error(`Release bundle is missing ${marker}`);
 }
 if (bundle.includes('/vendor/pdfjs-2/web/viewer.html')) {
   throw new Error('Release bundle still contains the legacy Via PDF wrapper');
+}
+for (const marker of ['require("fs")', 'require("https")', 'fetchHttpsTarget', 'epubjs']) {
+  if (bundle.includes(marker)) throw new Error(`Release bundle contains removed runtime code: ${marker}`);
 }
 
 const zipMarker = 'function(){/*@preserve';
@@ -44,14 +52,15 @@ const resources = await JSZip.loadAsync(
 
 for (const path of [
   'pdfjs/web/viewer.html',
+  'pdfjs/web/annotator-plus-bootstrap.js',
   'pdfjs/web/viewer.mjs',
   'pdfjs/build/pdf.mjs',
   'pdfjs/build/pdf.worker.mjs',
   'hypothes.is/app.html',
+  'hypothes.is/annotator-plus-app-bootstrap.js',
   'cdn.hypothes.is/hypothesis/build/boot.js',
   'cdn.hypothes.is/hypothesis/build/scripts/annotator.bundle.js',
-  'cdn.hypothes.is/hypothesis/build/scripts/sidebar.bundle.js',
-  'cdn.hypothes.is/demos/epub/epub.js/index.html'
+  'cdn.hypothes.is/hypothesis/build/scripts/sidebar.bundle.js'
 ]) {
   if (!resources.file(path)) throw new Error(`Reader resource is missing ${path}`);
 }
@@ -66,6 +75,7 @@ for (const path of [
   'hypothes.is/embed.js',
   'hypothes.is/notebook.html',
   'via.hypothes.is/https.html',
+  'cdn.hypothes.is/demos/epub/epub.js/index.html',
   'cdn.hypothes.is/hypothesis/build/boot-template.js',
   'cdn.hypothes.is/hypothesis/build/scripts/test-inputs.js',
   'cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js',
@@ -74,6 +84,15 @@ for (const path of [
   'cdn.hypothes.is/hypothesis/build/styles/ui-playground.css'
 ]) {
   if (resources.file(path)) throw new Error(`Release contains obsolete reader resource ${path}`);
+}
+if (Object.keys(resources.files).some(path => /(?:^|\/)epub(?:\/|$)/i.test(path))) {
+  throw new Error('Release contains EPUB reader resources');
+}
+for (const [path, file] of Object.entries(resources.files)) {
+  if (file.dir || !/\.(?:css|js|mjs)$/i.test(path)) continue;
+  if ((await file.async('string')).includes('sourceMappingURL=')) {
+    throw new Error(`Release resource still references a removed source map: ${path}`);
+  }
 }
 
 const pdf = await resources.file('pdfjs/build/pdf.mjs').async('string');
@@ -94,6 +113,15 @@ if (!pdfViewer.includes('}], ["supportsPrinting", {\n  value: false,')) {
 if (!pdfViewer.includes('return shadow(this, "supportsFullscreen", false);')) {
   throw new Error('PDF.js Presentation Mode must remain disabled in the Annotator+ reader');
 }
+for (const marker of [
+  '["enableAltTextModelDownload", {\n  value: false,',
+  '["enableAutoLinking", {\n  value: false,',
+  '["enableGuessAltText", {\n  value: false,',
+  '["enableScripting", {\n  value: false,',
+  'externalLinkEnabled = false;'
+]) {
+  if (!pdfViewer.includes(marker)) throw new Error(`PDF reader offline policy is missing ${marker}`);
+}
 for (const marker of ['eventBus.dispatch("openfile"', 'presentationModeKeyboard']) {
   if (pdfViewer.includes(marker)) throw new Error(`PDF reader restored disabled shortcut ${marker}`);
 }
@@ -105,11 +133,10 @@ for (const marker of [
 
 const viewer = await resources.file('pdfjs/web/viewer.html').async('string');
 for (const marker of [
-  'js-hypothesis-config',
-  'showHighlights',
-  'annotator-plus/sidebar.html',
-  'await window.PDFViewerApplication.initializedPromise',
-  'https://cdn.hypothes.is/hypothesis/build/boot.js',
+  'Content-Security-Policy',
+  "connect-src 'none'",
+  'annotator-plus-bootstrap.js',
+  'data-target-base64=aHR0cHM6Ly9hcnhpdi5vcmcvcGRmLzE3MDIuMDg3MzQucGRm',
   'id=printButton class="toolbarButton hidden"',
   'id=secondaryOpenFile class="toolbarButton labeled hidden"',
   'id=secondaryPrint class="toolbarButton labeled hidden"',
@@ -120,21 +147,49 @@ for (const marker of [
 ]) {
   if (!viewer.includes(marker)) throw new Error(`PDF reader is missing ${marker}`);
 }
-if (viewer.includes('<script src="https://cdn.hypothes.is/hypothesis/build/boot.js"></script>')) {
-  throw new Error('Hypothesis must not start before PDF.js initialization');
+if (viewer.includes("script-src 'unsafe-inline'") || viewer.includes("script-src 'unsafe-eval'")) {
+  throw new Error('PDF reader CSP permits inline or evaluated scripts');
+}
+if (/href="https?:\/\//i.test(viewer)) {
+  throw new Error('PDF reader HTML contains an external navigation link');
 }
 
-const epub = await resources.file('cdn.hypothes.is/demos/epub/epub.js/index.html').async('string');
+const bootstrap = await resources.file('pdfjs/web/annotator-plus-bootstrap.js').async('string');
 for (const marker of [
-  'js-hypothesis-config',
-  'showHighlights',
+  'await window.PDFViewerApplication.initializedPromise',
+  'targetBase64',
+  'instanceof URL',
+  '"enableScripting",!1',
+  '"enableAltTextModelDownload",!1',
+  '"enableGuessAltText",!1',
+  'showHighlights:"always"',
   'annotator-plus/sidebar.html',
   'https://cdn.hypothes.is/hypothesis/build/boot.js'
 ]) {
-  if (!epub.includes(marker)) throw new Error(`EPUB reader is missing ${marker}`);
+  if (!bootstrap.includes(marker)) throw new Error(`PDF bootstrap is missing ${marker}`);
 }
-if (epub.includes('fonts.googleapis.com')) {
-  throw new Error('EPUB reader must not load its controls from Google Fonts');
+
+const appBootstrap = await resources.file('hypothes.is/annotator-plus-app-bootstrap.js').async('string');
+for (const marker of ['window.hypothesisConfig', 'https://cdn.hypothes.is/hypothesis/build/boot.js']) {
+  if (!appBootstrap.includes(marker)) throw new Error(`Sidebar bootstrap is missing ${marker}`);
+}
+
+for (const path of ['pdfjs/web/viewer.html', 'hypothes.is/app.html']) {
+  const html = await resources.file(path).async('string');
+  if (!html.includes('Content-Security-Policy') || !html.includes("connect-src 'none'")) {
+    throw new Error(`${path} is missing the offline CSP`);
+  }
+  if (!html.includes('font-src blob: data: app:')) {
+    throw new Error(`${path} does not allow Obsidian's bundled PDF fonts`);
+  }
+  if (html.includes('__ANNOTATOR_PLUS_CSP_NONCE__') || html.includes('js-hypothesis-config')) {
+    throw new Error(`${path} contains an inline configuration script`);
+  }
+}
+
+const sidebarApp = await resources.file('hypothes.is/app.html').async('string');
+if (!sidebarApp.includes('src=https://hypothes.is/annotator-plus-app-bootstrap.js')) {
+  throw new Error('Sidebar app does not use the bundled absolute bootstrap URL');
 }
 
 const darkReader = await resources.file('dark-reader/darkreader.js').async('string');

@@ -1,12 +1,12 @@
 import { getAnnotation } from 'annotationFileUtils';
-import { ANNOTATION_TARGET_PROPERTY, ANNOTATION_TARGET_TYPE_PROPERTY, VIEW_TYPE_PDF_ANNOTATOR } from './constants';
+import { ANNOTATION_TARGET_PROPERTY, VIEW_TYPE_PDF_ANNOTATOR } from './constants';
 import { DarkReaderType } from 'darkreader';
 import AnnotatorPlugin from 'main';
 import { Annotation, AnnotationTarget } from './types';
 import { FileView, Menu, MenuItem, TFile, WorkspaceLeaf } from 'obsidian';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { get_url_extension, wait } from 'utils';
+import { wait } from 'utils';
 import { DARK_READER_FIXES, shouldUseDarkMode } from './darkMode';
 import { resolveAnnotationTarget } from './targetResolver';
 
@@ -38,8 +38,11 @@ export default class AnnotatorView extends FileView {
 
     async getAnnotationTarget(file: TFile): Promise<AnnotationTarget> {
         const annotationTargetPropertyValue = this.plugin.getPropertyValue(ANNOTATION_TARGET_PROPERTY, file);
-        return resolveAnnotationTarget(annotationTargetPropertyValue, this.plugin.settings.customDefaultPath, {
-            resolveVaultFile: path => this.app.metadataCache.getFirstLinkpathDest(path, file.path)
+        return resolveAnnotationTarget(annotationTargetPropertyValue, {
+            resolveVaultFile: path => {
+                const target = this.app.vault.getAbstractFileByPath(path);
+                return target instanceof TFile ? target : null;
+            }
         });
     }
 
@@ -54,10 +57,6 @@ export default class AnnotatorView extends FileView {
             this.contentEl.removeClass('view-content');
             this.contentEl.style.height = '100%';
             this.annotationTarget = annotationTarget;
-            const annotationTargetType = String(
-                this.plugin.getPropertyValue(ANNOTATION_TARGET_TYPE_PROPERTY, file) ||
-                    get_url_extension(annotationTarget.url)
-            ).toLowerCase();
             const commonProps = {
                 containerEl: this.contentEl,
                 annotationFile: file.path,
@@ -66,16 +65,7 @@ export default class AnnotatorView extends FileView {
                 },
                 onDarkReadersUpdated: this.onDarkReadersUpdated.bind(this)
             };
-            if (annotationTargetType === 'pdf') {
-                ReactDOM.render(<this.plugin.PdfAnnotation pdf={annotationTarget} {...commonProps} />, this.contentEl);
-            } else if (annotationTargetType === 'epub') {
-                ReactDOM.render(
-                    <this.plugin.EpubAnnotation epub={annotationTarget} {...commonProps} />,
-                    this.contentEl
-                );
-            } else {
-                throw new Error('Annotator+ supports PDF and EPUB targets only.');
-            }
+            ReactDOM.render(<this.plugin.PdfAnnotation pdf={annotationTarget} {...commonProps} />, this.contentEl);
         } catch (error) {
             this.contentEl.empty();
             this.contentEl.createDiv({

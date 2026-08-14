@@ -4,7 +4,7 @@ Thank you for improving Annotator+. Bug reports, accessibility fixes, documentat
 
 ## Before opening an issue
 
-Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator+ version, operating system, target type, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
+Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator+ version, operating system, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
@@ -33,7 +33,7 @@ npm run release:package
 
 `npm run build` compiles the vendored Hypothesis source, removes development-only assets, and then builds `main.js` with all reader resources embedded. There is no frozen release bundle or second repository. `npm run quick-build` rebuilds the plugin around the existing generated Hypothesis assets and is intended only for local iteration.
 
-The current reader pins are PDF.js 6.2.108, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. Update one reader component at a time, preserve its license, and repeat both automated checks and the Obsidian PDF/EPUB smoke tests before changing a pin.
+The current reader pins are PDF.js 6.2.108, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. Update one reader component at a time, preserve its license, and repeat both automated checks and the Obsidian PDF smoke test before changing a pin.
 
 For local development, put the absolute destination plugin directory in `.vault_plugin_dir`, run `npm run dev`, and reload the plugin after a build.
 
@@ -41,8 +41,8 @@ For local development, put the absolute destination plugin directory in `.vault_
 
 - Branch from `main` and keep the change focused.
 - Add the smallest regression test that would fail without a non-trivial fix.
-- Preserve local-first behavior, input validation, keyboard access, and upstream copyright notices.
-- Run all applicable checks above and describe manual PDF/EPUB testing.
+- Preserve the vault-only PDF boundary, fail-closed resource routing, keyboard access, and upstream copyright notices.
+- Run all applicable checks above and describe manual PDF testing.
 - Do not commit `node_modules`, `main.js`, local settings, vault data, or private documents.
 
 By contributing, you agree that your contribution is licensed under [AGPL-3.0](LICENSE.TXT). Code derived from bundled projects remains subject to the notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

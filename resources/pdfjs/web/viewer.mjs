@@ -625,10 +625,10 @@ const defaultOptions = new Map([["allowedGlobalEvents", {
   value: false,
   kind: OptionKind.VIEWER + OptionKind.PREFERENCE
 }], ["enableAltTextModelDownload", {
-  value: true,
+  value: false,
   kind: OptionKind.VIEWER + OptionKind.PREFERENCE + OptionKind.EVENT_DISPATCH
 }], ["enableAutoLinking", {
-  value: true,
+  value: false,
   kind: OptionKind.VIEWER + OptionKind.PREFERENCE
 }], ["enableComment", {
   value: false,
@@ -637,7 +637,7 @@ const defaultOptions = new Map([["allowedGlobalEvents", {
   value: true,
   kind: OptionKind.VIEWER
 }], ...[], ["enableGuessAltText", {
-  value: true,
+  value: false,
   kind: OptionKind.VIEWER + OptionKind.PREFERENCE + OptionKind.EVENT_DISPATCH
 }], ["enableHighlightFloatingButton", {
   value: false,
@@ -661,7 +661,7 @@ const defaultOptions = new Map([["allowedGlobalEvents", {
   value: true,
   kind: OptionKind.VIEWER + OptionKind.PREFERENCE
 }], ["enableScripting", {
-  value: true,
+  value: false,
   kind: OptionKind.VIEWER + OptionKind.PREFERENCE
 }], ["enableSelectionRendering", {
   value: true,
@@ -964,7 +964,7 @@ const LinkTarget = {
   TOP: 4
 };
 class PDFLinkService {
-  externalLinkEnabled = true;
+  externalLinkEnabled = false;
   constructor({
     eventBus,
     externalLinkTarget = null,
@@ -19330,7 +19330,7 @@ const PDFViewerApplication = {
       this.pdfDocumentProperties?.setDocument(null);
       this.signaturePropertiesManager?.setDocument(null);
     }
-    this.pdfLinkService.externalLinkEnabled = true;
+    this.pdfLinkService.externalLinkEnabled = false;
     this.store = null;
     this.isInitialViewSet = false;
     this.url = "";

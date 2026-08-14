@@ -10,9 +10,7 @@ import {
 
 describe('getBundledResourcePath', () => {
     it('resolves the upgraded PDF viewer request to its bundled path', () => {
-        expect(getBundledResourcePath('https://via.hypothes.is/pdfjs/web/viewer.html')).toBe(
-            'pdfjs/web/viewer.html'
-        );
+        expect(getBundledResourcePath('https://via.hypothes.is/pdfjs/web/viewer.html')).toBe('pdfjs/web/viewer.html');
         expect(getBundledResourcePath('https://via.hypothes.is/pdfjs/build/pdf.worker.mjs')).toBe(
             'pdfjs/build/pdf.worker.mjs'
         );
@@ -34,14 +32,13 @@ describe('getBundledResourcePath', () => {
         resourceUrls.delete('test/resource.json');
     });
 
-    it('rewrites bundled CSS assets without changing external or inline URLs', () => {
-        const urls = new Map([
-            ['cdn.hypothes.is/hypothesis/build/styles/fonts/test.woff2', 'blob:font']
-        ]);
-        const css = '.a{src:url(fonts/test.woff2)}.b{src:url(data:font/woff2;base64,abc)}.c{src:url(https://example.com/x)}';
-        expect(
-            rewriteBundledCss(css, 'cdn.hypothes.is/hypothesis/build/styles/annotator.css', urls)
-        ).toBe('.a{src:url("blob:font")}.b{src:url(data:font/woff2;base64,abc)}.c{src:url(https://example.com/x)}');
+    it('rewrites bundled CSS assets and blocks missing or external URLs', () => {
+        const urls = new Map([['cdn.hypothes.is/hypothesis/build/styles/fonts/test.woff2', 'blob:font']]);
+        const css =
+            '.a{src:url(fonts/test.woff2)}.b{src:url(data:font/woff2;base64,abc)}.c{src:url(https://example.com/x)}';
+        expect(rewriteBundledCss(css, 'cdn.hypothes.is/hypothesis/build/styles/annotator.css', urls)).toBe(
+            '.a{src:url("blob:font")}.b{src:url(data:font/woff2;base64,abc)}.c{src:url("data:,")}'
+        );
     });
 
     it('replaces a dynamically injected bundled stylesheet and reports it loaded', async () => {

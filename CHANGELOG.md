@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-08-14
+
+- Made Annotator+ a PDF-only plugin for files stored inside the current Obsidian vault.
+- Restricted `annotation-target` to one exact vault-relative `.pdf` path; URLs, absolute paths, traversal, lists, and non-PDF files are rejected.
+- Removed EPUB support, external-file reads, remote-document fetching, their settings, dependencies, and bundled assets.
+- Added fail-closed resource routing, offline Content Security Policies, blocked external links, and disabled PDF JavaScript, auto-linking, and model downloads.
+- Preserved existing annotation blocks and the legacy `annotation-target-type` property without rewriting notes.
+- Included the previously reviewed PDF highlight flicker fix.
+
 ## 0.4.8 — 2026-08-14
 
 - Removed PDF Print and its reader capability.
