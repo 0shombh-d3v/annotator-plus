@@ -24,6 +24,16 @@ describe('dark mode', () => {
         });
     });
 
+    test('removes retired path and EPUB settings', () => {
+        expect(
+            migrateDarkModeSettings({
+                darkMode: 'dark',
+                customDefaultPath: '/tmp',
+                epubSettings: { flow: 'paginated' }
+            })
+        ).toEqual({ settings: { darkMode: 'dark' }, migrated: true });
+    });
+
     test('keeps the highlight layer outside the PDF canvas inversion', () => {
         expect(DARK_READER_FIXES.invert).toEqual(['.canvasWrapper > canvas']);
         expect(DARK_READER_FIXES.css).toContain('mix-blend-mode: normal');

@@ -13,7 +13,7 @@ jest.mock(
 );
 
 import { TFile } from 'obsidian';
-import { writeAnnotation } from '../src/annotationFileUtils';
+import { getAnnotation, writeAnnotation } from '../src/annotationFileUtils';
 import { loadAnnotationsAtUriFromFileText } from '../src/annotationUtils';
 import { Annotation } from '../src/types';
 
@@ -54,4 +54,11 @@ test('concurrent annotation writes are serialized without losing either note', a
         writeAnnotation(annotation('second'), plugin as never, 'notes.md')
     ]);
     expect(loadAnnotationsAtUriFromFileText(null, text).rows.map(row => row.id)).toEqual(['first', 'second']);
+});
+
+test('invalid annotation links do not read or select the first stored annotation', async () => {
+    const file = new (TFile as unknown as { new (path: string): TFile })('notes.md');
+    const read = jest.fn();
+    await expect(getAnnotation(null, file, { read } as never)).resolves.toBeNull();
+    expect(read).not.toHaveBeenCalled();
 });

@@ -204,7 +204,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     onunload() {
         this.unloadResources();
         this.styleObserver.unwatch();
-        this.styleObserver.listerners = null;
         this.styleObserver = null;
         AnnotatorPlugin.instance = null;
 
@@ -215,12 +214,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async loadSettings() {
         const { settings, migrated } = migrateDarkModeSettings((await this.loadData()) || {});
-        const saved = { ...settings } as Partial<AnnotatorSettings> & {
-            customDefaultPath?: unknown;
-            epubSettings?: unknown;
-        };
-        delete saved.customDefaultPath;
-        delete saved.epubSettings;
+        const saved = settings as Partial<AnnotatorSettings>;
         this.settings = {
             ...DEFAULT_SETTINGS,
             ...saved,

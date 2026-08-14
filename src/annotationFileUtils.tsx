@@ -4,6 +4,7 @@ import type AnnotatorPlugin from './main';
 import {
     deleteAnnotationFromAnnotationFileString,
     getAnnotationFromFileContent,
+    isValidAnnotationId,
     loadAnnotationsAtUriFromFileText,
     writeAnnotationToAnnotationFileString
 } from './annotationUtils';
@@ -21,7 +22,8 @@ function serializeFileUpdate<T>(path: string, update: () => Promise<T>): Promise
     return current;
 }
 
-export async function getAnnotation(annotationId: string, file: TFile, vault: Vault): Promise<Annotation | null> {
+export async function getAnnotation(annotationId: string | null, file: TFile, vault: Vault): Promise<Annotation | null> {
+    if (!isValidAnnotationId(annotationId)) return null;
     const text = await vault.read(file);
     return getAnnotationFromFileContent(annotationId, text);
 }
@@ -59,7 +61,7 @@ export async function loadAnnotations(
 }
 
 export async function deleteAnnotation(
-    annotationId,
+    annotationId: string,
     vault: Vault,
     annotationFilePath: string
 ): Promise<{

@@ -30,11 +30,17 @@ export function migrateDarkModeSettings(settings: Record<string, unknown>): {
 } {
     const currentSettings = { ...settings };
     delete currentSettings.deafultDarkMode;
+    delete currentSettings.customDefaultPath;
+    delete currentSettings.epubSettings;
     const validPreference = ['follow-obsidian', 'dark', 'light'].includes(currentSettings.darkMode as string);
     const darkMode = validPreference ? (currentSettings.darkMode as DarkModePreference) : 'follow-obsidian';
 
     return {
         settings: { ...currentSettings, darkMode },
-        migrated: 'deafultDarkMode' in settings || !validPreference
+        migrated:
+            'deafultDarkMode' in settings ||
+            'customDefaultPath' in settings ||
+            'epubSettings' in settings ||
+            !validPreference
     };
 }

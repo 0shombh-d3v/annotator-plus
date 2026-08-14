@@ -105,6 +105,7 @@ export default class SourceViewObserver {
             'cm-hmd-internal-link cm-link-alias'
         ) as HTMLCollectionOf<HTMLAnchorElement>;
         const length = tempSourceLinks.length;
+        if (length === 0) return;
         const sourceLinks = new Array<HTMLAnchorElement>();
         if (length > 1) {
             let prev = tempSourceLinks[0];
@@ -135,7 +136,8 @@ export default class SourceViewObserver {
 
         for (let i = 0; i < sourceLinks.length; i++) {
             const tempLink = linkHref[i];
-            if (typeof tempLink != 'string') continue;
+            const sourceLink = sourceLinks[i];
+            if (typeof tempLink != 'string' || !sourceLink) continue;
 
             // substring used remove [[ from internal link
             // because iOS doesn't support positive lookback regex
@@ -144,8 +146,8 @@ export default class SourceViewObserver {
             const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(parsedLink.path, filePath);
 
             if (file && this.plugin.isAnnotationFile(file) && annotationid) {
-                this.addClickListener(sourceLinks[i], annotationid, file, false);
-                this.observer.observe(sourceLinks[i].parentNode as Node, observeConfig);
+                this.addClickListener(sourceLink, annotationid, file, false);
+                this.observer.observe(sourceLink.parentNode as Node, observeConfig);
             }
         }
     }
@@ -166,8 +168,12 @@ export default class SourceViewObserver {
 
     linkOnFocus(element: Element) {
         let count = 0;
-        const linkText = element.textContent;
-        while (element.className && element.className.indexOf('cm-formatting-link cm-formatting-link-end') == -1) {
+        const linkText = element.textContent || '';
+        while (
+            element &&
+            element.className &&
+            element.className.indexOf('cm-formatting-link cm-formatting-link-end') == -1
+        ) {
             if (this.targetClassNameSet.has(element.className)) count++;
             element = element.nextElementSibling;
         }
@@ -199,10 +205,9 @@ export default class SourceViewObserver {
 
         this.tmpTargetIndex += linkInfo.count;
 
-        this.addClickListener(uniqueTarget, annotationid, file, false);
-
         this.tmpLinkInfos.splice(0, 1);
         if (this.tmpLinkInfos.length == 0) this.resetTmpLinkInfo();
+        if (uniqueTarget && annotationid && file) this.addClickListener(uniqueTarget, annotationid, file, false);
     }
 
     resetTmpLinkInfo() {
