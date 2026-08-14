@@ -11,5 +11,5 @@
 - Kept annotation indicators stable through zoom and rotation and made them clickable and keyboard-accessible.
 - Bundled and pinned the PDF.js, Hypothesis, and Dark Reader stacks with fail-closed offline routing and Content Security Policies.
 - Disabled PDF JavaScript, external navigation, external auto-links, model downloads, editing, printing, saving, and presentation mode.
-- Added deterministic builds, full first-party and vendored test suites, release verification, checksums, CI, security guidance, and third-party attribution.
+- Added deterministic release packaging, full first-party and vendored test suites, release verification, checksums, CI, security guidance, and third-party attribution.
 - Preserved the original Obsidian Annotator Git history, contributor record, and AGPL-3.0 license.
