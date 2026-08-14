@@ -81,6 +81,18 @@ if (!pdf.includes('pdfjsVersion = 6.2.108')) {
   throw new Error('Release bundle does not contain the pinned PDF.js 6.2.108 build');
 }
 
+const pdfViewer = await resources.file('pdfjs/web/viewer.mjs').async('string');
+if (!pdfViewer.includes('const annotationEditorMode = AnnotationEditorType.DISABLE;')) {
+  throw new Error('PDF.js editing tools must remain disabled in the Annotator+ reader');
+}
+for (const marker of [
+  'print: document.getElementById("printButton")',
+  'download: document.getElementById("downloadButton")',
+  'toggleButton: document.getElementById("secondaryToolbarToggleButton")'
+]) {
+  if (!pdfViewer.includes(marker)) throw new Error(`PDF reader is missing ${marker}`);
+}
+
 const viewer = await resources.file('pdfjs/web/viewer.html').async('string');
 for (const marker of [
   'js-hypothesis-config',

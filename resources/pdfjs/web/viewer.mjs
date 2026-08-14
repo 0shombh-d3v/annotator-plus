@@ -18887,7 +18887,7 @@ const PDFViewerApplication = {
     });
     const container = appConfig.mainContainer,
       viewer = appConfig.viewerContainer;
-    const annotationEditorMode = AppOptions.get("annotationEditorMode");
+    const annotationEditorMode = AnnotationEditorType.DISABLE;
     const hasForcedColors = AppOptions.get("forcePageColors") || window.matchMedia("(forced-colors: active)").matches;
     const pageColors = hasForcedColors ? {
       background: AppOptions.get("pageColorsBackground"),

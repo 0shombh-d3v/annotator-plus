@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.6 — 2026-08-14
+
+- Removed PDF.js's competing Highlight, Text, Draw, and Image editing controls from the reader toolbar.
+- Kept PDF Print, Save, and Tools actions available.
+
 ## 0.4.5 — 2026-08-14
 
 - Simplified the local annotation sidebar to its useful search and sorting controls.
