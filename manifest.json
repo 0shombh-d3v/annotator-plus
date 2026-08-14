@@ -1,9 +1,9 @@
 {
 	"id": "annotator-plus",
 	"name": "Annotator+",
-	"version": "0.4.8",
+	"version": "0.5.0",
 	"minAppVersion": "1.12.3",
-	"description": "Private, local-first PDF and EPUB annotation with visible note indicators.",
+	"description": "Offline, vault-local PDF annotation with visible note indicators.",
 	"author": "0shombh-d3v",
 	"authorUrl": "https://github.com/0shombh-d3v",
 	"isDesktopOnly": true

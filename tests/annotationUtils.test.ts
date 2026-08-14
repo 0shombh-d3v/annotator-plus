@@ -9,11 +9,6 @@ const testAnnotatorSettings: IHasAnnotatorSettings = {
         darkMode: 'follow-obsidian',
         darkReaderSettings: null,
         debugLogging: false,
-        customDefaultPath: null,
-        epubSettings: {
-            readingMode: 'scroll',
-            fontSize: 16
-        },
         annotationMarkdownSettings: {
             annotationModeByDefault: true,
             includePostfix: true,

@@ -1,8 +1,8 @@
 {
-  "scripts/annotator.bundle.js": "scripts/annotator.bundle.js?77b6af",
-  "scripts/annotator.bundle.js.map": "scripts/annotator.bundle.js.map?b4e150",
-  "scripts/sidebar.bundle.js": "scripts/sidebar.bundle.js?583a2e",
-  "scripts/sidebar.bundle.js.map": "scripts/sidebar.bundle.js.map?8036ee",
+  "scripts/annotator.bundle.js": "scripts/annotator.bundle.js?23d180",
+  "scripts/annotator.bundle.js.map": "scripts/annotator.bundle.js.map?90746d",
+  "scripts/sidebar.bundle.js": "scripts/sidebar.bundle.js?b71ebf",
+  "scripts/sidebar.bundle.js.map": "scripts/sidebar.bundle.js.map?8f95bd",
   "scripts/ui-playground.bundle.js": "scripts/ui-playground.bundle.js?bf10cf",
   "scripts/ui-playground.bundle.js.map": "scripts/ui-playground.bundle.js.map?659eb2",
   "styles/annotator.css": "styles/annotator.css?3cfc6a",

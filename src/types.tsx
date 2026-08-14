@@ -105,20 +105,11 @@ export type GenericAnnotationProps = {
     onDarkReadersUpdated: (darkReaderReferences: Set<WeakRef<DarkReaderType>>) => Promise<void>;
 };
 
-export type AnnotationTarget =
-    | { kind: 'vault'; path: string; url: string }
-    | { kind: 'file'; path: string; url: string }
-    | { kind: 'https'; url: string };
+export type AnnotationTarget = { kind: 'vault'; path: string; url: string };
 
 export type PdfAnnotationProps = GenericAnnotationProps & {
     pdf: AnnotationTarget;
 };
-
-export type EpubAnnotationProps = GenericAnnotationProps & {
-    epub: AnnotationTarget;
-};
-
-export type SpecificAnnotationProps = PdfAnnotationProps | EpubAnnotationProps;
 
 export type LocalIFrameProps = {
     onIframePatch: (iframe: HTMLIFrameElement) => Promise<void>;

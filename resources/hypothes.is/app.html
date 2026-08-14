@@ -2,14 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src blob: 'sha256-bMI8+uWjjmaPVFlRb5DExAZ0DqOdHzlHyh3WrP/VNwo='; style-src blob: 'unsafe-inline'; img-src blob: data:; font-src blob: data: app:; connect-src 'none'; worker-src blob: data:; child-src blob: app:; frame-src blob: app:; media-src blob: data:; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Annotator+</title>
   </head>
   <body>
     <hypothesis-app></hypothesis-app>
-    <script class="js-hypothesis-config" type="application/json">
-      {"apiUrl":"https://hypothes.is/api/","assetRoot":"https://cdn.hypothes.is/hypothesis/","authDomain":"partner.org","oauthClientId":"annotator-plus","rpcAllowedOrigins":["app://obsidian.md"],"websocketUrl":"wss://h-websocket.hypothes.is/ws"}
-    </script>
-    <script src="https://cdn.hypothes.is/hypothesis/build/boot.js"></script>
+    <script src="https://hypothes.is/annotator-plus-app-bootstrap.js"></script>
   </body>
 </html>

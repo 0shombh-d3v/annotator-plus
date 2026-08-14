@@ -39,9 +39,9 @@ export function rewriteBundledCss(
         try {
             const path = getBundledResourcePath(new URL(reference, stylesheetUrl));
             const bundledUrl = urls.get(path);
-            return bundledUrl ? `url("${bundledUrl}")` : match;
+            return `url("${bundledUrl || 'data:,'}")`;
         } catch {
-            return match;
+            return 'url("data:,")';
         }
     });
 }

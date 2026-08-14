@@ -20,6 +20,7 @@ describe('#parseJsonConfig', () => {
     }
 
     sandbox.restore();
+    delete window.hypothesisConfig;
   });
 
   context('when there are no JSON scripts', () => {
@@ -131,6 +132,18 @@ describe('#parseJsonConfig', () => {
 
     it('overrides settings from earlier in the page with later ones', () => {
       assert.equal(parseJsonConfig(document).foo, 'third');
+    });
+  });
+
+  context('when window.hypothesisConfig is present', () => {
+    it('uses function settings over JSON settings', () => {
+      appendJSHypothesisConfig(document, '{"foo": "JSON"}');
+      window.hypothesisConfig = () => ({ foo: 'function', bar: 'BAR' });
+
+      assert.deepEqual(parseJsonConfig(document), {
+        foo: 'function',
+        bar: 'BAR',
+      });
     });
   });
 });

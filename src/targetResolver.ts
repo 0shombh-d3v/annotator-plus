@@ -1,6 +1,4 @@
 import { normalizePath, TFile } from 'obsidian';
-import { fileURLToPath } from 'url';
-import { promises as fs } from 'fs';
 import { AnnotationTarget } from './types';
 
 export type TargetResolverContext = {
@@ -9,49 +7,42 @@ export type TargetResolverContext = {
 
 export async function resolveAnnotationTarget(
     rawTarget: unknown,
-    fallbackPrefix: string,
     context: TargetResolverContext
 ): Promise<AnnotationTarget> {
-    const value = Array.isArray(rawTarget) ? rawTarget[0] : rawTarget;
-    if (typeof value !== 'string' || !value.trim()) throw new Error('The annotation-target property is empty.');
-
-    const target = value.trim();
-    let parsed: URL | null = null;
-    try {
-        parsed = new URL(target);
-    } catch {
-        // A value without a URL scheme is a vault path.
+    if (Array.isArray(rawTarget)) {
+        throw new Error('The annotation-target property must be one vault-relative PDF path.');
+    }
+    if (typeof rawTarget !== 'string' || !rawTarget.trim()) {
+        throw new Error('The annotation-target property is empty.');
     }
 
-    if (parsed) {
-        if (parsed.protocol === 'https:') return { kind: 'https', url: parsed.href };
-        if (parsed.protocol === 'file:') {
-            const path = await fs.realpath(fileURLToPath(parsed));
-            if (!(await fs.stat(path)).isFile()) throw new Error('The annotation target is not a file.');
-            return { kind: 'file', path, url: parsed.href };
-        }
-        throw new Error('Annotator+ supports only vault paths, file:// URLs, and HTTPS URLs.');
+    const target = rawTarget.trim();
+    const segments = target.split('/');
+    if (
+        target.startsWith('/') ||
+        target.includes('\\') ||
+        /^[a-z][a-z\d+.-]*:/i.test(target) ||
+        segments.some(segment => !segment || segment === '.' || segment === '..')
+    ) {
+        throw new Error('The annotation-target property must be a vault-relative PDF path.');
     }
 
-    for (const candidate of [target, `${fallbackPrefix || ''}${target}`]) {
-        const file = context.resolveVaultFile(candidate);
-        if (file instanceof TFile) {
-            const path = normalizePath(file.path);
-            const encodedPath = path.split('/').map(encodeURIComponent).join('/');
-            return { kind: 'vault', path, url: `vault:/${encodedPath}` };
-        }
+    const path = normalizePath(target);
+    if (!path.toLowerCase().endsWith('.pdf')) {
+        throw new Error('Annotator+ supports local PDF files only.');
     }
 
-    throw new Error(`Could not find annotation target “${target}” in the vault.`);
+    const file = context.resolveVaultFile(path);
+    if (!(file instanceof TFile) || normalizePath(file.path) !== path) {
+        throw new Error(`Could not find PDF “${path}” in the vault.`);
+    }
+
+    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+    return { kind: 'vault', path, url: `vault:/${encodedPath}` };
 }
 
 export function targetMatchesRequest(target: AnnotationTarget, requestUrl: URL): boolean {
-    if (target.kind === 'https') {
-        const expected = new URL(target.url);
-        const requested = new URL(requestUrl.href);
-        expected.hash = '';
-        requested.hash = '';
-        return expected.href === requested.href;
-    }
-    return requestUrl.href === target.url;
+    const requested = new URL(requestUrl.href);
+    requested.hash = '';
+    return requested.href === target.url;
 }

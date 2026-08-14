@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible Annotator+ problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach private PDFs, vault notes, or personal paths.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Annotator+, Obsidian, and operating-system versions.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use a public or synthetic PDF where possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant console errors
+      render: shell

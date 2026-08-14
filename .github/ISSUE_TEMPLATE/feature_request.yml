@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a focused improvement that fits the offline, vault-local PDF scope.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What PDF annotation workflow is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Product scope
+      options:
+        - label: This keeps PDFs vault-local and does not require network access.
+          required: true

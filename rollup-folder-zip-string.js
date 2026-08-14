@@ -91,7 +91,10 @@ const getZipOfFolder = async (dir) => {
     let addPath = slash(path.relative(dir, filePath)); // use this instead if you don't want the source folder itself in the zip
     let ext = filePath.split('.').pop().trim();
     
-    const data = minifiableFormats.has(ext) ? await minify(filePath) : fs.readFileSync(filePath);
+    let data = minifiableFormats.has(ext) ? await minify(filePath) : fs.readFileSync(filePath);
+    if (["css", "js", "mjs"].includes(ext)) {
+      data = data.toString().replace(/(?:\/\/[#@]|\/\*#)\s*sourceMappingURL=.*?(?:\*\/)?\s*$/gm, '');
+    }
 
     let stat = fs.lstatSync(filePath);
 

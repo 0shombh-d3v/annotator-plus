@@ -35,9 +35,12 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 baseSrc="https://via.hypothes.is/pdfjs/web/viewer.html"
                 {...props}
                 onload={async iframe => {
-                    const { application: PDFViewerApplication, container, document, viewer } = await waitForPdfViewer(
-                        iframe
-                    );
+                    const {
+                        application: PDFViewerApplication,
+                        container,
+                        document,
+                        viewer
+                    } = await waitForPdfViewer(iframe);
 
                     let startX = 0,
                         startY = 0;

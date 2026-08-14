@@ -1,3 +1,5 @@
+import { configFuncSettingsFrom } from '../annotator/config/config-func-settings-from';
+
 /**
  * Return a parsed `js-hypothesis-config` object from the document, or `{}`.
  *
@@ -33,6 +35,10 @@ export function parseJsonConfig(document: Document | Element) {
     }
     Object.assign(config, settings);
   }
+
+  const window_ =
+    (document as Document).defaultView ?? document.ownerDocument?.defaultView;
+  if (window_) Object.assign(config, configFuncSettingsFrom(window_));
 
   return config;
 }

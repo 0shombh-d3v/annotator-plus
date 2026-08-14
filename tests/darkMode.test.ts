@@ -11,8 +11,8 @@ describe('dark mode', () => {
     });
 
     test.each([true, false])('migrates legacy dark mode %s to Follow Obsidian', legacyValue => {
-        expect(migrateDarkModeSettings({ deafultDarkMode: legacyValue, customDefaultPath: 'PDFs' })).toEqual({
-            settings: { darkMode: 'follow-obsidian', customDefaultPath: 'PDFs' },
+        expect(migrateDarkModeSettings({ deafultDarkMode: legacyValue, debugLogging: true })).toEqual({
+            settings: { darkMode: 'follow-obsidian', debugLogging: true },
             migrated: true
         });
     });

@@ -16,8 +16,7 @@ import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
 import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from './constants';
-import defineEpubAnnotation from './defineEpubAnnotation';
-import { Annotation, PdfAnnotationProps, EpubAnnotationProps } from './types';
+import { Annotation, PdfAnnotationProps } from './types';
 import * as codeMirror from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
 import AnnotatorView from 'annotatorView';
@@ -39,8 +38,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     // All these initialized in onloadImpl(), instead of constructor
     // @ts-ignore
     PdfAnnotation: (props: PdfAnnotationProps) => JSX.Element;
-    // @ts-ignore
-    EpubAnnotation: (props: EpubAnnotationProps) => JSX.Element;
     // Used to store text of hypothesis highlight during drag-and-drop event
     dragData: null | { annotationFilePath: string; annotationId: string; annotationText: string } = null;
 
@@ -73,7 +70,6 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         await this.loadResources();
         this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
-        this.EpubAnnotation = defineEpubAnnotation(this.app.vault, this);
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
@@ -219,12 +215,16 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async loadSettings() {
         const { settings, migrated } = migrateDarkModeSettings((await this.loadData()) || {});
-        const saved = settings as Partial<AnnotatorSettings>;
+        const saved = { ...settings } as Partial<AnnotatorSettings> & {
+            customDefaultPath?: unknown;
+            epubSettings?: unknown;
+        };
+        delete saved.customDefaultPath;
+        delete saved.epubSettings;
         this.settings = {
             ...DEFAULT_SETTINGS,
             ...saved,
             darkReaderSettings: { ...DEFAULT_SETTINGS.darkReaderSettings, ...saved.darkReaderSettings },
-            epubSettings: { ...DEFAULT_SETTINGS.epubSettings, ...saved.epubSettings },
             annotationMarkdownSettings: {
                 ...DEFAULT_SETTINGS.annotationMarkdownSettings,
                 ...saved.annotationMarkdownSettings
