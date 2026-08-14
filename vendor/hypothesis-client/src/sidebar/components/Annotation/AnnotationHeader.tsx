@@ -4,11 +4,7 @@ import {
   AnnotationTimestamps,
   AnnotationUser,
 } from '@hypothesis/annotation-ui';
-import {
-  LinkButton,
-  HighlightIcon,
-  LockFilledIcon,
-} from '@hypothesis/frontend-shared';
+import { LinkButton, HighlightIcon } from '@hypothesis/frontend-shared';
 import { useMemo } from 'preact/hooks';
 
 import type { Annotation } from '../../../types/api';
@@ -23,7 +19,6 @@ import {
   annotationAuthorLink,
   annotationDisplayName,
 } from '../../helpers/annotation-user';
-import { isPrivate } from '../../helpers/permissions';
 import { withServices } from '../../service-context';
 import { useSidebarStore } from '../../store';
 
@@ -99,12 +94,6 @@ function AnnotationHeader({
   return (
     <header>
       <div className="flex gap-x-1 items-center flex-wrap-reverse">
-        {isPrivate(annotation.permissions) && !isEditing && (
-          <LockFilledIcon
-            className="w-[12px] h-[12px]"
-            title="This annotation is visible only to you"
-          />
-        )}
         <AnnotationUser authorLink={authorLink} displayName={authorName} />
         {replyCount > 0 && isCollapsedReply && (
           <LinkButton

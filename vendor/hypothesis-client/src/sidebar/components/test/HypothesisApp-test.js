@@ -8,7 +8,6 @@ describe('HypothesisApp', () => {
   let fakeStore = null;
   let fakeAuth = null;
   let fakeFrameSync;
-  let fakeConfirm;
   let fakeServiceConfig = null;
   let fakeSession = null;
   let fakeShouldAutoDisplayTutorial = null;
@@ -40,13 +39,6 @@ describe('HypothesisApp', () => {
       clearGroups: sinon.stub(),
       closeSidebarPanel: sinon.stub(),
       openSidebarPanel: sinon.stub(),
-      // draft store
-      countDrafts: sinon.stub().returns(0),
-      discardAllDrafts: sinon.stub(),
-      unsavedAnnotations: sinon.stub().returns([]),
-      removeAnnotations: sinon.stub(),
-
-      hasFetchedProfile: sinon.stub().returns(true),
       profile: sinon.stub().returns({
         userid: null,
         preferences: {
@@ -54,8 +46,6 @@ describe('HypothesisApp', () => {
         },
       }),
       route: sinon.stub().returns('sidebar'),
-
-      getLink: sinon.stub(),
     };
 
     fakeAuth = {
@@ -64,7 +54,6 @@ describe('HypothesisApp', () => {
 
     fakeSession = {
       load: sinon.stub().returns(Promise.resolve({ userid: null })),
-      logout: sinon.stub(),
       reload: sinon.stub().returns(Promise.resolve({ userid: null })),
     };
 
@@ -79,13 +68,10 @@ describe('HypothesisApp', () => {
       notice: sinon.stub(),
     };
 
-    fakeConfirm = sinon.stub().resolves(false);
-
     fakeIsThirdPartyService = sinon.stub().returns(false);
 
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
-      '@hypothesis/frontend-shared': { confirm: fakeConfirm },
       '../config/service-config': { serviceConfig: fakeServiceConfig },
       '../store': { useSidebarStore: () => fakeStore },
       '../helpers/session': {
@@ -192,7 +178,7 @@ describe('HypothesisApp', () => {
   function addCommonLoginTests(action) {
     const clickButton = wrapper =>
       wrapper
-        .find('TopBar')
+        .find('SidebarView')
         .prop(action === 'login' ? 'onLogin' : 'onSignUp')();
 
     it('clears groups', async () => {
@@ -229,7 +215,8 @@ describe('HypothesisApp', () => {
   }
 
   describe('"Sign up" action', () => {
-    const clickSignUp = wrapper => wrapper.find('TopBar').props().onSignUp();
+    const clickSignUp = wrapper =>
+      wrapper.find('SidebarView').props().onSignUp();
 
     addCommonLoginTests('signup');
 
@@ -253,7 +240,7 @@ describe('HypothesisApp', () => {
   });
 
   describe('"Log in" action', () => {
-    const clickLogIn = wrapper => wrapper.find('TopBar').props().onLogin();
+    const clickLogIn = wrapper => wrapper.find('SidebarView').props().onLogin();
 
     addCommonLoginTests('login');
 
@@ -270,130 +257,6 @@ describe('HypothesisApp', () => {
       assert.isTrue(
         fakeFrameSync.notifyHost.calledWithExactly('loginRequested'),
       );
-    });
-  });
-
-  describe('"Log out" action', () => {
-    beforeEach(() => {
-      fakeConfirm.resolves(true);
-    });
-
-    const clickLogOut = async wrapper => {
-      await wrapper.find('TopBar').props().onLogout();
-    };
-
-    // Tests used by both the first and third-party account scenarios.
-    function addCommonLogoutTests() {
-      // nb. Slightly different messages are shown depending on the draft count.
-      [1, 2].forEach(draftCount => {
-        it('prompts the user if there are drafts', async () => {
-          fakeStore.countDrafts.returns(draftCount);
-
-          const wrapper = createComponent();
-          await clickLogOut(wrapper);
-
-          assert.equal(fakeConfirm.callCount, 1);
-        });
-      });
-
-      it('clears groups', async () => {
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-
-        assert.called(fakeStore.clearGroups);
-      });
-
-      it('removes unsaved annotations', async () => {
-        fakeStore.unsavedAnnotations = sinon
-          .stub()
-          .returns(['draftOne', 'draftTwo', 'draftThree']);
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-
-        assert.calledWith(fakeStore.removeAnnotations, [
-          'draftOne',
-          'draftTwo',
-          'draftThree',
-        ]);
-      });
-
-      it('discards drafts', async () => {
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-
-        assert(fakeStore.discardAllDrafts.calledOnce);
-      });
-
-      it('does not remove unsaved annotations if the user cancels the prompt', async () => {
-        const wrapper = createComponent();
-        fakeStore.countDrafts.returns(1);
-        fakeConfirm.resolves(false);
-
-        await clickLogOut(wrapper);
-
-        assert.notCalled(fakeStore.removeAnnotations);
-      });
-
-      it('does not discard drafts if the user cancels the prompt', async () => {
-        const wrapper = createComponent();
-        fakeStore.countDrafts.returns(1);
-        fakeConfirm.resolves(false);
-
-        await clickLogOut(wrapper);
-
-        assert(fakeStore.discardAllDrafts.notCalled);
-      });
-
-      it('does not prompt if there are no drafts', async () => {
-        const wrapper = createComponent();
-        fakeStore.countDrafts.returns(0);
-
-        await clickLogOut(wrapper);
-
-        assert.notCalled(fakeConfirm);
-      });
-    }
-
-    context('when no third-party service is in use', () => {
-      addCommonLogoutTests();
-
-      it('calls session.logout()', async () => {
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-        assert.called(fakeSession.logout);
-      });
-    });
-
-    context('when a third-party service is in use', () => {
-      beforeEach(() => {
-        fakeServiceConfig.returns({});
-      });
-
-      addCommonLogoutTests();
-
-      it('sends "logoutRequested"', async () => {
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-
-        assert.calledOnce(fakeFrameSync.notifyHost);
-        assert.calledWithExactly(fakeFrameSync.notifyHost, 'logoutRequested');
-      });
-
-      it('does not send "logoutRequested" if the user cancels the prompt', async () => {
-        fakeStore.countDrafts.returns(1);
-        fakeConfirm.returns(false);
-
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-
-        assert.notCalled(fakeFrameSync.notifyHost);
-      });
-
-      it('does not call session.logout()', async () => {
-        const wrapper = createComponent();
-        await clickLogOut(wrapper);
-        assert.notCalled(fakeSession.logout);
-      });
     });
   });
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.5 — 2026-08-14
+
+- Simplified the local annotation sidebar to its useful search and sorting controls.
+- Removed the irrelevant group selector, account menu, privacy lock badges, and sharing dropdown; editing now uses plain **Save** and **Cancel** actions.
+- Kept annotation privacy and vault-backed storage unchanged.
+
 ## 0.4.4 — 2026-08-14
 
 - Corrected the display branding to **Annotator+**. The repository and plugin ID remain `annotator-plus`.

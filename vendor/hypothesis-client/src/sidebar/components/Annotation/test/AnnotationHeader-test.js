@@ -15,7 +15,6 @@ describe('AnnotationHeader', () => {
   let fakeIsHighlight;
   let fakeIsReply;
   let fakeHasBeenEdited;
-  let fakeIsPrivate;
   let fakeSettings;
   let fakeStore;
 
@@ -51,7 +50,6 @@ describe('AnnotationHeader', () => {
     fakeIsHighlight = sinon.stub().returns(false);
     fakeIsReply = sinon.stub().returns(false);
     fakeHasBeenEdited = sinon.stub().returns(false);
-    fakeIsPrivate = sinon.stub();
 
     fakeSettings = { usernameUrl: 'http://foo.bar/' };
 
@@ -85,9 +83,6 @@ describe('AnnotationHeader', () => {
         annotationAuthorLink: fakeAnnotationAuthorLink,
         annotationDisplayName: fakeAnnotationDisplayName,
       },
-      '../../helpers/permissions': {
-        isPrivate: fakeIsPrivate,
-      },
       '@hypothesis/annotation-ui': { AnnotationTimestamps: () => null },
     });
   });
@@ -96,29 +91,11 @@ describe('AnnotationHeader', () => {
     $imports.$restore();
   });
 
-  describe('only me icon', () => {
-    it('should render an "Only Me" icon if the annotation is private', () => {
-      fakeIsPrivate.returns(true);
-
+  describe('privacy status', () => {
+    it('does not render a redundant lock icon', () => {
       const wrapper = createAnnotationHeader();
-
-      assert.isTrue(wrapper.find('LockFilledIcon').exists());
-    });
-
-    it('should not render an "Only Me" icon if the annotation is being edited', () => {
-      fakeIsPrivate.returns(true);
-
-      const wrapper = createAnnotationHeader({ isEditing: true });
 
       assert.isFalse(wrapper.find('LockFilledIcon').exists());
-    });
-
-    it('should not render an "Only Me" icon if the annotation is not private', () => {
-      fakeIsPrivate.returns(false);
-
-      const wrapper = createAnnotationHeader();
-
-      assert.isFalse(wrapper.find('Icon').filter({ name: 'lock' }).exists());
     });
   });
 

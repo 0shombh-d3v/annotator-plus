@@ -348,53 +348,6 @@ describe('AnnotationEditor', () => {
           wrapper.find('AnnotationPublishControl').props().isDisabled,
         );
       });
-
-      context('privacy changed in publish control', () => {
-        it("updates the draft's privacy when set to private", () => {
-          const draft = fixtures.defaultDraft();
-          draft.isPrivate = false;
-          const wrapper = createComponent({ draft });
-
-          wrapper.find('AnnotationPublishControl').props().onSetPrivate(true);
-
-          const call = fakeStore.createDraft.getCall(0);
-
-          assert.calledOnce(fakeStore.createDraft);
-          assert.isTrue(call.args[1].isPrivate);
-        });
-
-        it("updates the draft's privacy when set to shared", () => {
-          const wrapper = createComponent();
-
-          wrapper.find('AnnotationPublishControl').props().onSetPrivate(false);
-
-          const call = fakeStore.createDraft.getCall(0);
-
-          assert.calledOnce(fakeStore.createDraft);
-          assert.isFalse(call.args[1].isPrivate);
-        });
-
-        it('updates privacy default setting', () => {
-          const wrapper = createComponent();
-
-          wrapper.find('AnnotationPublishControl').props().onSetPrivate(false);
-
-          assert.calledOnce(fakeStore.setDefault);
-          assert.calledWith(
-            fakeStore.setDefault,
-            'annotationPrivacy',
-            'shared',
-          );
-        });
-
-        it('does not update privacy default if annotation is a reply', () => {
-          const wrapper = createComponent({ annotation: fixtures.newReply() });
-
-          wrapper.find('AnnotationPublishControl').props().onSetPrivate(false);
-
-          assert.notCalled(fakeStore.setDefault);
-        });
-      });
     });
   });
 

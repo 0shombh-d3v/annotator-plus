@@ -1,4 +1,3 @@
-import { confirm } from '@hypothesis/frontend-shared';
 import classnames from 'classnames';
 import { useEffect, useMemo } from 'preact/hooks';
 
@@ -39,7 +38,7 @@ export type HypothesisAppProps = {
 /**
  * The root component for the Hypothesis client.
  *
- * This handles login/logout actions and renders the top navigation bar
+ * This handles login actions and renders the top navigation bar
  * and content appropriate for the current route.
  */
 function HypothesisApp({
@@ -100,47 +99,6 @@ function HypothesisApp({
     await loginOrSignUp('signup');
   };
 
-  const promptToLogout = async () => {
-    const drafts = store.countDrafts();
-    if (drafts === 0) {
-      return true;
-    }
-
-    let message = '';
-    if (drafts === 1) {
-      message =
-        'You have an unsaved annotation.\n' +
-        'Do you really want to discard this draft?';
-    } else if (drafts > 1) {
-      message =
-        'You have ' +
-        drafts +
-        ' unsaved annotations.\n' +
-        'Do you really want to discard these drafts?';
-    }
-    return confirm({
-      title: 'Discard drafts?',
-      message,
-      confirmAction: 'Discard',
-    });
-  };
-
-  const logout = async () => {
-    if (!(await promptToLogout())) {
-      return;
-    }
-    store.clearGroups();
-    store.removeAnnotations(store.unsavedAnnotations());
-    store.discardAllDrafts();
-
-    if (serviceConfig(settings)) {
-      frameSync.notifyHost('logoutRequested');
-      return;
-    }
-
-    session.logout();
-  };
-
   return (
     <div
       className={classnames(
@@ -160,14 +118,7 @@ function HypothesisApp({
       data-testid="hypothesis-app"
       style={backgroundStyle}
     >
-      {!isModalRoute && (
-        <TopBar
-          onLogin={login}
-          onSignUp={signUp}
-          onLogout={logout}
-          isSidebar={isSidebar}
-        />
-      )}
+      {!isModalRoute && <TopBar isSidebar={isSidebar} />}
       {!isModalRoute && shouldShowYoutubeDisclaimer(settings, profile) && (
         <YouTubeDisclaimerBanner />
       )}

@@ -1,9 +1,4 @@
 import {
-  GlobeIcon,
-  GroupsIcon,
-  LockFilledIcon,
-} from '@hypothesis/frontend-shared';
-import {
   checkAccessibility,
   mockImportedComponents,
 } from '@hypothesis/frontend-testing';
@@ -15,39 +10,26 @@ import AnnotationPublishControl, {
 } from '../AnnotationPublishControl';
 
 describe('AnnotationPublishControl', () => {
-  let fakeGroup;
-  let fakeSettings;
   let fakeApplyTheme;
-  let fakeUseContentTruncated;
-
-  let fakeOnSave;
   let fakeOnCancel;
-  let fakeOnSetPrivate;
+  let fakeOnSave;
+  let fakeSettings;
 
-  const createAnnotationPublishControl = (props = {}) => {
-    return mount(
+  const createControl = (props = {}) =>
+    mount(
       <AnnotationPublishControl
-        group={fakeGroup}
         isDisabled={false}
-        isPrivate={false}
         onCancel={fakeOnCancel}
         onSave={fakeOnSave}
-        onSetPrivate={fakeOnSetPrivate}
         settings={fakeSettings}
         {...props}
       />,
     );
-  };
 
   beforeEach(() => {
+    fakeApplyTheme = sinon.stub();
     fakeOnCancel = sinon.stub();
     fakeOnSave = sinon.stub();
-    fakeOnSetPrivate = sinon.stub();
-    fakeGroup = {
-      name: 'Fake Group',
-      type: 'private',
-    };
-
     fakeSettings = {
       branding: {
         ctaTextColor: '#0f0',
@@ -55,17 +37,9 @@ describe('AnnotationPublishControl', () => {
       },
     };
 
-    fakeApplyTheme = sinon.stub();
-    fakeUseContentTruncated = sinon.stub().returns(false);
-
     $imports.$mock(mockImportedComponents());
     $imports.$mock({
-      '../../helpers/theme': {
-        applyTheme: fakeApplyTheme,
-      },
-      '../../hooks/use-content-truncated': {
-        useContentTruncated: fakeUseContentTruncated,
-      },
+      '../../helpers/theme': { applyTheme: fakeApplyTheme },
     });
   });
 
@@ -73,155 +47,51 @@ describe('AnnotationPublishControl', () => {
     $imports.$restore();
   });
 
-  const getPublishButton = wrapper =>
+  const getSaveButton = wrapper =>
     wrapper.find('Button[data-testid="publish-control-button"]');
 
-  describe('theming', () => {
-    it('should apply theme styles', () => {
-      const fakeStyle = { foo: 'bar' };
-      fakeApplyTheme.returns(fakeStyle);
-      const wrapper = createAnnotationPublishControl();
-      const btnPrimary = getPublishButton(wrapper);
+  it('renders a plain Save button without sharing controls', () => {
+    const wrapper = createControl();
 
-      assert.calledWith(
-        fakeApplyTheme,
-        ['ctaTextColor', 'ctaBackgroundColor'],
-        fakeSettings,
-      );
-      assert.include(btnPrimary.prop('style'), fakeStyle);
-    });
+    assert.equal(getSaveButton(wrapper).text(), 'Save');
+    assert.isFalse(wrapper.exists('Menu'));
   });
 
-  describe('dropdown menu button (form submit button)', () => {
-    context('shared annotation', () => {
-      it('should label the button with the group name', () => {
-        const wrapper = createAnnotationPublishControl();
+  it('applies theme styles', () => {
+    const fakeStyle = { foo: 'bar' };
+    fakeApplyTheme.returns(fakeStyle);
 
-        const btn = getPublishButton(wrapper);
-        assert.equal(btn.text(), `Post to ${fakeGroup.name}`);
-      });
-    });
+    const button = getSaveButton(createControl());
 
-    context('private annotation', () => {
-      it('should label the button with "Only Me"', () => {
-        const wrapper = createAnnotationPublishControl({ isPrivate: true });
-
-        const btn = getPublishButton(wrapper);
-        assert.equal(btn.text(), 'Post to Only Me');
-      });
-    });
-
-    it('should disable the button if `isDisabled`', () => {
-      const wrapper = createAnnotationPublishControl({ isDisabled: true });
-
-      const btn = getPublishButton(wrapper);
-      assert.isOk(btn.prop('disabled'));
-    });
-
-    it('should enable the button if not `isDisabled`', () => {
-      const wrapper = createAnnotationPublishControl({ isDisabled: false });
-
-      const btn = getPublishButton(wrapper);
-      assert.isNotOk(btn.prop('disabled'));
-    });
-
-    it('should have a save callback', () => {
-      const fakeOnSave = sinon.stub();
-      const wrapper = createAnnotationPublishControl({ onSave: fakeOnSave });
-
-      const btn = getPublishButton(wrapper);
-
-      assert.equal(btn.prop('onClick'), fakeOnSave);
-    });
+    assert.calledWith(
+      fakeApplyTheme,
+      ['ctaTextColor', 'ctaBackgroundColor'],
+      fakeSettings,
+    );
+    assert.include(button.prop('style'), fakeStyle);
   });
 
-  describe('menu', () => {
-    describe('share (to group) menu item', () => {
-      it('should set privacy to shared when group name clicked', () => {
-        const wrapper = createAnnotationPublishControl();
-        const shareMenuItem = wrapper.find('MenuItem[label="Fake Group"]');
+  it('supports disabled and save states', () => {
+    assert.isTrue(
+      getSaveButton(createControl({ isDisabled: true })).prop('disabled'),
+    );
 
-        shareMenuItem.prop('onClick')();
-
-        assert.calledOnce(fakeOnSetPrivate);
-        assert.calledWith(fakeOnSetPrivate, false);
-      });
-
-      context('private group', () => {
-        it('should have a group icon', () => {
-          const wrapper = createAnnotationPublishControl();
-          const shareMenuItem = wrapper.find('MenuItem').first();
-
-          assert.equal(shareMenuItem.props().icon, GroupsIcon);
-        });
-      });
-
-      context('open group', () => {
-        beforeEach(() => {
-          fakeGroup.type = 'open';
-        });
-
-        it('should have a public icon', () => {
-          const wrapper = createAnnotationPublishControl();
-          const shareMenuItem = wrapper.find('MenuItem').first();
-
-          assert.equal(shareMenuItem.props().icon, GlobeIcon);
-        });
-      });
-    });
-
-    describe('private (only me) menu item', () => {
-      it('should set privacy to private when "Only Me" option clicked', () => {
-        const wrapper = createAnnotationPublishControl();
-        const shareMenuItem = wrapper.find('MenuItem[label="Only Me"]');
-
-        shareMenuItem.prop('onClick')();
-
-        assert.calledOnce(fakeOnSetPrivate);
-        assert.calledWith(fakeOnSetPrivate, true);
-      });
-
-      it('should use a private/lock icon', () => {
-        const wrapper = createAnnotationPublishControl();
-        const privateMenuItem = wrapper.find('MenuItem').at(1);
-
-        assert.equal(privateMenuItem.prop('icon'), LockFilledIcon);
-      });
-
-      it('should have an "Only me" label', () => {
-        const wrapper = createAnnotationPublishControl();
-        const privateMenuItem = wrapper.find('MenuItem').at(1);
-
-        assert.equal(privateMenuItem.prop('label'), 'Only Me');
-      });
-    });
+    const button = getSaveButton(createControl());
+    button.props().onClick();
+    assert.calledOnce(fakeOnSave);
   });
 
-  describe('cancel button', () => {
-    it('should invoke the `onCancel` callback when cancel button clicked', () => {
-      const wrapper = createAnnotationPublishControl();
-      const cancelBtn = wrapper.find('Button[data-testid="cancel-button"]');
+  it('cancels the edit', () => {
+    const cancelButton = createControl().find(
+      'Button[data-testid="cancel-button"]',
+    );
 
-      cancelBtn.props().onClick();
-
-      assert.calledOnce(fakeOnCancel);
-    });
-  });
-
-  [true, false].forEach(isTruncated => {
-    it('adds title to publish button when its content is truncated', () => {
-      fakeUseContentTruncated.returns(isTruncated);
-
-      const wrapper = createAnnotationPublishControl();
-
-      assert.equal(!!getPublishButton(wrapper).prop('title'), isTruncated);
-    });
+    cancelButton.props().onClick();
+    assert.calledOnce(fakeOnCancel);
   });
 
   it(
     'should pass a11y checks',
-    checkAccessibility({
-      content: () => createAnnotationPublishControl(),
-    }),
+    checkAccessibility({ content: () => createControl() }),
   );
 });

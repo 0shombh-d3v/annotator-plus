@@ -152,20 +152,6 @@ function AnnotationEditor({
     [draft, store],
   );
 
-  const onSetPrivate = useCallback(
-    (isPrivate: boolean) => {
-      store.createDraft(annotation, {
-        ...draft,
-        isPrivate,
-      });
-      // Persist this as privacy default for future annotations unless this is a reply
-      if (!isReplyAnno) {
-        store.setDefault('annotationPrivacy', isPrivate ? 'private' : 'shared');
-      }
-    },
-    [annotation, draft, isReplyAnno, store],
-  );
-
   const defaultAuthority = store.defaultAuthority();
   const mentionMode = useMemo(
     (): MentionMode =>
@@ -312,12 +298,9 @@ function AnnotationEditor({
       />
       {group && (
         <AnnotationPublishControl
-          group={group}
           isDisabled={isEmpty}
-          isPrivate={draft.isPrivate}
           onCancel={onCancel}
           onSave={onSave}
-          onSetPrivate={onSetPrivate}
         />
       )}
       {shouldShowLicense && <AnnotationLicense />}
