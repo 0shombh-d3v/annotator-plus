@@ -169,7 +169,7 @@ export function writeAnnotationToAnnotationFileString(
     annotationFileString: string | null,
     annotatorSettingsObject: IHasAnnotatorSettings
 ): { newAnnotationFileString: string; newAnnotation: Annotation } {
-    const annotationId = annotation.id ? annotation.id : Math.random().toString(36).substr(2);
+    const annotationId = annotation.id || crypto.randomUUID();
     const res = JSON.parse(JSON.stringify(annotation));
     res.flagged = false;
     res.id = annotationId;

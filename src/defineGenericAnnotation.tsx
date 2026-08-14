@@ -540,9 +540,6 @@ function proxy(url: URL | string, props: PdfAnnotationProps): URL {
     if (href.startsWith(`http://localhost:8001/api/groups`)) {
         return new URL(`zip:/fake-service/api/groups.json`);
     }
-    if (parsedUrl.pathname === '/annotator-plus/sidebar.html' && parsedUrl.protocol === 'app:') {
-        return new URL('zip:/hypothes.is/app.html');
-    }
     if (
         parsedUrl.pathname === '/annotator-plus/sidebar.html' &&
         (parsedUrl.hostname === 'via.hypothes.is' || parsedUrl.protocol === 'app:')

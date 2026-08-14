@@ -96,7 +96,7 @@ async function _loadResourcesZip(zipObject: JSZip | Promise<JSZip>): Promise<JSZ
         const file = zip.file(filePath);
         if (!file || file.dir) continue;
         const buf = await file.async('arraybuffer');
-        const type = mime.getType(get_url_extension(filePath));
+        const type = mime.getType(get_url_extension(filePath)) || 'application/octet-stream';
         const url = bufferToBlobUrl(buf, type);
         resourceUrls.set(filePath, url);
     }

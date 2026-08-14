@@ -5,17 +5,6 @@ export type AnnotationList = {
     rows: Annotation[];
 };
 
-export type Group = {
-    id: string;
-    groupid: string;
-    name: string;
-    links: unknown;
-    organization: string | unknown;
-    scopes: unknown;
-    scoped: boolean;
-    type: 'private' | 'restricted';
-};
-
 export type Annotation = {
     id: string;
     document: {
@@ -45,34 +34,6 @@ export type Annotation = {
     user_info: {
         display_name: string;
     };
-};
-
-export type AnnotationCreationData = {
-    created: string;
-    updated: string;
-    user: string;
-    links: {
-        html: string;
-        incontext: string;
-        json: string;
-    };
-    hidden: boolean;
-    user_info: {
-        display_name: string;
-    };
-    uri: string;
-    document: {
-        title: string[] | string;
-    };
-    text: string;
-    tags: string[];
-    group: string;
-    permissions: unknown;
-    target: {
-        source: string;
-        selector: Selector[];
-    }[];
-    references: string[];
 };
 
 export type Selector = TextPositionSelector | TextQuoteSelector | RangeSelector;
@@ -109,19 +70,4 @@ export type AnnotationTarget = { kind: 'vault'; path: string; url: string };
 
 export type PdfAnnotationProps = GenericAnnotationProps & {
     pdf: AnnotationTarget;
-};
-
-export type LocalIFrameProps = {
-    onIframePatch: (iframe: HTMLIFrameElement) => Promise<void>;
-    onload: (iframe: HTMLIFrameElement) => Promise<void>;
-    onDarkReadersUpdated: (darkReaderReferences: Set<WeakRef<DarkReaderType>>) => Promise<void>;
-    src: string;
-    proxy: (url: URL) => URL;
-    fetchProxy: (args: {
-        href: string;
-        init?: RequestInit;
-        contextUrl: string;
-        base: (href: string) => Promise<Response>;
-    }) => Promise<Response>;
-    htmlPostProcessFunction?: (html: string) => string;
 };
