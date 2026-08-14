@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4 — 2026-08-14
+
+- Corrected the display branding to **Annotator+**. The repository and plugin ID remain `annotator-plus`.
+
 ## 0.4.3 — 2026-08-14
 
 - Wait for PDF.js initialization before starting Hypothesis so fresh and newly rendered pages use native PDF anchoring.

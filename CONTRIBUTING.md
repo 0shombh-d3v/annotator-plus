@@ -1,10 +1,10 @@
-# Contributing to Annotator++
+# Contributing to Annotator+
 
-Thank you for improving Annotator++. Bug reports, accessibility fixes, documentation corrections, and focused pull requests are welcome.
+Thank you for improving Annotator+. Bug reports, accessibility fixes, documentation corrections, and focused pull requests are welcome.
 
 ## Before opening an issue
 
-Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator++ version, operating system, target type, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
+Search [existing issues](https://github.com/0shombh-d3v/annotator-plus/issues), then include your Obsidian version, Annotator+ version, operating system, target type, reproduction steps, and relevant console errors. Do not post vault content or private documents. Report security issues using [SECURITY.md](SECURITY.md).
 
 ## Development setup
 

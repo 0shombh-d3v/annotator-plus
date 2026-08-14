@@ -5,7 +5,7 @@ const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
 const versions = JSON.parse(await readFile('versions.json', 'utf8'));
 
-if (manifest.id !== 'annotator-plus' || manifest.name !== 'Annotator++') {
+if (manifest.id !== 'annotator-plus' || manifest.name !== 'Annotator+') {
   throw new Error('Unexpected plugin identity in manifest.json');
 }
 if (manifest.version !== pkg.version || versions[pkg.version] !== manifest.minAppVersion) {
@@ -19,6 +19,9 @@ if ((await stat('main.js')).size < 5_000_000) {
 const bundle = await readFile('main.js', 'utf8');
 if (bundle.includes('sourceMappingURL=')) {
   throw new Error('Production main.js must not contain a source map');
+}
+if (bundle.includes('Annotator++')) {
+  throw new Error('Production main.js contains the retired Annotator++ branding');
 }
 for (const marker of [
   'https://via.hypothes.is/pdfjs/web/viewer.html',
@@ -51,6 +54,11 @@ for (const path of [
   'cdn.hypothes.is/demos/epub/epub.js/index.html'
 ]) {
   if (!resources.file(path)) throw new Error(`Reader resource is missing ${path}`);
+}
+
+const hypothesisApp = await resources.file('hypothes.is/app.html').async('string');
+if (!hypothesisApp.includes('<title>Annotator+</title>')) {
+  throw new Error('Hypothesis sidebar has the wrong display name');
 }
 
 for (const path of [
@@ -127,4 +135,4 @@ if (manifestKeys.join('\n') !== [...manifestKeys].sort().join('\n')) {
   throw new Error('Hypothesis asset manifest is not deterministic');
 }
 
-console.log(`Verified Annotator++ ${manifest.version} with PDF.js 6.2.108, current Hypothesis, and Dark Reader 4.9.128`);
+console.log(`Verified Annotator+ ${manifest.version} with PDF.js 6.2.108, current Hypothesis, and Dark Reader 4.9.128`);

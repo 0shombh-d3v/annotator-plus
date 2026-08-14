@@ -61,7 +61,7 @@ export default class AnnotatorSettingsTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'Annotator++ Settings' });
+        containerEl.createEl('h2', { text: 'Annotator+ Settings' });
 
         containerEl.createEl('h3', { text: 'Annotation Target Settings' });
 

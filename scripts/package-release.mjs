@@ -29,4 +29,4 @@ for (const asset of assets) {
 await cp('main.js', 'dist/main.js');
 await cp('manifest.json', 'dist/manifest.json');
 await writeFile('dist/SHA256SUMS', `${checksums.join('\n')}\n`);
-console.log(`Packaged Annotator++ ${version} in dist/`);
+console.log(`Packaged Annotator+ ${version} in dist/`);

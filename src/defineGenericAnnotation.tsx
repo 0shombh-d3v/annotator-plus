@@ -164,7 +164,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                     }
                     const target = annotationTarget(props);
                     if (!targetMatchesRequest(target, url)) {
-                        return new Response(null, { status: 403, statusText: 'Blocked by Annotator++ target policy' });
+                        return new Response(null, { status: 403, statusText: 'Blocked by Annotator+ target policy' });
                     }
                     if (target.kind === 'vault') {
                         const file = vault.getAbstractFileByPath(target.path);

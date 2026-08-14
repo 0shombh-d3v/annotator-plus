@@ -1,6 +1,6 @@
 # Third-party notices
 
-Annotator++ is a fork of [Obsidian Annotator](https://github.com/elias-sundqvist/obsidian-annotator), originally created by Elias Sundqvist and released under AGPL-3.0. The Git history preserves the original project and contributor record. Annotator++ modifications are copyright © 2026 Shombh and contributors and are released under the same license.
+Annotator+ is a fork of [Obsidian Annotator](https://github.com/elias-sundqvist/obsidian-annotator), originally created by Elias Sundqvist and released under AGPL-3.0. The Git history preserves the original project and contributor record. Annotator+ modifications are copyright © 2026 Shombh and contributors and are released under the same license.
 
 The distribution embeds or builds upon these projects:
 
@@ -13,6 +13,6 @@ The distribution embeds or builds upon these projects:
 | epub.js | EPUB rendering | BSD-2-Clause |
 | react-offline-iframe | Offline reader resource bridge | MIT |
 
-The production `main.js` embeds the corresponding reader assets and their bundled license files. Releases are rebuilt from the vendored source and pinned assets in this repository; no prebuilt Annotator++ release bundle is used as build input.
+The production `main.js` embeds the corresponding reader assets and their bundled license files. Releases are rebuilt from the vendored source and pinned assets in this repository; no prebuilt Annotator+ release bundle is used as build input.
 
 This notice is informational; the corresponding license text controls where there is any conflict.

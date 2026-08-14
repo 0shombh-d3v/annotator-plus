@@ -74,7 +74,7 @@ export default class AnnotatorView extends FileView {
                     this.contentEl
                 );
             } else {
-                throw new Error('Annotator++ supports PDF and EPUB targets only.');
+                throw new Error('Annotator+ supports PDF and EPUB targets only.');
             }
         } catch (error) {
             this.contentEl.empty();
@@ -179,6 +179,6 @@ export default class AnnotatorView extends FileView {
             await wait(50);
         }
 
-        if (this.plugin.settings.debugLogging) console.warn('Annotator++ sidebar bridge did not become ready');
+        if (this.plugin.settings.debugLogging) console.warn('Annotator+ sidebar bridge did not become ready');
     }
 }
