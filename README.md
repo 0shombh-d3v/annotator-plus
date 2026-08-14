@@ -8,7 +8,7 @@ Annotator+ is an offline, vault-local PDF annotation plugin for Obsidian. It is 
 
 Annotations remain in the Markdown note that opened the PDF. Annotator+ has no account, cloud sync, telemetry, or remote-document support.
 
-![Annotator+ showing a plain highlight, a noted highlight with a dark-red underline, and the Notes sidebar filter](docs/images/annotator-plus-overview.png)
+![Annotator+ demo showing plain and noted highlights, the Notes filter, live light and dark modes, and zoom-stable annotations](docs/images/annotator-plus-demo.gif)
 
 ## What Annotator+ adds
 
