@@ -6,6 +6,7 @@ const HIGHLIGHT_RENDER_SELECTOR = `${HIGHLIGHT_SELECTOR}, .hypothesis-svg-highli
 const MARKED_HIGHLIGHT_CLASS = 'obsidian-annotator-note-highlight';
 const FOCUS_TARGET_CLASS = 'obsidian-annotator-note-focus-target';
 const INDICATOR_CLASS = 'obsidian-annotator-note-indicator';
+const REFRESHING_PAGE_CLASS = 'obsidian-annotator-note-refreshing';
 const STYLE_ID = 'obsidian-annotator-note-indicator-styles';
 const LEGACY_MARKER_CLASS = 'obsidian-annotator-note-marker';
 const LEGACY_STYLE_ID = 'obsidian-annotator-note-marker-styles';
@@ -29,6 +30,11 @@ export type PdfNoteIndicatorController = {
 const noOpController: PdfNoteIndicatorController = { refresh: () => undefined, disconnect: () => undefined };
 
 const styles = `
+    .page:has(.textLayer[hidden]) .hypothesis-highlight-layer,
+    .page.${REFRESHING_PAGE_CLASS} .hypothesis-highlight-layer {
+        visibility: hidden;
+    }
+
     .${INDICATOR_CLASS} {
         stroke: #991b1b;
         stroke-width: 2.5px;
@@ -167,6 +173,7 @@ export function setupPdfNoteIndicators(
     if (!document?.documentElement || !frameWindow) return noOpController;
     addStyles(document);
     let animationFrame = 0;
+    const refreshingPages = new Set<Element>();
 
     const refresh = () => syncPdfNoteIndicators(document, getAnnotations());
     const scheduleRefresh = () => {
@@ -174,7 +181,17 @@ export function setupPdfNoteIndicators(
         animationFrame = frameWindow.requestAnimationFrame(() => {
             animationFrame = 0;
             refresh();
+            refreshingPages.forEach(page => page.classList.remove(REFRESHING_PAGE_CLASS));
+            refreshingPages.clear();
         });
+    };
+    const refreshAfterTextLayer = (event?: { pageNumber?: number }) => {
+        const page = document.querySelector(`.page[data-page-number="${event?.pageNumber}"]`);
+        if (page) {
+            page.classList.add(REFRESHING_PAGE_CLASS);
+            refreshingPages.add(page);
+        }
+        scheduleRefresh();
     };
     const observer = new frameWindow.MutationObserver(records => {
         if (records.some(record => [...record.addedNodes, ...record.removedNodes].some(containsHighlight))) {
@@ -190,8 +207,8 @@ export function setupPdfNoteIndicators(
         frameWindow as typeof frameWindow & {
             PDFViewerApplication?: {
                 eventBus?: {
-                    on: (name: string, listener: () => void) => void;
-                    off: (name: string, listener: () => void) => void;
+                    on: (name: string, listener: (event?: { pageNumber?: number }) => void) => void;
+                    off: (name: string, listener: (event?: { pageNumber?: number }) => void) => void;
                 };
             };
         }
@@ -199,6 +216,7 @@ export function setupPdfNoteIndicators(
     pdfEventBus?.on('scalechanging', scheduleRefresh);
     pdfEventBus?.on('rotationchanging', scheduleRefresh);
     pdfEventBus?.on('pagerendered', scheduleRefresh);
+    pdfEventBus?.on('textlayerrendered', refreshAfterTextLayer);
 
     const onKeyDown = (event: KeyboardEvent) => {
         if (!['Enter', ' '].includes(event.key) || !(event.target instanceof frameWindow.Element)) return;
@@ -223,8 +241,10 @@ export function setupPdfNoteIndicators(
             pdfEventBus?.off('scalechanging', scheduleRefresh);
             pdfEventBus?.off('rotationchanging', scheduleRefresh);
             pdfEventBus?.off('pagerendered', scheduleRefresh);
+            pdfEventBus?.off('textlayerrendered', refreshAfterTextLayer);
             document.removeEventListener('keydown', onKeyDown);
             if (animationFrame) frameWindow.cancelAnimationFrame(animationFrame);
+            refreshingPages.forEach(page => page.classList.remove(REFRESHING_PAGE_CLASS));
             clearNoteIndicators(document);
             document.getElementById(STYLE_ID)?.remove();
         }
