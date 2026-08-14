@@ -577,7 +577,7 @@ const defaultOptions = new Map([["allowedGlobalEvents", {
   value: true,
   kind: OptionKind.BROWSER
 }], ["supportsPrinting", {
-  value: true,
+  value: false,
   kind: OptionKind.BROWSER
 }], ["toolbarDensity", {
   value: 0,
@@ -19232,7 +19232,7 @@ const PDFViewerApplication = {
     return shadow(this, "supportsPrinting", AppOptions.get("supportsPrinting") && PDFPrintServiceFactory.supportsPrinting);
   },
   get supportsFullscreen() {
-    return shadow(this, "supportsFullscreen", document.fullscreenEnabled);
+    return shadow(this, "supportsFullscreen", false);
   },
   get supportsPinchToZoom() {
     return shadow(this, "supportsPinchToZoom", AppOptions.get("supportsPinchToZoom"));
@@ -20667,28 +20667,10 @@ function onKeyDown(evt) {
         });
         handled = true;
         break;
-      case 79:
-        {
-          eventBus.dispatch("openfile", {
-            source: window
-          });
-          handled = true;
-        }
-        break;
     }
   }
   if (cmd === 3 || cmd === 10) {
     switch (evt.keyCode) {
-      case 80:
-        this.requestPresentationMode();
-        handled = true;
-        this.externalServices.reportTelemetry({
-          type: "buttons",
-          data: {
-            id: "presentationModeKeyboard"
-          }
-        });
-        break;
       case 71:
         if (this.appConfig.toolbar) {
           this.appConfig.toolbar.pageNumber.select();

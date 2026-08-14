@@ -88,8 +88,16 @@ if (!pdfViewer.includes('const annotationEditorMode = AnnotationEditorType.DISAB
 if (!pdfViewer.includes('const supportsDownloading = false;')) {
   throw new Error('PDF.js Save controls must remain disabled in the Annotator+ reader');
 }
+if (!pdfViewer.includes('}], ["supportsPrinting", {\n  value: false,')) {
+  throw new Error('PDF.js Print controls must remain disabled in the Annotator+ reader');
+}
+if (!pdfViewer.includes('return shadow(this, "supportsFullscreen", false);')) {
+  throw new Error('PDF.js Presentation Mode must remain disabled in the Annotator+ reader');
+}
+for (const marker of ['eventBus.dispatch("openfile"', 'presentationModeKeyboard']) {
+  if (pdfViewer.includes(marker)) throw new Error(`PDF reader restored disabled shortcut ${marker}`);
+}
 for (const marker of [
-  'print: document.getElementById("printButton")',
   'toggleButton: document.getElementById("secondaryToolbarToggleButton")'
 ]) {
   if (!pdfViewer.includes(marker)) throw new Error(`PDF reader is missing ${marker}`);
@@ -101,7 +109,14 @@ for (const marker of [
   'showHighlights',
   'annotator-plus/sidebar.html',
   'await window.PDFViewerApplication.initializedPromise',
-  'https://cdn.hypothes.is/hypothesis/build/boot.js'
+  'https://cdn.hypothes.is/hypothesis/build/boot.js',
+  'id=printButton class="toolbarButton hidden"',
+  'id=secondaryOpenFile class="toolbarButton labeled hidden"',
+  'id=secondaryPrint class="toolbarButton labeled hidden"',
+  'id=documentActionsSeparator class="horizontalToolbarSeparator hidden"',
+  'id=presentationMode class="toolbarButton labeled hidden"',
+  'id=viewBookmark class="toolbarButton labeled hidden"',
+  'id=viewBookmarkSeparator class="horizontalToolbarSeparator hidden"'
 ]) {
   if (!viewer.includes(marker)) throw new Error(`PDF reader is missing ${marker}`);
 }

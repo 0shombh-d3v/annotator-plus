@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.8 — 2026-08-14
+
+- Removed PDF Print and its reader capability.
+- Removed Open File, Presentation Mode, and Current Page from Tools while keeping navigation, rotation, cursor, scrolling, spread, and document-property controls.
+
 ## 0.4.7 — 2026-08-14
 
 - Removed the nonfunctional PDF Save action, which could not include Annotator+ highlights or notes.
