@@ -25,7 +25,7 @@ The Hypothesis client is ordinary source under `vendor/hypothesis-client`; there
 ```bash
 npm run check
 npm run check:vendor
-npm audit --audit-level=high
+npm run audit:dependencies
 npm run build
 npm run release:verify
 npm run release:package
@@ -49,4 +49,8 @@ By contributing, you agree that your contribution is licensed under [AGPL-3.0](L
 
 The pinned PDF.js assets must include their runtime polyfills in **both** realms. Modern PDF.js builds may start successfully but silently discard embedded fonts on Obsidian's Chromium runtime when worker APIs such as `Math.sumPrecise` are missing. Run the compatibility regression tests and compare a page with embedded mathematical fonts in Obsidian. Do not substitute unpolyfilled assets. Native module workers are restricted to the exact bundled worker; font, CMap, and decoder requests return through the local viewer fetch bridge.
 
+The bundled viewer library also carries a small local patch to the text layer's minimum-font probe: a hidden Obsidian tab reports zero layout height, so use the probe's 1px size in that case. `scripts/tests/pdf-text-layer.test.mjs` exercises both visible and initially hidden iframes using the actual bundled library and stylesheet.
+
 `moment` is overridden to 2.31.0 for the development SDK dependency. The SDK remains at the declared minimum supported Obsidian API version; Obsidian supplies the runtime module.
+
+The vendored annotation-ui package has a checked-in Yarn patch replacing Showdown with Marked. Its replacement dependency is declared in `.yarnrc.yml`, since Yarn patches cannot change dependency resolution. KaTeX 0.18.2 is deliberately supplied despite annotation-ui's older peer range; the renderer API and its matching CSS/fonts are checked together. Keep the renderer regressions and both dependency audits passing when updating these packages. The audit command checks every severity and parses Yarn's JSON instead of trusting its exit status.

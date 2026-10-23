@@ -1,6 +1,6 @@
 {
   "name": "annotator-plus",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Offline, vault-local PDF annotation for Obsidian.",
   "main": "main.js",
   "scripts": {
@@ -9,14 +9,16 @@
     "typecheck": "tsc --noEmit",
     "dev": "rollup --config rollup.config.js -w",
     "test": "jest --runInBand --no-watchman",
-    "check": "npm run typecheck && npm test && npm run lint",
+    "check": "npm run typecheck && npm test && npm run lint && npm run test:dependencies",
     "check:vendor": "cd vendor/hypothesis-client && node .yarn/releases/yarn-3.6.0.cjs checkformatting && node .yarn/releases/yarn-3.6.0.cjs typecheck && cd ../.. && node scripts/run-hypothesis-task.mjs test",
     "quick-build": "rollup --config rollup.config.js --environment BUILD:production",
     "build": "npm run build:all",
     "build:all": "npm run build-hypothesis && npm run quick-build",
     "build-hypothesis": "rimraf resources/cdn.hypothes.is/hypothesis/build vendor/hypothesis-client/build && node scripts/run-hypothesis-task.mjs build && move-file vendor/hypothesis-client/build resources/cdn.hypothes.is/hypothesis/build && rimraf resources/cdn.hypothes.is/hypothesis/build/boot-template.js resources/cdn.hypothes.is/hypothesis/build/**/*.map resources/cdn.hypothes.is/hypothesis/build/scripts/test-inputs.js resources/cdn.hypothes.is/hypothesis/build/scripts/tests.bundle.js resources/cdn.hypothes.is/hypothesis/build/scripts/ui-playground.bundle.js resources/cdn.hypothes.is/hypothesis/build/styles/ui-playground.css",
     "release:verify": "node scripts/verify-release.mjs",
-    "release:package": "npm run release:verify && node scripts/package-release.mjs"
+    "release:package": "npm run release:verify && node scripts/package-release.mjs",
+    "test:dependencies": "node --test scripts/tests/*.test.mjs",
+    "audit:dependencies": "node scripts/audit-dependencies.mjs"
   },
   "keywords": [
     "obsidian",

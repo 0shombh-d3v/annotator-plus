@@ -140,6 +140,25 @@ describe('annotator/integrations/pdf', () => {
       });
     });
 
+    it('preserves the text layer retained by PDF.js during a layout reset', () => {
+      pdfIntegration = createPDFIntegration();
+      const page = fakePDFViewerApplication.pdfViewer.getPageView(0);
+      const textLayer = page.textLayer;
+      // PDF.js keeps this same object in its selection drawing layer during
+      // zoom/sidebar resizes, even while the page returns to INITIAL.
+      const selectionLayer = { textLayer };
+      page.renderingState = RenderingStates.INITIAL;
+
+      pdfIntegration._update();
+      pdfIntegration._update();
+
+      assert.strictEqual(page.textLayer, textLayer);
+      assert.strictEqual(page.textLayer, selectionLayer.textLayer);
+      page.renderingState = RenderingStates.FINISHED;
+      pdfIntegration._update();
+      assert.strictEqual(page.textLayer, textLayer);
+    });
+
     it('hides annotation layers when there is a text selection', async () => {
       // This tests checks for a CSS class on the root PDF viewer element.
       // The annotation layers are hidden by a CSS rule that uses this class.

@@ -41,6 +41,7 @@ import ReactDOM from 'react-dom';
 import { TFile } from 'obsidian';
 import AnnotatorView from '../src/annotatorView';
 import { getAnnotation } from '../src/annotationFileUtils';
+import { DARK_READER_FIXES } from '../src/darkMode';
 
 const makeFile = (path: string) => new (TFile as unknown as { new (path: string): TFile })(path);
 function context() {
@@ -214,4 +215,19 @@ test('Follow Obsidian responds to body theme changes and stops after disposal', 
     await Promise.resolve();
     expect(darkReader.disable).toHaveBeenCalledTimes(1);
     expect(view.darkReaderReferences.size).toBe(0);
+});
+
+test('dark mode preserves PDF.js selection rendering without changing the saved theme settings', async () => {
+    const { view, plugin } = context();
+    const savedSettings = { brightness: 90, contrast: 85, selectionColor: 'auto' };
+    plugin.settings.darkReaderSettings = savedSettings;
+    document.body.classList.add('theme-dark');
+    const darkReader = { enable: jest.fn(), disable: jest.fn() };
+
+    await view.onDarkReadersUpdated(new Set([new WeakRef(darkReader as never)]));
+
+    expect(darkReader.enable).toHaveBeenCalledWith({ ...savedSettings, selectionColor: '' }, DARK_READER_FIXES);
+    expect(savedSettings.selectionColor).toBe('auto');
+    expect(plugin.settings.darkReaderSettings).toBe(savedSettings);
+    view.dispose();
 });
