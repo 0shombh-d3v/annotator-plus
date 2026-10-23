@@ -10,6 +10,7 @@ export default class StyleObserver {
     }
 
     watch() {
+        if (this.interval) return;
         this.interval = setInterval(() => {
             const newStyle = [...document.getElementsByTagName('style')]
                 .flatMap(x => [...(x.sheet?.cssRules || [])].map(x => x.cssText))
@@ -34,5 +35,7 @@ export default class StyleObserver {
 
     unwatch() {
         clearInterval(this.interval);
+        this.interval = null;
+        this.listeners.clear();
     }
 }

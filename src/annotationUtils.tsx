@@ -16,67 +16,90 @@ export const isWritableAnnotation = (value: unknown): value is Annotation => {
         typeof annotation.text === 'string' &&
         Array.isArray(annotation.tags) &&
         annotation.tags.every(tag => typeof tag === 'string') &&
-        Array.isArray(annotation.target)
+        Array.isArray(annotation.target) &&
+        annotation.target.every(
+            target =>
+                target &&
+                typeof target === 'object' &&
+                typeof target.source === 'string' &&
+                (target.selector === undefined ||
+                    (Array.isArray(target.selector) &&
+                        target.selector.every(
+                            selector => selector && typeof selector === 'object' && typeof selector.type === 'string'
+                        )))
+        ) &&
+        (annotation.references === undefined ||
+            (Array.isArray(annotation.references) && annotation.references.every(isValidAnnotationId)))
     );
 };
 
 const makeAnnotationBlockRegex = (annotationId?: string) =>
     new RegExp(
-        '(?<annotationBlock>^\n(>.*?\n)*?>```annotation-json(\n>.*?)*?)\n\\^(?<annotationId>' +
+        '(?<annotationBlock>(?:^|\\r?\\n)> ?%%\\r?\\n> ?```annotation-json(?:\\r?\\n>[^\\n]*)*?)\\r?\\n\\^(?<annotationId>' +
             (annotationId ? escapeRegExp(annotationId) : '[A-Za-z0-9_-]{1,128}') +
-            ')\n',
+            ')(?:\\r?\\n|$)',
         'gm'
     );
 
 const getAnnotationFromAnnotationBlock = (annotationBlock: string, annotationId: string): Annotation => {
-    const contentRegex = makeAnnotationContentRegex();
-    const content = annotationBlock
-        .split('\n')
-        .map(x => x.substr(1))
-        .join('\n');
+    const quotePrefix = /^> ```annotation-json\r?$/m.test(annotationBlock) ? /^> ?/ : /^>/;
+    const lines = annotationBlock.split(/\r?\n/).map(line => line.replace(quotePrefix, ''));
+    const jsonStart = lines.indexOf('```annotation-json');
+    const jsonEnd = lines.indexOf('```', jsonStart + 1);
+    if (jsonStart < 0 || jsonEnd < 0) throw new Error('The annotation JSON fence is incomplete.');
+    const annotation = JSON.parse(lines.slice(jsonStart + 1, jsonEnd).join('\n'));
+    if (!annotation || typeof annotation !== 'object' || Array.isArray(annotation))
+        throw new Error('Invalid annotation metadata.');
 
-    const {
-        groups: { annotationJson, prefix, highlight, postfix, comment, tags }
-    } = contentRegex.exec(content);
-    const annotation = JSON.parse(annotationJson);
-    const annotationTarget = annotation.target?.[0];
-    if (annotationTarget && 'selector' in annotationTarget) {
-        annotationTarget.selector = annotationTarget.selector.map(x =>
-            x.type == 'TextQuoteSelector'
-                ? { ...x, prefix: prefix ?? x.prefix, exact: x.exact ?? highlight, suffix: postfix ?? x.suffix }
-                : x
+    const metadata = lines.slice(jsonEnd + 1);
+    const commentStart = metadata.indexOf('%%COMMENT%%');
+    // Only the final tags delimiter is structural. Notes may quote these markers.
+    const tagsStart = metadata.lastIndexOf('%%TAGS%%');
+    const comment =
+        commentStart < 0
+            ? annotation.text || ''
+            : metadata.slice(commentStart + 1, tagsStart > commentStart ? tagsStart : undefined).join('\n');
+    const tags =
+        tagsStart < 0
+            ? annotation.tags || []
+            : metadata
+                  .slice(tagsStart + 1)
+                  .join('\n')
+                  .split(',')
+                  .map(tag => tag.trim().replace(/^#/, ''))
+                  .filter(Boolean);
+
+    const excerpt = metadata.slice(0, commentStart < 0 ? undefined : commentStart).join('\n');
+    const prefix = /%%PREFIX%%([\s\S]*?)(?=%%HIGHLIGHT%%|%%POSTFIX%%)/.exec(excerpt)?.[1];
+    const suffix = /%%POSTFIX%%([\s\S]*?)\*(?:\n|$)/.exec(excerpt)?.[1];
+    const context = (original: string | undefined, display: string | undefined) => {
+        if (original === undefined) return display;
+        return display?.trim() === original.trim() && display.length > original.length ? display : original;
+    };
+    if (Array.isArray(annotation.target?.[0]?.selector)) {
+        annotation.target[0].selector = annotation.target[0].selector.map(selector =>
+            selector?.type === 'TextQuoteSelector'
+                ? {
+                      ...selector,
+                      prefix: context(selector.prefix, prefix),
+                      suffix: context(selector.suffix, suffix)
+                  }
+                : selector
         );
     }
-    annotation.text = comment;
-    annotation.tags = tags
-        .split(',')
-        .map(x => x.trim().substr(1))
-        .filter(x => x);
-    if ('group' in annotation) {
-        delete annotation.group;
-    }
-    return { ...makeDefaultAnnotationObject(annotationId, annotation.tags), ...annotation };
-};
 
-const makeAnnotationContentRegex = () =>
-    new RegExp(
-        [
-            '(.|\\n)*?',
-            '%%\\n',
-            '```annotation-json\\n',
-            '(?<annotationJson>(.|\\n)*?)\\n',
-            '```\\n',
-            '%%(.|\\n)*?\\*',
-            '(%%PREFIX%%(?<prefix>(.|\\n)*?))?',
-            '(%%HIGHLIGHT%%( ==)?(?<highlight>(.|\\n)*?)(== )?)?',
-            '(%%POSTFIX%%(?<postfix>(.|\\n)*?))?\\*\\n',
-            '(%%LINK%%(?<link>(.|\\n)*?)\\n)?',
-            '(%%COMMENT%%\\n(?<comment>(.|\\n)*?)\\n)?',
-            '(%%TAGS%%\\n(?<tags>(.|\\n)*))?',
-            '$'
-        ].join(''),
-        'g'
-    );
+    const result = {
+        ...makeDefaultAnnotationObject(annotationId, tags),
+        ...annotation,
+        id: annotationId,
+        text: comment,
+        tags
+    };
+    if (!isWritableAnnotation(result)) throw new Error('Invalid annotation fields or selectors.');
+    delete result.group;
+    // JSON selectors retain their original whitespace; the display excerpt is trimmed.
+    return { ...makeDefaultAnnotationObject(annotationId, tags), ...result };
+};
 
 export const getAnnotationHighlightTextData = (annotation: Annotation) => {
     let prefix = '';
@@ -123,6 +146,7 @@ const makeAnnotationString = (annotation: Annotation, plugin: IHasAnnotatorSetti
 };
 
 export function getAnnotationFromFileContent(annotationId: string, fileContent: string): Annotation {
+    if (!isValidAnnotationId(annotationId)) return null;
     const annotationRegex = makeAnnotationBlockRegex(annotationId);
     let m: RegExpExecArray;
 
@@ -133,7 +157,11 @@ export function getAnnotationFromFileContent(annotationId: string, fileContent: 
         const {
             groups: { annotationBlock, annotationId }
         } = m;
-        return getAnnotationFromAnnotationBlock(annotationBlock, annotationId);
+        try {
+            return getAnnotationFromAnnotationBlock(annotationBlock, annotationId);
+        } catch {
+            return null;
+        }
     } else {
         return null;
     }
@@ -169,11 +197,13 @@ export function writeAnnotationToAnnotationFileString(
     annotationFileString: string | null,
     annotatorSettingsObject: IHasAnnotatorSettings
 ): { newAnnotationFileString: string; newAnnotation: Annotation } {
+    if (!isWritableAnnotation(annotation)) throw new Error('Invalid annotation payload.');
     const annotationId = annotation.id || crypto.randomUUID();
     const res = JSON.parse(JSON.stringify(annotation));
     res.flagged = false;
     res.id = annotationId;
-    const annotationString = makeAnnotationString(res, annotatorSettingsObject);
+    const lineEnding = annotationFileString?.includes('\r\n') ? '\r\n' : '\n';
+    const annotationString = makeAnnotationString(res, annotatorSettingsObject).replace(/\n/g, lineEnding);
     if (annotationFileString !== null) {
         let didReplace = false;
         const regex = makeAnnotationBlockRegex(annotationId);
@@ -182,7 +212,8 @@ export function writeAnnotationToAnnotationFileString(
             return annotationString;
         });
         if (!didReplace) {
-            annotationFileString = `${annotationFileString}\n${annotationString}`;
+            const separator = annotationFileString && !annotationFileString.endsWith(lineEnding) ? lineEnding : '';
+            annotationFileString = `${annotationFileString}${separator}${annotationString}`;
         }
         return { newAnnotationFileString: annotationFileString, newAnnotation: res };
     } else {
@@ -196,7 +227,15 @@ export function loadAnnotationsAtUriFromFileText(url: URL | null, fileText: stri
         return { rows: [], total: 0 };
     }
 
-    const rows = [];
+    const rows: Annotation[] = [];
+    const errors: NonNullable<AnnotationList['errors']> = [];
+    const decode = (value: string) => {
+        try {
+            return decodeURI(value);
+        } catch {
+            return value;
+        }
+    };
 
     const annotationRegex = makeAnnotationBlockRegex();
     if (fileText !== null) {
@@ -208,7 +247,16 @@ export function loadAnnotationsAtUriFromFileText(url: URL | null, fileText: stri
             const {
                 groups: { annotationBlock, annotationId }
             } = m;
-            const completeAnnotation = getAnnotationFromAnnotationBlock(annotationBlock, annotationId);
+            let completeAnnotation: Annotation;
+            try {
+                completeAnnotation = getAnnotationFromAnnotationBlock(annotationBlock, annotationId);
+            } catch (error) {
+                errors.push({
+                    id: annotationId,
+                    message: error instanceof Error ? error.message : 'Invalid annotation block.'
+                });
+                continue;
+            }
             const annotationDocumentIdentifiers = [
                 completeAnnotation.document?.documentFingerprint,
                 completeAnnotation.uri
@@ -219,14 +267,14 @@ export function loadAnnotationsAtUriFromFileText(url: URL | null, fileText: stri
                 url === null ||
                 annotationDocumentIdentifiers.includes(params.uri) ||
                 annotationDocumentIdentifiers.includes(encodeURI(params.uri)) ||
-                annotationDocumentIdentifiers.includes(decodeURI(params.uri)) ||
+                annotationDocumentIdentifiers.includes(decode(params.uri)) ||
                 annotationDocumentIdentifiers.includes(SAMPLE_PDF_URL)
             ) {
                 rows.push(completeAnnotation);
             }
         }
     }
-    return { rows, total: rows.length };
+    return { rows, total: rows.length, ...(errors.length ? { errors } : {}) };
 }
 
 export function deleteAnnotationFromAnnotationFileString(

@@ -8,7 +8,7 @@ import {
 } from '@hypothesis/frontend-shared';
 import classnames from 'classnames';
 import type { ComponentChildren } from 'preact';
-import { useCallback, useState } from 'preact/hooks';
+import { useCallback, useEffect, useState } from 'preact/hooks';
 
 import { pluralize } from '../../shared/pluralize';
 import type { SidebarSettings } from '../../types/config';
@@ -116,6 +116,10 @@ function SidebarTabs({
   const { rootThread, tabCounts } = useRootThread();
   const [showOnlyWithNotes, setShowOnlyWithNotes] = useState(false);
   const store = useSidebarStore();
+  const focusRequest = store.annotationFocusRequest();
+  useEffect(() => {
+    if (focusRequest) setShowOnlyWithNotes(false);
+  }, [focusRequest]);
   const selectedTab = store.selectedTab();
   const noteCount = tabCounts.note;
   const annotationCount = tabCounts.annotation;

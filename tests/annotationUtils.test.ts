@@ -140,3 +140,64 @@ test('annotation writes accept only safe IDs and the expected payload shape', ()
     expect(annotationUtils.isWritableAnnotation({ id: 'bad/id', text: 'note', tags: [], target: [] })).toBe(false);
     expect(annotationUtils.isWritableAnnotation({ text: 'note', tags: 'tag', target: [] })).toBe(false);
 });
+
+test('CRLF and a final block ID without a newline remain readable', () => {
+    const text = loadMd('testfile.md');
+    const expected = annotationUtils.loadAnnotationsAtUriFromFileText(null, text);
+    expect(annotationUtils.loadAnnotationsAtUriFromFileText(null, text.replace(/\n/g, '\r\n').trimEnd())).toEqual(
+        expected
+    );
+});
+
+test('one corrupt JSON block does not hide the remaining annotations or rewrite the source', () => {
+    const text = loadMd('testfile.md');
+    const expected = annotationUtils.loadAnnotationsAtUriFromFileText(null, text);
+    const corrupted = text.replace(/(>```annotation-json\n)>[^\n]+/, '$1>{broken JSON');
+    const loaded = annotationUtils.loadAnnotationsAtUriFromFileText(null, corrupted);
+    expect(loaded.rows).toEqual(expected.rows.slice(1));
+    expect(loaded.errors).toHaveLength(1);
+    expect(loaded.errors[0].id).toBe(expected.rows[0].id);
+    expect(corrupted).toContain('>{broken JSON');
+});
+
+test('comments preserve indentation, Unicode, blank lines, and literal marker lines', () => {
+    const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
+    const comment = '  indented $x$\n\n> quoted\n%%TAGS%%\n#literal, not tags\nमराठी ∞';
+    const annotation = { ...base, text: comment, tags: ['math', 'नोट'] };
+    const result = annotationUtils.writeAnnotationToAnnotationFileString(annotation, '', testAnnotatorSettings);
+    expect(annotationUtils.getAnnotationFromFileContent(annotation.id, result.newAnnotationFileString)).toEqual(
+        annotation
+    );
+});
+
+test('saving a trimmed excerpt retains the original selector context and CRLF prose', () => {
+    const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
+    const selectors = [
+        { type: 'TextQuoteSelector', exact: 'quote', prefix: ' before ', suffix: ' after ' }
+    ] as Annotation['target'][0]['selector'];
+    const annotation = { ...base, target: [{ source: 'vault:/book.pdf', selector: selectors }] };
+    const prose = '---\r\nannotation-target: book.pdf\r\n---\r\n\r\nUser prose.\r\n';
+    const result = annotationUtils.writeAnnotationToAnnotationFileString(annotation, prose, testAnnotatorSettings);
+    const restored = annotationUtils.getAnnotationFromFileContent(annotation.id, result.newAnnotationFileString);
+    expect(restored.target).toEqual(annotation.target);
+    expect(result.newAnnotationFileString.startsWith(prose)).toBe(true);
+    expect(result.newAnnotationFileString.replace(/\r\n/g, '')).not.toContain('\n');
+});
+
+test('deleting an EOF annotation leaves the preceding note intact', () => {
+    const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
+    const text = annotationUtils
+        .writeAnnotationToAnnotationFileString(base, 'User prose.\n', testAnnotatorSettings)
+        .newAnnotationFileString.trimEnd();
+    expect(annotationUtils.deleteAnnotationFromAnnotationFileString(base.id, text)).toBe('User prose.\n');
+});
+
+test('malformed nested selectors and unsafe direct writes are rejected', () => {
+    expect(
+        annotationUtils.isWritableAnnotation({ text: '', tags: [], target: [{ source: 'pdf', selector: 'bad' }] })
+    ).toBe(false);
+    const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
+    expect(() =>
+        annotationUtils.writeAnnotationToAnnotationFileString({ ...base, id: '../unsafe' }, '', testAnnotatorSettings)
+    ).toThrow('Invalid annotation payload');
+});

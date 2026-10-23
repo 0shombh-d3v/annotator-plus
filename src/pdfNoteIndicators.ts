@@ -146,7 +146,9 @@ export function syncPdfNoteIndicators(document: Document, annotations: Annotatio
         if (!pseudoAnnotation) continue;
 
         // ponytail: document-sized linear scan; index selectors only if PDFs reach thousands of annotations.
-        const annotation = annotations.find(candidate => checkPseudoAnnotationEquality(candidate, pseudoAnnotation));
+        const annotation = annotations.find(
+            candidate => candidate.text?.trim() && checkPseudoAnnotationEquality(candidate, pseudoAnnotation)
+        );
         if (!annotation?.text?.trim()) continue;
 
         for (const highlight of highlights) {

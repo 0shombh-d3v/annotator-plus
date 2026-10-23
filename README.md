@@ -46,7 +46,7 @@ annotation-target: PDFs/my-book.pdf
 
 The legacy `annotation-target-type` property is ignored. Existing annotation blocks are not rewritten.
 
-Use **Open as Markdown** to inspect or edit the stored blocks. Text in the `%%COMMENT%%` region may be edited freely. Avoid changing annotation IDs or the JSON/selector structure. Renaming a target file breaks its existing association unless the note's `annotation-target` is updated.
+Use **Open as Markdown** to inspect or edit the stored blocks. Text in the `%%COMMENT%%` region may be edited freely. Avoid changing annotation IDs or the JSON/selector structure. Renaming a target PDF breaks its existing association unless the note's `annotation-target` is updated. Renaming the annotation note itself updates its open reader's save path. Deleted notes are never recreated by a stale reader.
 
 ## Appearance
 
@@ -57,6 +57,8 @@ Under **Settings → Annotator+ → Annotator appearance**, choose:
 - **Always light**.
 
 No Obsidian restart is required.
+
+Annotator+ uses its own view type, so it can be installed alongside the original Annotator. For predictable automatic opening, enable the plugin you want to use by default. Existing Annotator+ 1.0.0 workspace views migrate when the original Annotator is disabled.
 
 ## Privacy and security
 
@@ -71,7 +73,7 @@ Treat PDFs from unknown sources as untrusted files and keep Obsidian and Annotat
 
 Source, vendored reader code, tests, and release automation all live in this one repository. See [CONTRIBUTING.md](CONTRIBUTING.md). Release notes are in [CHANGELOG.md](CHANGELOG.md), and bundled-project attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-The 1.0.0 reader stack is reproducibly pinned to PDF.js 6.2.108, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. These are bundled locally; Annotator+ does not download executable code at runtime.
+The 1.0.1 reader stack is reproducibly pinned to PDF.js 6.2.108 compatibility builds for both the viewer and worker, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a` with the local fixes in this repository, and Dark Reader 4.9.128. These are bundled locally; Annotator+ does not download executable code at runtime.
 
 ## Credits and license
 

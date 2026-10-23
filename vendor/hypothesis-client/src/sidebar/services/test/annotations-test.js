@@ -391,6 +391,14 @@ describe('AnnotationsService', () => {
   });
 
   describe('reply', () => {
+    it('can reply to a page note with no text target', () => {
+      const annotation = { ...fixtures.defaultAnnotation(), target: [] };
+      svc.reply(annotation, 'acct:foo@bar.com');
+      const reply = fakeStore.addAnnotations.getCall(0).args[0][0];
+      assert.equal(reply.target[0].source, annotation.uri);
+      assert.include(reply.references, annotation.id);
+    });
+
     const filledAnnotation = () => {
       const annot = fixtures.defaultAnnotation();
       annot.group = 'mix3boop';

@@ -1,217 +1,50 @@
-import { MarkdownView, TFile, parseLinktext } from 'obsidian';
-import AnnotatorPlugin from 'main';
+import { editorInfoField, TFile, parseLinktext } from 'obsidian';
+import { EditorView } from '@codemirror/view';
+import type AnnotatorPlugin from './main';
+import { wikiLinkAtPosition } from './annotationLinks';
+import { isValidAnnotationId } from './annotationUtils';
 
 export default class SourceViewObserver {
-    private plugin: AnnotatorPlugin;
-    private tmpLinkInfos: { linkText: string; count: number }[] = [];
-    private tmpTargetIndex = -1;
-    private targetClassNameSet: Set<string> = new Set();
+    private controller = new AbortController();
+    private linkedElements = new WeakSet<HTMLElement>();
+    readonly editorExtension;
 
-    // @ts-ignore initializes in initObserver() when active view is MarkdownView
-    private observer: MutationObserver;
-
-    constructor(plugin: AnnotatorPlugin) {
-        this.plugin = plugin;
-        this.initClassNameSet();
-        this.initObserver();
-    }
-
-    initClassNameSet() {
-        const prefixObservedClassName = [
-            'cm-highlight ',
-            'cm-em ',
-            'cm-header cm-header-1 ',
-            'cm-header cm-header-2 ',
-            'cm-header cm-header-3 ',
-            'cm-header cm-header-4 ',
-            'cm-header cm-header-5 ',
-            'cm-header cm-header-6 '
-        ];
-        const suffixObservedClassName = [
-            '',
-            ' cm-list-1',
-            ' cm-list-2',
-            ' cm-list-3',
-            ' cm-quote cm-quote-1',
-            ' cm-strong'
-        ];
-        const baseTargetClassName = 'cm-hmd-internal-link cm-link-alias';
-        for (const className of prefixObservedClassName) {
-            this.targetClassNameSet.add(className + baseTargetClassName);
-        }
-        for (const className of suffixObservedClassName) {
-            this.targetClassNameSet.add(baseTargetClassName + className);
-        }
-    }
-
-    initObserver() {
-        const activeLeaf = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-        const filePath = this.plugin.app.workspace.getActiveFile()?.path;
-        if (!activeLeaf || filePath === undefined) return;
-
-        const that = this;
-        const observedClassName = 'cm-hmd-internal-link cm-link-has-alias';
-        const targetClassName = 'cm-hmd-internal-link cm-link-alias';
-        const observeCallback = function (mutations: MutationRecord[]) {
-            that.plugin.log('-----------------------------');
-            for (const mutation of mutations) {
-                if (mutation.type == 'childList') {
-                    for (const addedNode of mutation.addedNodes) {
-                        const addedElement = addedNode as Element;
-                        if (addedElement.className && addedElement.className.indexOf(observedClassName) >= 0) {
-                            that.linkOnFocus(addedElement);
-                        }
-                    }
-                    for (const removedNode of mutation.removedNodes) {
-                        const removedElement = removedNode as Element;
-                        if (removedElement.className && removedElement.className.indexOf(observedClassName) >= 0) {
-                            const removedLinkText = removedElement.textContent ? removedElement.textContent : '';
-                            that.plugin.log('remove');
-                            that.linkOnBlur(mutation.target as Element, removedLinkText, filePath, targetClassName);
-                        }
-                    }
-                } else if (mutation.type == 'attributes') {
-                    if (mutation.oldValue && mutation.oldValue.indexOf(observedClassName) >= 0) {
-                        that.plugin.log('attri');
-                        that.linkOnBlur(mutation.target.parentNode as Element, '', filePath, targetClassName);
-                    }
-                }
-            }
+    constructor(private plugin: AnnotatorPlugin) {
+        const onClick = (event: MouseEvent, editor: EditorView): boolean => {
+            const target = event.target as HTMLElement;
+            const linkElement = target.closest?.('.cm-hmd-internal-link');
+            const file = editor.state.field(editorInfoField, false)?.file;
+            if (!linkElement || !file) return false;
+            const href = wikiLinkAtPosition(editor.state.doc.toString(), editor.posAtDOM(linkElement));
+            if (!href) return false;
+            const parsed = parseLinktext(href);
+            const id = parsed.subpath.startsWith('#^') ? parsed.subpath.slice(2) : null;
+            const destination = parsed.path
+                ? plugin.app.metadataCache.getFirstLinkpathDest(parsed.path, file.path)
+                : file;
+            if (!destination || !isValidAnnotationId(id) || !plugin.isAnnotationFile(destination)) return false;
+            this.open(event, destination, id);
+            return true;
         };
-        this.observer = new MutationObserver(observeCallback);
+        this.editorExtension = EditorView.domEventHandlers({ click: onClick, auxclick: onClick });
     }
 
-    getObserver(): MutationObserver {
-        return this.observer;
+    private open(event: MouseEvent, file: TFile, id: string) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void this.plugin.openAnnotationTarget(file, event.metaKey || event.ctrlKey || event.button === 1, id);
     }
 
-    setObserver(observer: MutationObserver) {
-        this.observer = observer;
+    addClickListener(element: HTMLAnchorElement, id: string, file: TFile) {
+        if (this.linkedElements.has(element) || !isValidAnnotationId(id)) return;
+        this.linkedElements.add(element);
+        const handler = (event: MouseEvent) => this.open(event, file, id);
+        element.addEventListener('click', handler, { signal: this.controller.signal });
+        element.addEventListener('auxclick', handler, { signal: this.controller.signal });
     }
 
-    watch() {
-        const activeLeaf = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-        const filePath = this.plugin.app.workspace.getActiveFile()?.path;
-        if (!activeLeaf || filePath === undefined) return;
-
-        const regex2FindLinks = /[[]{2}[^\]]*(?=[\]]{2})/gm;
-        const view = activeLeaf.leaf.view.containerEl;
-        const editor = activeLeaf.editor;
-        const oldText = editor.getValue();
-        const linkHref = oldText.match(regex2FindLinks);
-        if (!linkHref || linkHref.length == 0) return;
-
-        const tempSourceLinks = view.getElementsByClassName(
-            'cm-hmd-internal-link cm-link-alias'
-        ) as HTMLCollectionOf<HTMLAnchorElement>;
-        const length = tempSourceLinks.length;
-        if (length === 0) return;
-        const sourceLinks = new Array<HTMLAnchorElement>();
-        if (length > 1) {
-            let prev = tempSourceLinks[0];
-            for (let i = 1; i < length; i++) {
-                if (tempSourceLinks[i - 1].nextElementSibling != tempSourceLinks[i]) {
-                    sourceLinks.push(prev);
-                    prev = tempSourceLinks[i];
-                    if (i == length - 1) {
-                        sourceLinks.push(tempSourceLinks[i]);
-                    }
-                } else if (i == length - 1) {
-                    sourceLinks.push(prev);
-                }
-            }
-        } else {
-            sourceLinks.push(tempSourceLinks[0]);
-        }
-
-        const observeConfig = {
-            attributeFilter: ['class'],
-            attributes: true,
-            characterData: true,
-            characterDataOldValue: true,
-            childList: true,
-            attributeOldValue: true,
-            subtree: true
-        };
-
-        for (let i = 0; i < sourceLinks.length; i++) {
-            const tempLink = linkHref[i];
-            const sourceLink = sourceLinks[i];
-            if (typeof tempLink != 'string' || !sourceLink) continue;
-
-            // substring used remove [[ from internal link
-            // because iOS doesn't support positive lookback regex
-            const parsedLink = parseLinktext(tempLink.substring(2).split('|')[0]);
-            const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substring(2) : null;
-            const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(parsedLink.path, filePath);
-
-            if (file && this.plugin.isAnnotationFile(file) && annotationid) {
-                this.addClickListener(sourceLink, annotationid, file, false);
-                this.observer.observe(sourceLink.parentNode as Node, observeConfig);
-            }
-        }
-    }
-
-    addClickListener(element: HTMLAnchorElement, annotationid: string, file: TFile, isReadingView: boolean) {
-        const childs = element.children;
-        if (isReadingView || (childs && childs.length == 1)) {
-            element.addEventListener('click', ev => {
-                this.plugin.log(annotationid);
-                ev.preventDefault();
-                ev.stopPropagation();
-                ev.stopImmediatePropagation();
-                const inNewPane = ev.metaKey || ev.ctrlKey || ev.button == 1;
-                void this.plugin.openAnnotationTarget(file, inNewPane, annotationid);
-            });
-        }
-    }
-
-    linkOnFocus(element: Element) {
-        let count = 0;
-        const linkText = element.textContent || '';
-        while (
-            element &&
-            element.className &&
-            element.className.indexOf('cm-formatting-link cm-formatting-link-end') == -1
-        ) {
-            if (this.targetClassNameSet.has(element.className)) count++;
-            element = element.nextElementSibling;
-        }
-        this.tmpLinkInfos.push({ linkText: linkText, count: count });
-    }
-
-    linkOnBlur(node: Element, rawLinkText: string, filePath: string, className: string) {
-        const linkIndex = this.tmpTargetIndex + 1;
-        if (this.tmpLinkInfos.length == 0) return;
-        const linkInfo = this.tmpLinkInfos[0];
-
-        const link = parseLinktext(rawLinkText == '' ? linkInfo.linkText : rawLinkText);
-        const annotationid = link.subpath.startsWith('#^') ? link.subpath.substring(2) : null;
-        const file: TFile | null = this.plugin.app.metadataCache.getFirstLinkpathDest(link.path, filePath);
-
-        const targets = node.getElementsByClassName(className) as HTMLCollectionOf<HTMLAnchorElement>;
-        const uniqueTarget = targets[linkIndex];
-        this.plugin.log(
-            'linkText: ' +
-                link.path +
-                ' tarIndex: ' +
-                this.tmpTargetIndex.toString() +
-                ' linkIndex: ' +
-                linkIndex.toString() +
-                ' size: ' +
-                this.tmpLinkInfos.length.toString()
-        );
-        this.plugin.log(uniqueTarget);
-
-        this.tmpTargetIndex += linkInfo.count;
-
-        this.tmpLinkInfos.splice(0, 1);
-        if (this.tmpLinkInfos.length == 0) this.resetTmpLinkInfo();
-        if (uniqueTarget && annotationid && file) this.addClickListener(uniqueTarget, annotationid, file, false);
-    }
-
-    resetTmpLinkInfo() {
-        this.tmpTargetIndex = -1;
-        this.tmpLinkInfos.length = 0;
+    disconnect() {
+        this.controller.abort();
     }
 }

@@ -20,6 +20,10 @@ export default class AnnotatorView extends FileView {
     iframe: HTMLIFrameElement;
     annotationTarget?: AnnotationTarget;
     darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
+    private loadGeneration = 0;
+    private navigationGeneration = 0;
+    private closed = false;
+    private themeObserver: MutationObserver;
     getViewType(): string {
         return VIEW_TYPE_PDF_ANNOTATOR;
     }
@@ -27,6 +31,13 @@ export default class AnnotatorView extends FileView {
         super(leaf);
         this.plugin = plugin;
         this.plugin.views.add(this);
+        this.themeObserver = new MutationObserver(() => {
+            if (this.plugin.settings.darkMode === 'follow-obsidian') void this.onDarkReadersUpdated();
+        });
+        this.themeObserver.observe(this.containerEl.ownerDocument.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
     }
 
     isDarkModeEnabled(): boolean {
@@ -47,12 +58,14 @@ export default class AnnotatorView extends FileView {
     }
 
     async onLoadFile(file: TFile) {
+        const generation = ++this.loadGeneration;
         try {
             // Prevent pane from loading too early.
             await this.plugin.setupPromise;
-            ReactDOM.unmountComponentAtNode(this.contentEl);
-            this.contentEl.empty();
+            if (this.closed || generation !== this.loadGeneration) return;
+            this.clearReader();
             const annotationTarget = await this.getAnnotationTarget(file);
+            if (this.closed || generation !== this.loadGeneration) return;
 
             this.contentEl.removeClass('view-content');
             this.contentEl.style.height = '100%';
@@ -61,18 +74,37 @@ export default class AnnotatorView extends FileView {
                 containerEl: this.contentEl,
                 annotationFile: file.path,
                 onload: async (iframe: HTMLIFrameElement) => {
+                    if (this.closed || generation !== this.loadGeneration) return;
                     this.iframe = iframe;
                 },
-                onDarkReadersUpdated: this.onDarkReadersUpdated.bind(this)
+                onDarkReadersUpdated: async (references: Set<WeakRef<DarkReaderType>>) => {
+                    if (!this.closed && generation === this.loadGeneration) await this.onDarkReadersUpdated(references);
+                },
+                onerror: (error: Error) => {
+                    if (!this.closed && generation === this.loadGeneration) this.showError(error);
+                }
             };
             ReactDOM.render(<this.plugin.PdfAnnotation pdf={annotationTarget} {...commonProps} />, this.contentEl);
         } catch (error) {
-            this.contentEl.empty();
-            this.contentEl.createDiv({
-                cls: 'annotator-plus-error',
-                text: error instanceof Error ? error.message : 'Could not open the annotation target.'
-            });
+            if (!this.closed && generation === this.loadGeneration) this.showError(error);
         }
+    }
+
+    private showError(error: unknown) {
+        this.clearReader();
+        this.contentEl.createDiv({
+            cls: 'annotator-plus-error',
+            attr: { role: 'alert' },
+            text: error instanceof Error ? error.message : 'Could not open the annotation target.'
+        });
+    }
+
+    private clearReader() {
+        ReactDOM.unmountComponentAtNode(this.contentEl);
+        this.iframe = null;
+        this.annotationTarget = undefined;
+        this.darkReaderReferences.clear();
+        this.contentEl.empty();
     }
 
     async onDarkReadersUpdated(darkReaderReferences?: Set<WeakRef<DarkReaderType>>): Promise<void> {
@@ -103,18 +135,28 @@ export default class AnnotatorView extends FileView {
     }
 
     onunload() {
-        try {
-            ReactDOM.unmountComponentAtNode(this.contentEl);
-        } catch (e) {}
+        this.dispose();
         this.plugin.views.delete(this);
-        this.contentEl.empty();
+    }
+
+    dispose() {
+        this.closed = true;
+        ++this.loadGeneration;
+        ++this.navigationGeneration;
+        this.themeObserver.disconnect();
+        this.clearReader();
     }
 
     async onUnloadFile(file: TFile) {
-        try {
-            ReactDOM.unmountComponentAtNode(this.contentEl);
-        } catch (e) {}
+        ++this.loadGeneration;
+        ++this.navigationGeneration;
+        this.clearReader();
         await super.onUnloadFile(file);
+    }
+
+    async onRename(file: TFile) {
+        await super.onRename(file);
+        await this.onLoadFile(file);
     }
 
     onPaneMenu(menu: Menu, source: 'more-options' | 'tab-header' | string) {
@@ -150,20 +192,20 @@ export default class AnnotatorView extends FileView {
     }
 
     async scrollToAnnotation(annotationId: Annotation['id'] | null) {
-        const annotation = await getAnnotation(annotationId, this.file, this.app.vault);
-        if (!annotation || !this.iframe) return;
+        if (!this.file || !annotationId) return;
+        const generation = ++this.navigationGeneration;
+        const file = this.file;
+        const annotation = await getAnnotation(annotationId, file, this.app.vault);
+        if (!annotation) return;
 
         for (let attempt = 0; attempt < 100; attempt++) {
-            const sidebarFrame = this.iframe.contentDocument
+            if (this.closed || generation !== this.navigationGeneration || this.file !== file) return;
+            const sidebarFrame = this.iframe?.contentDocument
                 ?.querySelector('hypothesis-sidebar')
                 ?.shadowRoot?.querySelector<HTMLIFrameElement>('iframe.sidebar-frame');
             const bridge = (sidebarFrame?.contentWindow as Window & { annotatorPlus?: AnnotatorPlusBridge })
                 ?.annotatorPlus;
             if (bridge) {
-                if (!annotation.target?.length) {
-                    bridge.showPageNotes();
-                    return;
-                }
                 if (bridge.focusAnnotation(annotation.id)) return;
             }
             await wait(50);

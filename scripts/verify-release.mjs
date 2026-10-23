@@ -99,8 +99,17 @@ const pdf = await resources.file('pdfjs/build/pdf.mjs').async('string');
 if (!pdf.includes('pdfjsVersion = 6.2.108')) {
   throw new Error('Release bundle does not contain the pinned PDF.js 6.2.108 build');
 }
+for (const path of ['pdfjs/build/pdf.mjs', 'pdfjs/build/pdf.worker.mjs']) {
+  const source = await resources.file(path).async('string');
+  for (const feature of ['es.math.sum-precise.js', 'es.map.get-or-insert-computed.js']) {
+    if (!source.includes(feature)) throw new Error(`${path} is missing its runtime compatibility polyfill: ${feature}`);
+  }
+}
 
 const pdfViewer = await resources.file('pdfjs/web/viewer.mjs').async('string');
+if (!pdfViewer.includes('useWorkerFetch: false')) {
+  throw new Error('PDF worker resource reads must pass through the vault-only viewer fetch bridge');
+}
 if (!pdfViewer.includes('const annotationEditorMode = AnnotationEditorType.DISABLE;')) {
   throw new Error('PDF.js editing tools must remain disabled in the Annotator+ reader');
 }

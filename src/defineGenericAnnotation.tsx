@@ -3,16 +3,10 @@ import { OfflineIframe } from 'react-offline-iframe';
 import React, { useEffect, useRef } from 'react';
 import { PdfAnnotationProps } from 'types';
 import { b64_to_utf8, utf8_to_b64 } from 'utils';
-import { deleteAnnotation, loadAnnotations, writeAnnotation } from 'annotationFileUtils';
 import { Annotation } from './types';
 import AnnotatorPlugin from 'main';
-import {
-    checkPseudoAnnotationEquality,
-    getAnnotationHighlightTextData,
-    isValidAnnotationId,
-    isWritableAnnotation
-} from 'annotationUtils';
-import { MarkdownRenderChild, MarkdownRenderer, TFile, Vault } from 'obsidian';
+import { checkPseudoAnnotationEquality, getAnnotationHighlightTextData } from 'annotationUtils';
+import { MarkdownRenderChild, MarkdownRenderer, Notice, TFile, Vault } from 'obsidian';
 import { DarkReaderType } from 'darkreader';
 import {
     awaitResourceLoading,
@@ -25,7 +19,9 @@ import {
 import { PdfNoteIndicatorController, setupPdfNoteIndicatorsInFrame } from 'pdfNoteIndicators';
 import { targetMatchesRequest } from './targetResolver';
 import { isLocalAnnotationApiUrl, shouldBlockExternalHref } from './offlinePolicy';
+import { handleAnnotationApi } from './annotationApi';
 import { normalizeIframeFetch } from './iframeFetch';
+import { installPdfWorker } from './pdfWorker';
 
 const proxiedHosts = new Set(['cdn.hypothes.is', 'via.hypothes.is', 'hypothes.is']);
 const BLOCKED_RESOURCE_URL = 'junk:/blocked';
@@ -43,6 +39,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
         const pdfAnnotations = useRef<Annotation[]>([]);
         const pdfNoteIndicatorController = useRef<PdfNoteIndicatorController>(null);
         const sidebarCleanups = useRef(new Set<() => void>()).current;
+        const warnedInvalidBlocks = useRef(false);
 
         const refreshPdfNoteIndicators = (annotations?: Annotation[]) => {
             if (annotations) pdfAnnotations.current = annotations;
@@ -57,6 +54,7 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 sidebarCleanups.clear();
                 markdownRenderChildren.forEach(child => child.unload());
                 markdownRenderChildren.clear();
+                darkReaderReferences.forEach(reference => reference.deref()?.disable());
                 darkReaderReferences.clear();
                 pdfNoteIndicatorController.current?.disconnect();
             };
@@ -69,66 +67,22 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 fetch={async (requestInfo: RequestInfo, requestInit?: RequestInit) => {
                     const href = typeof requestInfo == 'string' ? requestInfo : requestInfo.url;
                     const url = new URL(href);
-                    let res = null;
                     if (href.startsWith('junk:')) {
-                        return new Response(null, {
-                            status: 403,
-                            statusText: 'Blocked by Annotator+ offline policy'
-                        });
+                        return new Response(null, { status: 403, statusText: 'Blocked by Annotator+ offline policy' });
                     }
                     if (isBundledResourceUrl(href)) return fetch(href);
-                    const localApi = isLocalAnnotationApiUrl(url);
-                    if (localApi && url.pathname === '/api/search') {
-                        try {
-                            res = await loadAnnotations(null, vault, props.annotationFile);
-                            refreshPdfNoteIndicators(res.rows);
-                        } catch (e) {
-                            console.error('failed to load annotations', { error: e });
-                        }
-                    }
-                    if (
-                        localApi &&
-                        (url.pathname === '/api/annotations' || url.pathname.startsWith('/api/annotations/'))
-                    ) {
-                        const method = (requestInit?.method || 'GET').toUpperCase();
-                        if (method === 'DELETE') {
-                            let id = '';
-                            try {
-                                id = decodeURIComponent(url.pathname.slice('/api/annotations/'.length));
-                            } catch {
-                                // Handled by the validation below.
-                            }
-                            if (!isValidAnnotationId(id)) {
-                                return new Response(null, { status: 400, statusText: 'Invalid annotation ID' });
-                            }
-                            res = await deleteAnnotation(id, vault, props.annotationFile);
-                            if (res.deleted) {
-                                refreshPdfNoteIndicators(
-                                    pdfAnnotations.current.filter(annotation => annotation.id != res.id)
+                    const result = await handleAnnotationApi(url, requestInit, plugin, props.annotationFile);
+                    if (result) {
+                        if (result.annotations) {
+                            refreshPdfNoteIndicators(result.annotations.rows);
+                            if (result.annotations.errors?.length && !warnedInvalidBlocks.current) {
+                                warnedInvalidBlocks.current = true;
+                                new Notice(
+                                    `Annotator+: ${result.annotations.errors.length} invalid annotation block(s) could not be read. Open the note as Markdown to inspect them. The original text is unchanged.`
                                 );
                             }
-                        } else if (['POST', 'PUT', 'PATCH'].includes(method) && typeof requestInit?.body === 'string') {
-                            let annotation: unknown;
-                            try {
-                                annotation = JSON.parse(requestInit.body);
-                            } catch {
-                                return new Response(null, { status: 400, statusText: 'Invalid annotation JSON' });
-                            }
-                            if (!isWritableAnnotation(annotation)) {
-                                return new Response(null, { status: 400, statusText: 'Invalid annotation payload' });
-                            }
-                            res = await writeAnnotation(annotation, plugin, props.annotationFile);
-                            refreshPdfNoteIndicators([
-                                ...pdfAnnotations.current.filter(annotation => annotation.id != res.id),
-                                res
-                            ]);
-                        } else return new Response(null, { status: 405, statusText: 'Unsupported annotation request' });
-                    }
-                    if (res) {
-                        return new Response(JSON.stringify(res, null, 2), {
-                            status: 200,
-                            statusText: 'ok'
-                        });
+                        }
+                        return result.response;
                     }
                     await awaitResourceLoading();
                     const folder = resourcesZip;
@@ -175,6 +129,17 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 onMessagePatchStrategy={null}
                 onIframePatch={async iframe => {
                     if (!iframe.contentWindow || !iframe.contentDocument) return;
+                    if (disposed.current) return;
+                    // The iframe dependency silences every diagnostic, including font failures.
+                    (iframe.contentWindow as Window & typeof globalThis).console = {
+                        ...console,
+                        log: (...args) => plugin.log(...args),
+                        debug: (...args) => plugin.log(...args),
+                        info: (...args) => plugin.log(...args)
+                    };
+                    if (iframe.getAttribute('patched-src')?.includes('/pdfjs/web/viewer.html')) {
+                        sidebarCleanups.add(installPdfWorker(iframe, resourceUrls.get('pdfjs/build/pdf.worker.mjs')));
+                    }
                     normalizeIframeFetch(iframe.contentWindow);
                     blockExternalNavigation(iframe);
                     const cleanupSidebar = patchSidebarMarkdownRendering(
@@ -188,6 +153,10 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                     await props.onIframePatch?.(iframe);
 
                     const darkReader = await loadDarkReader(iframe, resourceUrls.get('dark-reader/darkreader.js'));
+                    if (disposed.current) {
+                        darkReader?.disable();
+                        return;
+                    }
                     if (darkReader) {
                         const darkReaderReference = new WeakRef(darkReader);
                         darkReaderReferences.add(darkReaderReference);
@@ -230,11 +199,11 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                             elem.draggable &&= ev.key != 'Shift';
                         };
 
-                        elem.ondragstart = async event => {
+                        elem.ondragstart = event => {
+                            plugin.dragData = null;
                             event.dataTransfer.setData('text/plain', 'drag-event::hypothesis-highlight');
                             const pseudoAnnotation = (elem as HTMLElement & { _annotation: Annotation })._annotation;
-                            const annotations = await loadAnnotations(null, vault, props.annotationFile);
-                            const matchingAnnotations = annotations.rows.filter(annotation =>
+                            const matchingAnnotations = pdfAnnotations.current.filter(annotation =>
                                 checkPseudoAnnotationEquality(annotation, pseudoAnnotation)
                             );
                             if (matchingAnnotations.length > 0) {
@@ -247,6 +216,9 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                                     annotationText: exact
                                 };
                             }
+                        };
+                        elem.ondragend = () => {
+                            plugin.dragData = null;
                         };
                     });
                 }}
@@ -280,17 +252,13 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
 };
 
 async function loadDarkReader(iframe: HTMLIFrameElement, moduleUrl?: string): Promise<DarkReaderType | null> {
-    if (!moduleUrl || !iframe.contentDocument || !iframe.contentWindow) return null;
+    const frameWindow = iframe.contentWindow as Window & typeof globalThis;
+    const frameDocument = iframe.contentDocument;
+    if (!moduleUrl || !frameDocument || !frameWindow) return null;
     return await new Promise(resolve => {
         const resultKey = '__annotatorPlusDarkReader';
         const readyEvent = 'annotator-plus-dark-reader-ready';
-        const onReady = () => {
-            iframe.contentWindow.removeEventListener(readyEvent, onReady);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            resolve((iframe.contentWindow as any)[resultKey] || null);
-        };
-        iframe.contentWindow.addEventListener(readyEvent, onReady, { once: true });
-        const script = iframe.contentDocument.createElement('script');
+        const script = frameDocument.createElement('script');
         script.type = 'module';
         const wrapperUrl = URL.createObjectURL(
             new Blob(
@@ -302,13 +270,19 @@ window.dispatchEvent(new Event(${JSON.stringify(readyEvent)}));`
                 { type: 'text/javascript' }
             )
         );
-        script.src = wrapperUrl;
-        script.onload = () => URL.revokeObjectURL(wrapperUrl);
-        script.onerror = () => {
+        const finish = (reader: DarkReaderType | null) => {
+            clearTimeout(timeout);
+            frameWindow.removeEventListener(readyEvent, onReady);
             URL.revokeObjectURL(wrapperUrl);
-            resolve(null);
+            resolve(reader);
         };
-        iframe.contentDocument.head.appendChild(script);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const onReady = () => finish((frameWindow as any)[resultKey] || null);
+        const timeout = setTimeout(() => finish(null), 5000);
+        frameWindow.addEventListener(readyEvent, onReady, { once: true });
+        script.src = wrapperUrl;
+        script.onerror = () => finish(null);
+        frameDocument.head.appendChild(script);
     });
 }
 
@@ -363,6 +337,11 @@ function patchSidebarMarkdownRendering(
         markdown: string;
         renderChild?: MarkdownRenderChild;
 
+        connectedCallback() {
+            this.classList.add('markdown-rendered');
+            this.style.display = 'block';
+        }
+
         clearRenderChild() {
             if (!this.renderChild) return;
             this.renderChild.unload();
@@ -389,53 +368,57 @@ function patchSidebarMarkdownRendering(
                     await MarkdownRenderer.renderMarkdown(this.markdown, this, filePath, renderChild);
                     if (this.renderChild !== renderChild) return;
                     const maxDepth = 10;
-                    const patchEmbeds = (el: HTMLElement, filePath: string, depth: number) => {
+                    const patchEmbeds = async (el: HTMLElement, filePath: string, depth: number) => {
                         if (depth > maxDepth) return;
-                        [...el.findAll('.internal-embed')].forEach(async (el: HTMLElement) => {
-                            const src = el.getAttribute('src');
-                            const target =
-                                typeof src === 'string' && plugin.app.metadataCache.getFirstLinkpathDest(src, filePath);
-                            if (target instanceof TFile) {
-                                el.innerText = '';
-                                switch (target.extension) {
-                                    case 'md':
-                                        const embed = el.createDiv({ cls: 'markdown-embed' });
-                                        embed.createDiv({ cls: 'markdown-embed-title', text: target.basename });
-                                        const content = embed.createDiv({
-                                            cls: 'markdown-embed-content node-insert-event markdown-embed-page'
-                                        });
-                                        const previewEl = content.createDiv({ cls: 'markdown-preview-view' });
-                                        embed.createDiv({
-                                            cls: 'markdown-embed-link',
-                                            attr: { 'aria-label': 'Open link' }
-                                        });
-                                        await MarkdownRenderer.renderMarkdown(
-                                            await plugin.app.vault.cachedRead(target),
-                                            previewEl,
-                                            target.path,
-                                            renderChild
-                                        );
-                                        await patchEmbeds(previewEl, target.path, depth + 1);
-                                        el.addClasses(['is-loaded']);
-                                        break;
-                                    default:
-                                        el.createEl(
-                                            'img',
-                                            { attr: { src: plugin.app.vault.getResourcePath(target) } },
-                                            img => {
-                                                if (el.hasAttribute('width'))
-                                                    img.setAttribute('width', el.getAttribute('width'));
-                                                if (el.hasAttribute('alt'))
-                                                    img.setAttribute('alt', el.getAttribute('alt'));
-                                            }
-                                        );
-                                        el.addClasses(['image-embed', 'is-loaded']);
-                                        break;
+                        await Promise.all(
+                            [...el.findAll('.internal-embed')].map(async (el: HTMLElement) => {
+                                const src = el.getAttribute('src');
+                                const target =
+                                    typeof src === 'string' &&
+                                    plugin.app.metadataCache.getFirstLinkpathDest(src, filePath);
+                                if (target instanceof TFile) {
+                                    el.innerText = '';
+                                    switch (target.extension) {
+                                        case 'md':
+                                            const embed = el.createDiv({ cls: 'markdown-embed' });
+                                            embed.createDiv({ cls: 'markdown-embed-title', text: target.basename });
+                                            const content = embed.createDiv({
+                                                cls: 'markdown-embed-content node-insert-event markdown-embed-page'
+                                            });
+                                            const previewEl = content.createDiv({ cls: 'markdown-preview-view' });
+                                            embed.createDiv({
+                                                cls: 'markdown-embed-link',
+                                                attr: { 'aria-label': 'Open link' }
+                                            });
+                                            await MarkdownRenderer.renderMarkdown(
+                                                await plugin.app.vault.cachedRead(target),
+                                                previewEl,
+                                                target.path,
+                                                renderChild
+                                            );
+                                            if (this.renderChild !== renderChild) return;
+                                            await patchEmbeds(previewEl, target.path, depth + 1);
+                                            el.addClasses(['is-loaded']);
+                                            break;
+                                        default:
+                                            el.createEl(
+                                                'img',
+                                                { attr: { src: plugin.app.vault.getResourcePath(target) } },
+                                                img => {
+                                                    if (el.hasAttribute('width'))
+                                                        img.setAttribute('width', el.getAttribute('width'));
+                                                    if (el.hasAttribute('alt'))
+                                                        img.setAttribute('alt', el.getAttribute('alt'));
+                                                }
+                                            );
+                                            el.addClasses(['image-embed', 'is-loaded']);
+                                            break;
+                                    }
                                 }
-                            }
-                        });
+                            })
+                        );
                     };
-                    patchEmbeds(this, filePath, 1);
+                    await patchEmbeds(this, filePath, 1);
                 })();
             }
         }
@@ -463,9 +446,10 @@ function patchSidebarMarkdownRendering(
         }
         style.textContent = css;
     };
-    plugin.styleObserver.listen(updateStyles);
+    const styleObserver = plugin.styleObserver;
+    styleObserver.listen(updateStyles);
     return () => {
-        plugin.styleObserver.remove(updateStyles);
+        styleObserver.remove(updateStyles);
         [...renderChildren].forEach(child => {
             if (child.containerEl.ownerDocument === iframe.contentDocument) {
                 child.unload();
