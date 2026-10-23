@@ -6229,7 +6229,10 @@ button.hasPopupMenu{
       width:100%;
       height:100%;
       pointer-events:none;
-      background:rgb(0 90 255 / 0.22);
+      /* Blend with the painted PDF so the original glyphs stay visible. */
+      background:rgb(15 117 240);
+      mix-blend-mode:multiply;
+      z-index:1;
     }
   }
 }

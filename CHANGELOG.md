@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 — 2026-10-24
+
+- Restore visible text selection after scrolling far enough to evict a PDF page and returning to it. Dispose the selection draw layer even when PDF editing is disabled.
+- Keep PDF.js's invisible selection helper outside annotation wrappers so text immediately after existing or overlapping highlights remains reachable during forward and backward drags.
+- Resolve releases in the line margin to real PDF text before resetting the compatibility helper, preventing selections from jumping to the page footer in Obsidian's Chromium 142.
+- Use a stronger blue selection in light and dark modes while preserving the original canvas-rendered fonts and mathematical glyphs. Keep line breaks and page margins unpainted.
+- Exercise the bundled worker, real PDF rendering and page buffer, native pointer and keyboard selection, copying, zoom, rotation, and rendered selection pixels in browser regressions.
+
 ## 1.0.3 — 2026-10-24
 
 - Keep native PDF text selections and the Annotate/Highlight popup visible when sidebar layout notifications reapply an unchanged zoom preset.
