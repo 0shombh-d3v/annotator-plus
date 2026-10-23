@@ -18,6 +18,7 @@ type AnnotatorPlusBridge = {
 export default class AnnotatorView extends FileView {
     plugin: AnnotatorPlugin;
     iframe: HTMLIFrameElement;
+    private readerDocument: Document | null = null;
     annotationTarget?: AnnotationTarget;
     darkReaderReferences: Set<WeakRef<DarkReaderType>> = new Set();
     private loadGeneration = 0;
@@ -76,6 +77,7 @@ export default class AnnotatorView extends FileView {
                 onload: async (iframe: HTMLIFrameElement) => {
                     if (this.closed || generation !== this.loadGeneration) return;
                     this.iframe = iframe;
+                    this.readerDocument = iframe.contentDocument;
                 },
                 onDarkReadersUpdated: async (references: Set<WeakRef<DarkReaderType>>) => {
                     if (!this.closed && generation === this.loadGeneration) await this.onDarkReadersUpdated(references);
@@ -100,7 +102,9 @@ export default class AnnotatorView extends FileView {
     }
 
     private clearReader() {
-        const document = this.iframe?.contentDocument;
+        // Obsidian can detach the iframe before invoking the view's unload
+        // hooks, at which point iframe.contentDocument is already null.
+        const document = this.readerDocument || this.iframe?.contentDocument;
         const sidebarLink = document?.querySelector('link[type="application/annotator+html"][rel="sidebar"]');
         if (sidebarLink) {
             // The embedded client owns observers, ports, and pending anchors.
@@ -111,6 +115,7 @@ export default class AnnotatorView extends FileView {
         }
         ReactDOM.unmountComponentAtNode(this.contentEl);
         this.iframe = null;
+        this.readerDocument = null;
         this.annotationTarget = undefined;
         this.darkReaderReferences.clear();
         this.contentEl.empty();

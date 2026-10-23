@@ -131,6 +131,26 @@ test('closing a reader asks the embedded client to stop before removing its ifra
     iframe.remove();
 });
 
+test('client cleanup still runs when Obsidian has already detached the iframe document', async () => {
+    const { view } = context();
+    jest.spyOn(view, 'getAnnotationTarget').mockResolvedValue(target);
+    await view.onLoadFile(makeFile('one.md'));
+    const frameDocument = document.implementation.createHTMLDocument();
+    const link = frameDocument.createElement('link');
+    link.type = 'application/annotator+html';
+    link.rel = 'sidebar';
+    frameDocument.head.appendChild(link);
+    const destroy = jest.fn();
+    link.addEventListener('destroy', destroy);
+    const iframe = { contentDocument: frameDocument };
+    await (ReactDOM.render as jest.Mock).mock.calls[0][0].props.onload(iframe);
+    iframe.contentDocument = null;
+
+    view.dispose();
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+});
+
 test('annotation navigation waits for the new sidebar and focuses page notes by ID', async () => {
     jest.useFakeTimers();
     const { view } = context();

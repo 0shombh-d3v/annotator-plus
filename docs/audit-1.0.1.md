@@ -24,7 +24,7 @@ Audited the plugin source, local reader bridge, annotation persistence, vendored
 
 ## Verification
 
-- Plugin type checking, 85 regression tests, and ESLint.
+- Plugin type checking, 86 regression tests, and ESLint.
 - Vendored Hypothesis formatting, type checking, and 4,273 browser tests, including Notes-filter, page-note reply, and hidden-canvas regressions.
 - Root npm dependency audit; compatible dependency updates and pinned development-SDK override.
 - Vendored dependency review and compatible lockfile refresh, including patched Preact and DOMPurify. No critical advisories remain in that dependency tree. Remaining advisories in legacy development tools and upstream Markdown dependencies are tracked below.
