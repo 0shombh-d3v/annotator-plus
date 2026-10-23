@@ -32,6 +32,19 @@ describe('getBundledResourcePath', () => {
         resourceUrls.delete('test/resource.json');
     });
 
+    it('loads a bundled sidebar with configuration fragments without admitting other blob URLs', () => {
+        const url = 'blob:app://obsidian.md/bundled-sidebar';
+        resourceUrls.set('hypothes.is/app.html', url);
+        try {
+            expect(isBundledResourceUrl(`${url}#config=%7B%22openSidebar%22%3Atrue%7D`)).toBe(true);
+            expect(getBundledResourcePath(`${url}#config=test`)).toBe('hypothes.is/app.html');
+            expect(isBundledResourceUrl(`${url}?unbundled=true#config=test`)).toBe(false);
+            expect(isBundledResourceUrl('blob:app://obsidian.md/unknown#config=test')).toBe(false);
+        } finally {
+            resourceUrls.delete('hypothes.is/app.html');
+        }
+    });
+
     it('rewrites bundled CSS assets and blocks missing or external URLs', () => {
         const urls = new Map([['cdn.hypothes.is/hypothesis/build/styles/fonts/test.woff2', 'blob:font']]);
         const css =

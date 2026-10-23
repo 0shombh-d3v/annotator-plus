@@ -8,7 +8,7 @@ The distribution embeds or builds upon these projects:
 | --- | --- | --- |
 | Obsidian Annotator | Original plugin implementation | AGPL-3.0; [LICENSE.TXT](LICENSE.TXT) |
 | Hypothesis client (`b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`) | Annotation guest and sidebar | BSD-2-Clause and noted subcomponents; [vendor license](vendor/hypothesis-client/LICENSE) |
-| PDF.js 6.2.108 | PDF rendering | Apache-2.0 and bundled font notices; [bundled license](resources/pdfjs/LICENSE) |
+| PDF.js 6.2.108 (legacy compatibility builds) | PDF rendering | Apache-2.0 and bundled font notices; [bundled license](resources/pdfjs/LICENSE) |
 | Dark Reader 4.9.128 | Dark appearance | MIT; [bundled license](resources/dark-reader/LICENCE) |
 | react-offline-iframe | Offline reader resource bridge | MIT |
 

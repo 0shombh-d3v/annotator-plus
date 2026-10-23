@@ -1,6 +1,5 @@
 import 'core-js';
 import {
-    FileView,
     MarkdownView,
     Plugin,
     ViewState,
@@ -8,14 +7,20 @@ import {
     TFile,
     MarkdownPostProcessorContext,
     parseLinktext,
-    MenuItem
+    MenuItem,
+    editorInfoField
 } from 'obsidian';
 
 import StyleObserver from 'styleObserver';
 import definePdfAnnotation from './definePdfAnnotation';
 import { around } from 'monkey-around';
 
-import { VIEW_TYPE_PDF_ANNOTATOR, ICON_NAME, ANNOTATION_TARGET_PROPERTY } from './constants';
+import {
+    VIEW_TYPE_PDF_ANNOTATOR,
+    LEGACY_VIEW_TYPE_PDF_ANNOTATOR,
+    ICON_NAME,
+    ANNOTATION_TARGET_PROPERTY
+} from './constants';
 import { Annotation, PdfAnnotationProps } from './types';
 import * as codeMirror from '@codemirror/state';
 import AnnotatorSettingsTab, { AnnotatorSettings, DEFAULT_SETTINGS, IHasAnnotatorSettings } from 'settings';
@@ -25,6 +30,7 @@ import stringEncodedResourcesFolder from './resources!zipStringEncoded';
 import * as jszip from 'jszip';
 import SourceViewObserver from 'sourceViewObserver';
 import { migrateDarkModeSettings } from './darkMode';
+import { navigateToAnnotation } from './annotationNavigation';
 
 export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSettings {
     static instance: AnnotatorPlugin = null;
@@ -33,7 +39,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     views: Set<AnnotatorView> = new Set();
 
     public pdfAnnotatorFileModes: { [file: string]: string } = {};
-    private _loaded = false;
+    private ready = false;
+    private unloading = false;
 
     // All these initialized in onloadImpl(), instead of constructor
     // @ts-ignore
@@ -49,6 +56,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     sourceViewObserver: SourceViewObserver;
 
     async onload() {
+        this.unloading = false;
         AnnotatorPlugin.instance = this;
         this.setupPromise = this.onloadImpl();
         await this.setupPromise;
@@ -65,16 +73,21 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
     async onloadImpl() {
         await this.loadSettings();
+        if (this.unloading) return;
         this.styleObserver = new StyleObserver();
         this.styleObserver.watch();
         this.registerView(VIEW_TYPE_PDF_ANNOTATOR, leaf => new AnnotatorView(leaf, this));
         await this.loadResources();
+        if (this.unloading) {
+            this.unloadResources();
+            return;
+        }
         this.PdfAnnotation = definePdfAnnotation(this.app.vault, this);
+        this.sourceViewObserver = new SourceViewObserver(this);
         this.addMarkdownPostProcessor();
         this.registerMonkeyPatches();
         this.registerSettingsTab();
-        this.sourceViewObserver = new SourceViewObserver(this);
-        this.sourceViewObserver.watch();
+        this.registerEditorExtension(this.sourceViewObserver.editorExtension);
 
         this.registerEditorExtension(this.getDropExtension());
 
@@ -82,18 +95,21 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             id: 'toggle-annotation-mode',
             name: 'Toggle Annotation/Markdown Mode',
             mobileOnly: false,
-            callback: () => {
+            checkCallback: checking => {
                 const annotatorView = this.app.workspace.getActiveViewOfType(AnnotatorView);
                 const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+                if (!annotatorView && (!markdownView?.file || !this.isAnnotationFile(markdownView.file))) return false;
+                if (checking) return true;
 
                 if (annotatorView != null) {
                     this.pdfAnnotatorFileModes[(annotatorView.leaf as any).id || annotatorView.file.path] = 'markdown'; // eslint-disable-line
-                    this.setMarkdownView(annotatorView.leaf);
+                    void this.setMarkdownView(annotatorView.leaf);
                 } else if (markdownView != null) {
                     this.pdfAnnotatorFileModes[(markdownView.leaf as any).id || markdownView.file.path] = // eslint-disable-line
                         VIEW_TYPE_PDF_ANNOTATOR;
-                    this.setAnnotatorView(markdownView.leaf);
+                    void this.setAnnotatorView(markdownView.leaf);
                 }
+                return true;
             }
         });
 
@@ -123,27 +139,13 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         );
 
         this.registerEvent(
-            this.app.workspace.on('file-open', file => {
-                if (file) {
-                    this.log('file opened');
-                    if (this.sourceViewObserver.getObserver()) {
-                        this.sourceViewObserver.resetTmpLinkInfo();
-                        this.sourceViewObserver.getObserver().disconnect();
-                    } else {
-                        this.sourceViewObserver.initObserver();
-                    }
-                    this.sourceViewObserver.watch();
-                }
-            })
-        );
-
-        this.registerEvent(
             this.app.workspace.on('css-change', () => {
                 if (this.settings.darkMode === 'follow-obsidian') {
                     this.views.forEach(view => void view.onDarkReadersUpdated());
                 }
             })
         );
+        this.ready = true;
     }
 
     /*
@@ -154,22 +156,17 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
             (transaction: codeMirror.Transaction): codeMirror.TransactionSpec => {
                 if (transaction.isUserEvent('input.drop')) {
                     try {
-                        // changes.inserted used like this because ChangeSet doesn't have typed attributes for that
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any
-                        const droppedText = (transaction.changes as any).inserted
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            .map((x: any) => x.text.join(''))
-                            .join('');
-
-                        if (this.dragData !== null && droppedText == 'drag-event::hypothesis-highlight') {
-                            const startPos = transaction.selection.ranges[0].from;
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const leaf: FileView = Object.keys((transaction.state as any).config.address)
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                .map(x => (transaction.state as any).field({ id: x }))
-                                .filter(x => x?.file)[0];
-
-                            const targetFile = leaf.file;
+                        const changes: { from: number; to: number; text: string }[] = [];
+                        transaction.changes.iterChanges((from, to, _fromB, _toB, inserted) =>
+                            changes.push({ from, to, text: inserted.toString() })
+                        );
+                        if (
+                            this.dragData !== null &&
+                            changes.length === 1 &&
+                            changes[0].text === 'drag-event::hypothesis-highlight'
+                        ) {
+                            const { from, to } = changes[0];
+                            const targetFile = transaction.startState.field(editorInfoField, false)?.file;
 
                             const annotationFile = this.app.vault.getAbstractFileByPath(
                                 this.dragData.annotationFilePath
@@ -183,8 +180,8 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                                 );
                                 this.dragData = null;
                                 return {
-                                    changes: { from: startPos, insert: linkString },
-                                    selection: { anchor: startPos }
+                                    changes: { from, to, insert: linkString },
+                                    selection: { anchor: from + linkString.length }
                                 };
                             }
                         }
@@ -202,14 +199,17 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
     }
 
     onunload() {
+        this.unloading = true;
+        this.ready = false;
+        this.views.forEach(view => view.dispose());
+        this.views.clear();
         this.unloadResources();
-        this.styleObserver.unwatch();
+        this.styleObserver?.unwatch();
         this.styleObserver = null;
         AnnotatorPlugin.instance = null;
 
-        if (this.sourceViewObserver.getObserver()) {
-            this.sourceViewObserver.getObserver().disconnect();
-        }
+        this.sourceViewObserver?.disconnect();
+        this.dragData = null;
     }
 
     async loadSettings() {
@@ -237,36 +237,12 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
         onNewPane: boolean,
         annotationId: string | null
     ): Promise<void> {
-        const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_PDF_ANNOTATOR);
-        let leaf: WorkspaceLeaf | null = null;
-
-        if (leaves?.length > 0) {
-            leaf = leaves[0];
-        }
-        if (!leaf) {
-            leaf = this.app.workspace.activeLeaf;
-        }
-
-        if (!leaf) {
-            leaf = this.app.workspace.getLeaf();
-        }
-
-        if (onNewPane) {
-            leaf = this.app.workspace.createLeafBySplit(leaf);
-        }
-
-        await leaf.setViewState({
-            type: VIEW_TYPE_PDF_ANNOTATOR,
-            state: { file: annotationTargetFile.path }
-        });
-
-        this.scrollToAnnotation(annotationId);
+        await navigateToAnnotation(this.app.workspace, this.views, annotationTargetFile, onNewPane, annotationId);
     }
 
     public scrollToAnnotation(annotationid: Annotation['id'] | null) {
-        for (const view of this.views) {
-            view.scrollToAnnotation(annotationid);
-        }
+        const view = this.app.workspace.getActiveViewOfType(AnnotatorView);
+        if (view) void view.scrollToAnnotation(annotationid);
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -315,8 +291,18 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
 
                 setViewState(next) {
                     return function (state: ViewState, ...rest: unknown[]) {
+                        // Restore workspaces saved by 1.0.0 without claiming the fallback plugin's view type.
                         if (
-                            self._loaded &&
+                            state.type === LEGACY_VIEW_TYPE_PDF_ANNOTATOR &&
+                            !(
+                                self.app as typeof self.app & { plugins: { getPlugin: (id: string) => unknown } }
+                            ).plugins?.getPlugin('obsidian-annotator')
+                        ) {
+                            // eslint-disable-line
+                            state = { ...state, type: VIEW_TYPE_PDF_ANNOTATOR };
+                        }
+                        if (
+                            self.ready &&
                             state.type === 'markdown' &&
                             typeof state.state?.file === 'string' &&
                             self.pdfAnnotatorFileModes[this.id || state.state.file] !== 'markdown' &&
@@ -330,7 +316,7 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                                     type: VIEW_TYPE_PDF_ANNOTATOR
                                 };
 
-                                self.pdfAnnotatorFileModes[state.state.file] = VIEW_TYPE_PDF_ANNOTATOR;
+                                self.pdfAnnotatorFileModes[this.id || state.state.file] = VIEW_TYPE_PDF_ANNOTATOR;
 
                                 return next.apply(this, [newState, ...rest]);
                             }
@@ -375,10 +361,12 @@ export default class AnnotatorPlugin extends Plugin implements IHasAnnotatorSett
                 }
                 const parsedLink = parseLinktext(linkHref);
                 const annotationid = parsedLink.subpath.startsWith('#^') ? parsedLink.subpath.substr(2) : null;
-                const file: TFile | null = this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath);
+                const file = parsedLink.path
+                    ? this.app.metadataCache.getFirstLinkpathDest(parsedLink.path, ctx.sourcePath)
+                    : this.app.vault.getAbstractFileByPath(ctx.sourcePath);
 
-                if (file !== null && annotationid != null && this.isAnnotationFile(file)) {
-                    this.sourceViewObserver.addClickListener(link, annotationid, file, true);
+                if (file instanceof TFile && annotationid != null && this.isAnnotationFile(file)) {
+                    this.sourceViewObserver.addClickListener(link, annotationid, file);
                 }
             }
         };

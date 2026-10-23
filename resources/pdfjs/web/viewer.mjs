@@ -19369,7 +19369,9 @@ const PDFViewerApplication = {
     const apiParams = AppOptions.getAll(OptionKind.API);
     const loadingTask = getDocument({
       ...apiParams,
-      ...args
+      ...args,
+      // Resource reads go through the vault-only fetch shim in the viewer.
+      useWorkerFetch: false
     });
     this.pdfLoadingTask = loadingTask;
     loadingTask.onPassword = (updateCallback, reason) => {

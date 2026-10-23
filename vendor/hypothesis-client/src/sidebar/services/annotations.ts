@@ -260,7 +260,7 @@ export class AnnotationsService {
         ? sharedPermissions(userid, annotation.group)
         : privatePermissions(userid),
       references: (annotation.references || []).concat(annotation.id),
-      target: [{ source: annotation.target[0].source }],
+      target: [{ source: annotation.target[0]?.source ?? annotation.uri }],
       uri: annotation.uri,
     };
     this.create(replyAnnotation);

@@ -270,6 +270,13 @@ function drawHighlightsAbovePDFCanvas(
     return;
   }
 
+  const canvasRect = canvasEl.getBoundingClientRect();
+  if (canvasRect.width <= 0 || canvasRect.height <= 0) {
+    // Hidden or detached readers have no layout yet. Keep CSS highlighting
+    // instead of hiding it behind an SVG with invalid percentage coordinates.
+    return;
+  }
+
   let svgHighlightLayer = canvasEl.parentElement.querySelector(
     '.hypothesis-highlight-layer',
   ) as SVGSVGElement | null;
@@ -300,7 +307,6 @@ function drawHighlightsAbovePDFCanvas(
     svgStyle.mixBlendMode = 'multiply';
   }
 
-  const canvasRect = canvasEl.getBoundingClientRect();
   const highlightRects = highlightEls.map(highlightEl => {
     const highlightRect = highlightEl.getBoundingClientRect();
 

@@ -7,7 +7,10 @@ export const resourcesZip = new JSZip();
 export const resourceUrls = new Map<string, string>();
 const resourceStyles = new Map<string, string>();
 
-export const isBundledResourceUrl = (url: string): boolean => [...resourceUrls.values()].includes(url);
+const withoutFragment = (url: string) => url.split('#')[0];
+
+export const isBundledResourceUrl = (url: string): boolean =>
+    [...resourceUrls.values()].includes(withoutFragment(url));
 
 function bufferToBlobUrl(buffer: ArrayBuffer, type: string) {
     const blob = new Blob([buffer], { type });
@@ -16,6 +19,10 @@ function bufferToBlobUrl(buffer: ArrayBuffer, type: string) {
 
 export function getBundledResourcePath(url: URL | string): string {
     const parsedUrl = typeof url == 'string' ? new URL(url) : url;
+    const resourceUrl = withoutFragment(parsedUrl.href);
+    for (const [path, bundledUrl] of resourceUrls) {
+        if (bundledUrl === resourceUrl) return path;
+    }
     if (
         parsedUrl.pathname === '/annotator-plus/sidebar.html' &&
         (parsedUrl.hostname === 'via.hypothes.is' || parsedUrl.protocol === 'app:')

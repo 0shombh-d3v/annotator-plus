@@ -19,7 +19,7 @@ import { Annotation } from '../src/types';
 
 test('concurrent annotation writes are serialized without losing either note', async () => {
     const file = new (TFile as unknown as { new (path: string): TFile })('notes.md');
-    let exists = false;
+    let exists = true;
     let text = '';
     const vault = {
         getAbstractFileByPath: () => (exists ? file : null),

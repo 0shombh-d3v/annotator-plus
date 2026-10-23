@@ -55,6 +55,7 @@ describe('SidebarTabs', () => {
       selectTab: sinon.stub(),
       isWaitingToAnchorAnnotations: sinon.stub().returns(false),
       selectedTab: sinon.stub().returns('annotation'),
+      annotationFocusRequest: sinon.stub().returns(null),
     };
     fakeUseRootThread = sinon.stub();
     stubTabCounts();
@@ -123,6 +124,31 @@ describe('SidebarTabs', () => {
       assert.deepEqual(wrapper.find('ThreadList').prop('threads'), [
         noted,
         draft,
+      ]);
+    });
+
+    it('reveals an externally focused highlight while the Notes filter is active', () => {
+      const noted = { id: 'noted', annotation: { id: 'noted', text: 'Note' } };
+      const highlight = {
+        id: 'highlight',
+        annotation: { id: 'highlight', text: '' },
+      };
+      fakeUseRootThread.returns({
+        rootThread: { children: [noted, highlight] },
+        tabCounts: { annotation: 2, note: 0, orphan: 0 },
+      });
+      const wrapper = createComponent();
+      wrapper
+        .find('LinkButton[data-testid="show-annotations-with-notes"]')
+        .find('button')
+        .simulate('click');
+      assert.deepEqual(wrapper.find('ThreadList').prop('threads'), [noted]);
+      fakeStore.annotationFocusRequest.returns('highlight');
+      wrapper.setProps({});
+      wrapper.update();
+      assert.deepEqual(wrapper.find('ThreadList').prop('threads'), [
+        noted,
+        highlight,
       ]);
     });
   });

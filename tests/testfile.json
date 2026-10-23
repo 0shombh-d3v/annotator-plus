@@ -88,8 +88,8 @@
             {
               "type": "TextQuoteSelector",
               "exact": "if trained correct",
-              "prefix": "dimensionallatent space, which,",
-              "suffix": "ly, will be able to imitate the"
+              "prefix": "dimensionallatent space, which, ",
+              "suffix": "ly, will be able to imitate the "
             }
           ]
         }
@@ -180,7 +180,7 @@
               "type": "TextQuoteSelector",
               "exact": "lgorithm",
               "prefix": "s that the computations of our a",
-              "suffix": "also must be made to operateove"
+              "suffix": " also must be made to operateove"
             }
           ]
         }

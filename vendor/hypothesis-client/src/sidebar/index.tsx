@@ -14,7 +14,7 @@ import {
   startServer as startRPCServer,
   preStartServer as preStartRPCServer,
 } from './cross-origin-rpc';
-import { tabForAnnotation } from './helpers/tabs';
+import { focusAnnotation } from './helpers/focus-annotation';
 import { ServiceContext } from './service-context';
 import { AnalyticsService } from './services/analytics';
 import { AnnotationActivityService } from './services/annotation-activity';
@@ -145,13 +145,10 @@ function setupAnnotatorPlusBridge(
     configurable: true,
     value: Object.freeze({
       focusAnnotation(id: string) {
-        const annotation = store.findAnnotationByID(id);
+        const annotation = focusAnnotation(store, id);
         if (!annotation) {
           return false;
         }
-        store.selectTab(tabForAnnotation(annotation));
-        store.selectAnnotations([id]);
-        store.setAnnotationFocusRequest(id);
         frameSync.notifyHost('openSidebar');
         frameSync.scrollToAnnotation(annotation);
         return true;

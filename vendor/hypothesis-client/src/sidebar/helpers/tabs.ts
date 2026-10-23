@@ -15,3 +15,13 @@ export function tabForAnnotation(ann: Annotation): TabName {
     return 'annotation';
   }
 }
+
+/** Replies belong to their root thread's tab, including page-note threads. */
+export function tabForAnnotationLink(
+  annotation: Annotation,
+  findAnnotation: (id: string) => Annotation | undefined,
+): TabName {
+  const rootId = annotation.references?.[0];
+  const root = rootId ? findAnnotation(rootId) : annotation;
+  return root ? tabForAnnotation(root) : 'orphan';
+}

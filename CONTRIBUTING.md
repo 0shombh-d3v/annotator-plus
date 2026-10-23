@@ -33,7 +33,7 @@ npm run release:package
 
 `npm run build` compiles the vendored Hypothesis source, removes development-only assets, and then builds `main.js` with all reader resources embedded. There is no frozen release bundle or second repository. `npm run quick-build` rebuilds the plugin around the existing generated Hypothesis assets and is intended only for local iteration.
 
-The current reader pins are PDF.js 6.2.108, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. Update one reader component at a time, preserve its license, and repeat both automated checks and the Obsidian PDF smoke test before changing a pin.
+The current reader pins are PDF.js 6.2.108 legacy/compatibility builds (viewer library and worker), Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. Update one reader component at a time, preserve its license, and repeat both automated checks and the Obsidian PDF smoke test before changing a pin.
 
 For local development, put the absolute destination plugin directory in `.vault_plugin_dir`, run `npm run dev`, and reload the plugin after a build.
 
@@ -46,3 +46,7 @@ For local development, put the absolute destination plugin directory in `.vault_
 - Do not commit `node_modules`, `main.js`, local settings, vault data, or private documents.
 
 By contributing, you agree that your contribution is licensed under [AGPL-3.0](LICENSE.TXT). Code derived from bundled projects remains subject to the notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+The pinned PDF.js assets must include their runtime polyfills in **both** realms. Modern PDF.js builds may start successfully but silently discard embedded fonts on Obsidian's Chromium runtime when worker APIs such as `Math.sumPrecise` are missing. Run the compatibility regression tests and compare a page with embedded mathematical fonts in Obsidian. Do not substitute unpolyfilled assets. Native module workers are restricted to the exact bundled worker; font, CMap, and decoder requests return through the local viewer fetch bridge.
+
+`moment` is overridden to 2.31.0 for the development SDK dependency. The SDK remains at the declared minimum supported Obsidian API version; Obsidian supplies the runtime module.

@@ -75,6 +75,12 @@ function highlightPDFRange(highlighter, pageContainer, cssClass = '') {
 describe('annotator/highlighter', () => {
   let containers;
 
+  function renderPDFPage(container) {
+    containers.push(container);
+    document.body.append(container);
+    render(<PDFPage />, container);
+  }
+
   /**
    * Render a fake PDF.js page (`PDFPage`) and return its container.
    *
@@ -84,10 +90,7 @@ describe('annotator/highlighter', () => {
    */
   function createPDFPageWithHighlight(highlighter, cssClass = '') {
     const container = document.createElement('div');
-    containers.push(container);
-    document.body.append(container);
-
-    render(<PDFPage />, container);
+    renderPDFPage(container);
 
     highlightPDFRange(highlighter, container, cssClass);
 
@@ -381,7 +384,7 @@ describe('annotator/highlighter', () => {
       it('does not create an SVG highlight if the canvas is not found', () => {
         const container = document.createElement('div');
         const hl = new Highlighter(container);
-        render(<PDFPage />, container);
+        renderPDFPage(container);
 
         // Remove canvas. This might be missing if the DOM structure looks like
         // PDF.js but isn't, or perhaps a future PDF.js update or fork changes
@@ -394,6 +397,25 @@ describe('annotator/highlighter', () => {
         assert.isFalse(highlight.classList.contains('is-transparent'));
         assert.isNull(container.querySelector('rect'));
         assert.notOk(highlight.svgHighlight);
+      });
+
+      it('keeps CSS highlighting when a hidden canvas has zero dimensions', () => {
+        const container = document.createElement('div');
+        container.style.display = 'none';
+        document.body.append(container);
+        try {
+          renderPDFPage(container);
+          const [highlight] = highlightPDFRange(
+            new Highlighter(container),
+            container,
+          );
+
+          assert.isFalse(highlight.classList.contains('is-transparent'));
+          assert.isNull(container.querySelector('rect'));
+          assert.notOk(highlight.svgHighlight);
+        } finally {
+          container.remove();
+        }
       });
 
       it('does not create an SVG highlight for placeholder highlights', () => {
@@ -557,7 +579,7 @@ describe('annotator/highlighter', () => {
     it('sets nesting data on highlight elements', () => {
       const container = document.createElement('div');
       const hl = new Highlighter(container);
-      render(<PDFPage />, container);
+      renderPDFPage(container);
 
       const highlights = [
         ...highlightPDFRange(hl, container, 'user-annotations'),
@@ -582,7 +604,7 @@ describe('annotator/highlighter', () => {
     it('sets nesting data on SVG highlights', () => {
       const container = document.createElement('div');
       const hl = new Highlighter(container);
-      render(<PDFPage />, container);
+      renderPDFPage(container);
 
       const highlights = [
         ...highlightPDFRange(hl, container, 'user-annotations'),
@@ -601,7 +623,7 @@ describe('annotator/highlighter', () => {
     it('reorders SVG highlights based on nesting level', () => {
       const container = document.createElement('div');
       const hl = new Highlighter(container);
-      render(<PDFPage />, container);
+      renderPDFPage(container);
 
       // SVG highlights for these highlights will be added in order.
       // These first three highlights will nest.
@@ -623,7 +645,7 @@ describe('annotator/highlighter', () => {
     it('orders focused SVG highlights last regardless of nesting level', () => {
       const container = document.createElement('div');
       const hl = new Highlighter(container);
-      render(<PDFPage />, container);
+      renderPDFPage(container);
 
       const svgEls = () => Array.from(container.querySelectorAll('rect'));
       const orderedNestingLevels = () => svgEls().map(el => nestingLevel(el));
@@ -732,7 +754,7 @@ describe('annotator/highlighter', () => {
     it('clones and sets focus class on focused SVG highlights in PDFs', () => {
       const root = document.createElement('div');
       const hl = new Highlighter();
-      render(<PDFPage />, root);
+      renderPDFPage(root);
       const highlights = [
         ...highlightPDFRange(hl, root),
         ...highlightPDFRange(hl, root),
@@ -755,7 +777,7 @@ describe('annotator/highlighter', () => {
     it('leaves SVG highlights focused if highlights are focused again', () => {
       const root = document.createElement('div');
       const hl = new Highlighter(root);
-      render(<PDFPage />, root);
+      renderPDFPage(root);
       const highlights = [
         ...highlightPDFRange(hl, root),
         ...highlightPDFRange(hl, root),
@@ -782,7 +804,7 @@ describe('annotator/highlighter', () => {
     it('removes cloned SVG highlights when associated highlight is unfocused', () => {
       const root = document.createElement('div');
       const hl = new Highlighter(root);
-      render(<PDFPage />, root);
+      renderPDFPage(root);
       const highlights = [
         ...highlightPDFRange(hl, root),
         ...highlightPDFRange(hl, root),
@@ -800,7 +822,7 @@ describe('annotator/highlighter', () => {
     it('removes focused SVG highlights when associated highlight is removed', () => {
       const root = document.createElement('div');
       const hl = new Highlighter();
-      render(<PDFPage />, root);
+      renderPDFPage(root);
       const highlights = [
         ...highlightPDFRange(hl, root),
         ...highlightPDFRange(hl, root),

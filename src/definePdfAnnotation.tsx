@@ -7,8 +7,9 @@ import { PdfAnnotationProps } from './types';
 
 async function waitForPdfViewer(iframe: HTMLIFrameElement): Promise<void> {
     for (let attempt = 0; attempt < 200; attempt++) {
-        const application = (iframe.contentWindow as (Window & { PDFViewerApplication?: { pdfViewer?: unknown } }) | null)
-            ?.PDFViewerApplication;
+        const application = (
+            iframe.contentWindow as (Window & { PDFViewerApplication?: { pdfViewer?: unknown } }) | null
+        )?.PDFViewerApplication;
         if (application?.pdfViewer) return;
         await wait(50);
     }
@@ -23,8 +24,12 @@ export default (vault: Vault, plugin: AnnotatorPlugin) => {
                 baseSrc="https://via.hypothes.is/pdfjs/web/viewer.html"
                 {...props}
                 onload={async iframe => {
-                    await waitForPdfViewer(iframe);
-                    await onload(iframe);
+                    try {
+                        await waitForPdfViewer(iframe);
+                        await onload(iframe);
+                    } catch (error) {
+                        props.onerror?.(error instanceof Error ? error : new Error(String(error)));
+                    }
                 }}
             />
         );

@@ -3,6 +3,7 @@ import { DarkReaderType } from 'darkreader';
 export type AnnotationList = {
     total: number;
     rows: Annotation[];
+    errors?: { id: string; message: string }[];
 };
 
 export type Annotation = {
@@ -64,6 +65,7 @@ export type GenericAnnotationProps = {
     containerEl: HTMLElement;
     onload: (iframe: HTMLIFrameElement) => Promise<void>;
     onDarkReadersUpdated: (darkReaderReferences: Set<WeakRef<DarkReaderType>>) => Promise<void>;
+    onerror?: (error: Error) => void;
 };
 
 export type AnnotationTarget = { kind: 'vault'; path: string; url: string };
