@@ -151,6 +151,30 @@ test('client cleanup still runs when Obsidian has already detached the iframe do
     expect(destroy).toHaveBeenCalledTimes(1);
 });
 
+test('pagehide stops the embedded client before native detachment clears its listeners', async () => {
+    const { view } = context();
+    jest.spyOn(view, 'getAnnotationTarget').mockResolvedValue(target);
+    await view.onLoadFile(makeFile('one.md'));
+    const frameDocument = document.implementation.createHTMLDocument();
+    const link = frameDocument.createElement('link');
+    link.type = 'application/annotator+html';
+    link.rel = 'sidebar';
+    frameDocument.head.appendChild(link);
+    const destroy = jest.fn();
+    link.addEventListener('destroy', destroy);
+    const contentWindow = new EventTarget();
+    await (ReactDOM.render as jest.Mock).mock.calls[0][0].props.onload({
+        frameDocument,
+        contentDocument: frameDocument,
+        contentWindow
+    });
+
+    contentWindow.dispatchEvent(new Event('pagehide'));
+    expect(destroy).toHaveBeenCalledTimes(1);
+    view.dispose();
+    expect(destroy).toHaveBeenCalledTimes(1);
+});
+
 test('annotation navigation waits for the new sidebar and focuses page notes by ID', async () => {
     jest.useFakeTimers();
     const { view } = context();
