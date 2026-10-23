@@ -100,6 +100,15 @@ export default class AnnotatorView extends FileView {
     }
 
     private clearReader() {
+        const document = this.iframe?.contentDocument;
+        const sidebarLink = document?.querySelector('link[type="application/annotator+html"][rel="sidebar"]');
+        if (sidebarLink) {
+            // The embedded client owns observers, ports, and pending anchors.
+            // Use its unload protocol before removing its iframe.
+            const event = document.createEvent('Event');
+            event.initEvent('destroy', false, false);
+            sidebarLink.dispatchEvent(event);
+        }
         ReactDOM.unmountComponentAtNode(this.contentEl);
         this.iframe = null;
         this.annotationTarget = undefined;

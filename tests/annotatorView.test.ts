@@ -112,6 +112,25 @@ test('target errors are visible and remove the stale iframe reference', async ()
     view.dispose();
 });
 
+test('closing a reader asks the embedded client to stop before removing its iframe', () => {
+    const { view } = context();
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    view.iframe = iframe;
+    const link = iframe.contentDocument.createElement('link');
+    link.type = 'application/annotator+html';
+    link.rel = 'sidebar';
+    iframe.contentDocument.head.appendChild(link);
+    const destroy = jest.fn(() => expect(view.iframe).toBe(iframe));
+    link.addEventListener('destroy', destroy);
+
+    view.dispose();
+
+    expect(destroy).toHaveBeenCalledTimes(1);
+    expect(view.iframe).toBeNull();
+    iframe.remove();
+});
+
 test('annotation navigation waits for the new sidebar and focuses page notes by ID', async () => {
     jest.useFakeTimers();
     const { view } = context();
@@ -122,9 +141,14 @@ test('annotation navigation waits for the new sidebar and focuses page notes by 
     const focusAnnotation = jest.fn().mockReturnValue(true);
     view.iframe = {
         contentDocument: {
-            querySelector: () => ({
-                shadowRoot: { querySelector: () => ({ contentWindow: { annotatorPlus: { focusAnnotation } } }) }
-            })
+            querySelector: selector =>
+                selector === 'hypothesis-sidebar'
+                    ? {
+                          shadowRoot: {
+                              querySelector: () => ({ contentWindow: { annotatorPlus: { focusAnnotation } } })
+                          }
+                      }
+                    : null
         }
     } as never;
     jest.advanceTimersByTime(50);

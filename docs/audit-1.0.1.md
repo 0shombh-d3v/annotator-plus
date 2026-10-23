@@ -13,20 +13,23 @@ Audited the plugin source, local reader bridge, annotation persistence, vendored
 | Annotation context | Display excerpts trimmed original selector whitespace. Indentation and literal marker lines in notes were fragile. | Preserve selector context, indentation, Unicode, paragraph breaks, and literal comment markers. |
 | Local API | Reads and partial updates were unsupported; failed reads could fall through into unrelated resource routing. Modification times stayed stale. Snapshot-based patches could lose a simultaneous edit to another field. | Add scoped reads, pagination, partial updates, explicit errors, safe IDs, and creation/update timestamps. Serialize writes per vault and note, and merge patches inside the atomic update. |
 | Renames and deletion | A reader retained its old save path and could recreate a note after rename or deletion. | Rebuild renamed readers and reject saves to missing notes. |
-| Lifecycle and appearance | Slow loads could render after a newer load or closure. Detached reader references survived, and theme changes depended on indirect events. | Cancel stale work, clear references and child renderers, stop workers, and observe the owning Obsidian window's theme directly. |
+| Lifecycle and appearance | Slow loads could render after a newer load or closure. Detached reader references survived, and theme changes depended on indirect events. | Cancel stale work, invoke the embedded client's unload protocol, clear references and child renderers, stop workers, and observe the owning Obsidian window's theme directly. |
 | Editor links and dragging | Editor links were paired by the order of visible aliases and could resolve against a stale source file. Drop handling depended on private CodeMirror internals. | Resolve links by document position and use the public editor information field and change iterator. Prepare drag metadata synchronously. |
 | Plugin coexistence | Annotator+ and the original Annotator registered the same view type. | Use an Annotator+ view type and migrate legacy workspace states when the original plugin is disabled. |
 | Page-note replies | The sidebar assumed every parent had a target entry. Reply links also selected a reply ID where thread filtering required the root ID, leaving an empty sidebar. | Fall back to the parent's document URI; select the root thread, open its tab, and expand all ancestors before focusing a reply. Cover real thread construction in regression tests. |
+| Reopened sidebars | A sidebar link could resolve to its bundled blob URL with a configuration fragment. Exact URL matching rejected it and produced an empty document. | Match known resource URLs without their fragments and resolve the sidebar's bundled path for Markdown rendering. Unknown blobs and query variants remain blocked. |
+| Reused iframe realms | Rewriting a sidebar document retained its global lexical bindings, so a second bootstrap could throw a duplicate declaration error. | Scope bootstrap declarations to an IIFE and test executing the shell twice in the same realm. |
+| Hidden PDF highlights | Highlight geometry could divide by a hidden canvas's zero dimensions, producing invalid SVG coordinates and hiding the text-layer highlight. | Retain CSS highlighting when the canvas has no layout, with a browser regression and mounted fixtures for layout-dependent SVG tests. |
 | Release assembly | The release workflow used existing generated sidebar assets after source changes. | Build the vendored reader from source before release verification and packaging. |
 
 ## Verification
 
-- Plugin type checking, 82 regression tests, and ESLint.
-- Vendored Hypothesis formatting, type checking, and 4,272 browser tests, including Notes-filter and page-note reply regressions.
+- Plugin type checking, 85 regression tests, and ESLint.
+- Vendored Hypothesis formatting, type checking, and 4,273 browser tests, including Notes-filter, page-note reply, and hidden-canvas regressions.
 - Root npm dependency audit; compatible dependency updates and pinned development-SDK override.
 - Vendored dependency review and compatible lockfile refresh, including patched Preact and DOMPurify. No critical advisories remain in that dependency tree. Remaining advisories in legacy development tools and upstream Markdown dependencies are tracked below.
 - Full source build, embedded-resource verification, release packaging, and checksums.
-- 35 live assertions using the actual local Obsidian session and isolated copies of its annotation notes, covering saves, replies, navigation, filtering, renames, failed writes, themes, workers, and rendering. Original note contents, plugin settings, and the customized fallback plugin were verified unchanged against backup hashes.
+- Live assertions using the actual local Obsidian session and isolated copies of its annotation notes, covering saves, replies, navigation, filtering, renames, failed writes, themes, workers, repeated reopening, and rendering. Original note contents, plugin settings, and the customized fallback plugin were verified unchanged against backup hashes.
 
 ## Dependency limitations
 

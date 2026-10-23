@@ -315,7 +315,7 @@ function patchSidebarMarkdownRendering(
 ): (() => void) | null {
     const source = iframe.getAttribute('patched-src');
     try {
-        if (!source || new URL(source).pathname !== '/annotator-plus/sidebar.html') return null;
+        if (!source || getBundledResourcePath(source) !== 'hypothes.is/app.html') return null;
     } catch {
         return null;
     }
