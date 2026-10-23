@@ -21,12 +21,17 @@ jobs:
         working-directory: vendor/hypothesis-client
         run: node .yarn/releases/yarn-3.6.0.cjs install --immutable
       - name: Install Chromium for Hypothesis tests
-        run: node vendor/hypothesis-client/node_modules/playwright/cli.js install --with-deps chromium
+        run: |
+          # Keep the runner's Ubuntu archives; skip its intermittently slow Azure proxy.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+          fi
+          node vendor/hypothesis-client/node_modules/playwright/cli.js install --with-deps chromium
       - name: Verify tag
         run: test "${GITHUB_REF_NAME}" = "$(node -p "require('./manifest.json').version")"
       - run: npm run check
       - run: npm run check:vendor
-      - run: npm audit --audit-level=high
+      - run: npm run audit:dependencies
       - run: npm run build
       - run: npm run release:verify
       - run: npm run release:package

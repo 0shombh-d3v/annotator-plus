@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 — 2026-10-24
+
+- Preserve original PDF fonts while selecting text in dark mode, and remove selected line-break marks from the page margin.
+- Preserve the PDF.js text layer through zoom and layout resets so its selection renderer keeps following the visible page.
+- Keep text selectable when a PDF first loads in a background tab; avoid caching a zero minimum font size from its hidden layout.
+- Replace Showdown in annotation previews and HTML exports with Marked, preserving sanitized Markdown, formula rendering, heading IDs, links, and plain-paragraph export behavior.
+- Update KaTeX, Cheerio/nth-check, AJV, diff, path-to-regexp, Zod, and http-cache-semantics to versions outside the reported advisory ranges.
+- Require clean audits of both dependency trees in CI and release builds. Check Yarn's report contents because its exit status alone does not indicate findings.
+- Add bounded parser attack regressions and legitimate rendering, routing, validation, and cache-policy controls.
+
 ## 1.0.1 — 2026-10-24
 
 - Restore embedded fonts, mathematical symbols, and correct text rendering with PDF.js compatibility builds in both the viewer and worker.

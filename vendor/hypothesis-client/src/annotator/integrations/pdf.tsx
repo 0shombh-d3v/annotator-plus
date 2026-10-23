@@ -403,20 +403,13 @@ export class PDFIntegration
         continue;
       }
 
-      // Detect what needs to be done by checking the rendering state.
-      switch (page.renderingState) {
-        case RenderingStates.INITIAL:
-          // This page has been reset to its initial state so its text layer
-          // is no longer valid. Null it out so that we don't process it again.
-          page.textLayer = null;
-          break;
-        case RenderingStates.FINISHED:
-          // This page is still rendered. If it has a placeholder node that
-          // means the PDF anchoring module anchored annotations before it was
-          // rendered. Remove this, which will cause the annotations to anchor
-          // again, below.
-          removePlaceholder(page.div);
-          break;
+      // PDF.js retains its text layer while resetting a page for zoom/layout.
+      // Its selection draw layer and accessibility manager share that object.
+      // Replacing it here leaves those consumers pointing at a detached layer.
+      // Anchoring already waits for FINISHED, so leave lifecycle ownership to
+      // PDF.js and only remove our placeholder after rendering completes.
+      if (page.renderingState === RenderingStates.FINISHED) {
+        removePlaceholder(page.div);
       }
     }
 

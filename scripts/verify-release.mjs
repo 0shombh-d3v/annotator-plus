@@ -60,7 +60,9 @@ for (const path of [
   'hypothes.is/annotator-plus-app-bootstrap.js',
   'cdn.hypothes.is/hypothesis/build/boot.js',
   'cdn.hypothes.is/hypothesis/build/scripts/annotator.bundle.js',
-  'cdn.hypothes.is/hypothesis/build/scripts/sidebar.bundle.js'
+  'cdn.hypothes.is/hypothesis/build/scripts/sidebar.bundle.js',
+  'licenses/marked-LICENSE',
+  'licenses/katex-LICENSE'
 ]) {
   if (!resources.file(path)) throw new Error(`Reader resource is missing ${path}`);
 }
@@ -215,9 +217,14 @@ for (const marker of [
   'Filter annotations',
   'show-annotations-with-notes',
   'Notes (',
-  'renderObsidianMarkdown'
+  'renderObsidianMarkdown',
+  'github.com/markedjs/marked',
+  '0.18.2'
 ]) {
   if (!sidebar.includes(marker)) throw new Error(`Hypothesis sidebar is missing ${marker}`);
+}
+if (sidebar.includes('showdownjs/showdown')) {
+  throw new Error('Hypothesis sidebar still contains the retired Showdown parser');
 }
 
 const hypothesisManifest = JSON.parse(

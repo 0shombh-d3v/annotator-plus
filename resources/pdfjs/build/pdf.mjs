@@ -21459,7 +21459,9 @@ class TextLayer {
     div.style.position = "absolute";
     div.textContent = "X";
     document.body.append(div);
-    this.#minFontSize = div.getBoundingClientRect().height;
+    // Annotator+: background Obsidian tabs have no layout. Do not cache zero
+    // from the 1px probe or every text layer in that reader becomes unselectable.
+    this.#minFontSize = div.getBoundingClientRect().height || 1;
     div.remove();
   }
   static #getAscent(fontFamily, style, lang) {

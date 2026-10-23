@@ -31,7 +31,9 @@ Audited the plugin source, local reader bridge, annotation persistence, vendored
 - Full source build, embedded-resource verification, release packaging, and checksums.
 - 43 live assertions using the actual local Obsidian session, its two original PDF notes, and isolated annotation-note copies, covering saves, replies, navigation, filtering, renames, failed writes, themes, workers, repeated reopening, and rendering. Original note contents, plugin settings, and the customized fallback plugin were verified unchanged against backup hashes.
 
-## Dependency limitations
+## Dependency limitations at 1.0.1
+
+The listed dependency advisories were addressed in 1.0.2. Both dependency trees are now checked with `npm run audit:dependencies`, including all severities, as part of CI and release builds. The following paragraph records the original 1.0.1 audit result.
 
 The root npm audit is clean. The vendored upstream development tree is larger than the shipped plugin. Its remaining high-severity advisories include `nth-check` under Enzyme, `path-to-regexp` under the development server, and `http-cache-semantics` under the package/release tooling. These tools are excluded from the production reader bundle. Remaining moderate/low advisories include upstream Showdown (no patched version), older KaTeX, and development-only AJV/diff. Annotation comments use Obsidian's Markdown renderer in the installed plugin; the embedded reader also retains its offline CSP and resource boundary. This audit does not claim that upstream dependencies or arbitrary untested PDFs are defect-free.
 

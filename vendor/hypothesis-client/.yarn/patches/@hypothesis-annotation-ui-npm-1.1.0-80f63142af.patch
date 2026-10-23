@@ -1,0 +1,73 @@
+diff --git a/lib/utils/render-markdown.js b/lib/utils/render-markdown.js
+index ae9c65e2d8358948d3be910faf156caed268b750..c550e5d7441f95b81d9cc5f65ff0cd3740f54d5e 100644
+--- a/lib/utils/render-markdown.js
++++ b/lib/utils/render-markdown.js
+@@ -1,7 +1,7 @@
+ import createDOMPurify from 'dompurify';
+ import escapeHTML from 'escape-html';
+ import katex from 'katex';
+-import showdown from 'showdown';
++import { Marked } from 'marked';
+ var DOMPurify = createDOMPurify(window);
+ 
+ // Ensure that any links generated either by Showdown or in the markdown/HTML
+@@ -11,33 +11,33 @@ DOMPurify.addHook('afterSanitizeAttributes', function (node) {
+     node.setAttribute('target', '_blank');
+   }
+ });
+-function targetBlank() {
+-  function filter(text) {
+-    return text.replace(/<a href=/g, '<a target="_blank" href=');
+-  }
+-  return [{
+-    type: 'output',
+-    filter: filter
+-  }];
+-}
+-var converter;
++// Keep the existing synchronous, sanitized fragment contract for all callers,
++// including HTML export. Showdown has no released fix for its link-parser ReDoS.
+ function renderMarkdown(markdown) {
+-  if (!converter) {
+-    // see https://github.com/showdownjs/showdown#valid-options
+-    converter = new showdown.Converter({
+-      extensions: [targetBlank],
+-      simplifiedAutoLink: true,
+-      excludeTrailingPunctuationFromURLs: true,
+-      // Since we're using simplifiedAutoLink we also use
+-      // literalMidWordUnderscores because otherwise _'s in URLs get
+-      // transformed into <em>'s.
+-      // See https://github.com/showdownjs/showdown/issues/211
+-      literalMidWordUnderscores: true,
+-      // Enable strikethrough, which is disabled by default
+-      strikethrough: true
+-    });
+-  }
+-  return converter.makeHtml(markdown);
++  var headingCounts = new Map();
++  var converter = new Marked({
++    gfm: true,
++    tokenizer: {
++      // Match the previous renderer, which does not enable Markdown tables.
++      table: function () { return undefined; }
++    },
++    walkTokens: function (token) {
++      if (token.type === 'text' && !token.tokens) {
++        token.text = token.text.replace(/\.\.\./g, '…');
++      }
++    },
++    renderer: {
++      heading: function (token) {
++        var base = token.text.replace(/[^\w]/g, '').toLowerCase();
++        var count = headingCounts.get(base) || 0;
++        headingCounts.set(base, count + 1);
++        var id = base + (count ? '-' + count : '');
++        return '<h' + token.depth + ' id="' + id + '">' +
++          this.parser.parseInline(token.tokens) + '</h' + token.depth + '>\n';
++      }
++    }
++  });
++  return converter.parse(markdown).trim();
+ }
+ function mathPlaceholder(id) {
+   return '{math:' + id.toString() + '}';

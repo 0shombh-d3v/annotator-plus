@@ -157,7 +157,10 @@ export default class AnnotatorView extends FileView {
             const f = () => {
                 try {
                     if (this.isDarkModeEnabled()) {
-                        darkReader.enable(darkReaderSettings, DARK_READER_FIXES);
+                        // PDF.js paints the glyphs and selection itself. A global
+                        // selection color exposes its transparent fallback text
+                        // and paints selected line breaks in the page margin.
+                        darkReader.enable({ ...darkReaderSettings, selectionColor: '' }, DARK_READER_FIXES);
                     } else {
                         darkReader.disable();
                     }

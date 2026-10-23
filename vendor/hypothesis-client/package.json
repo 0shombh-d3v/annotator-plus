@@ -41,7 +41,6 @@
     "@types/retry": "^0.12.1",
     "@types/scroll-into-view": "^1.16.0",
     "@types/shallowequal": "^1.1.1",
-    "@types/showdown": "^2.0.0",
     "@types/sinon": "^21.0.0",
     "@vitest/browser": "^4.1.9",
     "@vitest/browser-playwright": "^4.1.9",
@@ -73,7 +72,7 @@
     "globals": "^16.0.0",
     "gulp": "^5.0.0",
     "gulp-changed": "^5.0.1",
-    "katex": "^0.16.0",
+    "katex": "0.18.2",
     "lodash.debounce": "^4.0.3",
     "mustache": "^4.0.1",
     "mustache-express": "^1.3.2",
@@ -92,7 +91,6 @@
     "sass": "^1.23.0",
     "scroll-into-view": "^1.8.2",
     "shallowequal": "^1.1.0",
-    "showdown": "^2.0.0",
     "sinon": "^21.0.0",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.0.2",
@@ -125,6 +123,9 @@
   "packageManager": "yarn@3.6.0",
   "resolutions": {
     "serialize-javascript": "7.0.5",
-    "ip-address": "10.7.4"
+    "ip-address": "10.7.4",
+    "cheerio": "1.0.0-rc.12",
+    "diff": "8.0.3",
+    "@hypothesis/annotation-ui@^1.0.2": "patch:@hypothesis/annotation-ui@npm%3A1.1.0#./.yarn/patches/@hypothesis-annotation-ui-npm-1.1.0-80f63142af.patch"
   }
 }
