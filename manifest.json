@@ -1,7 +1,7 @@
 {
   "id": "annotator-plus",
   "name": "Annotator+",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minAppVersion": "1.12.3",
   "description": "Offline, vault-local PDF annotation with visible note indicators.",
   "author": "0shombh-d3v",

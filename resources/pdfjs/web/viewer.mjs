@@ -15326,7 +15326,6 @@ class PDFViewer {
     drawingDelay = -1,
     origin = null
   }) {
-    this.clearSelection();
     this._currentScaleValue = newValue.toString();
     if (this.#isSameScale(newScale)) {
       if (preset) {
@@ -15338,6 +15337,9 @@ class PDFViewer {
       }
       return;
     }
+    // Annotator+: repeated sidebar layouts reapply the same zoom preset.
+    // Preserve the user's selection unless the scale actually changes.
+    this.clearSelection();
     this.viewer.style.setProperty("--scale-factor", newScale * PixelsPerInch.PDF_TO_CSS_UNITS);
     const postponeDrawing = drawingDelay >= 0 && drawingDelay < 1000;
     this.refresh(true, {

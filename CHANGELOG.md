@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3 — 2026-10-24
+
+- Keep native PDF text selections and the Annotate/Highlight popup visible when sidebar layout notifications reapply an unchanged zoom preset.
+- Continue clearing selections when the page scale actually changes. Cover numeric, automatic, page-fit, and page-width zoom modes with the actual bundled viewer in a browser regression.
+
 ## 1.0.2 — 2026-10-24
 
 - Preserve original PDF fonts while selecting text in dark mode, and remove selected line-break marks from the page margin.
