@@ -84,6 +84,7 @@
     "react-offline-iframe": "0.5.0"
   },
   "overrides": {
-    "moment": "2.31.0"
+    "moment": "2.31.0",
+    "serialize-javascript": "7.1.3"
   }
 }
