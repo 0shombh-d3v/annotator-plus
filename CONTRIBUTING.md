@@ -35,6 +35,8 @@ npm run release:package
 
 The current reader pins are PDF.js 6.2.108 legacy/compatibility builds (viewer library and worker), Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a`, and Dark Reader 4.9.128. Update one reader component at a time, preserve its license, and repeat both automated checks and the Obsidian PDF smoke test before changing a pin.
 
+The PDF regressions render a generated document with the bundled viewer and worker, exercise the actual page buffer, and check native selection and rendered pixels. For the Obsidian smoke test, also render enough distant pages to evict the starting page before returning to it, drag forward and backward through saved highlights and maths, and release both on text and just beyond the line. Check dark and light appearance, zoom, rotation, and the Annotate/Highlight popup; a fresh first-page selection alone is insufficient.
+
 For local development, put the absolute destination plugin directory in `.vault_plugin_dir`, run `npm run dev`, and reload the plugin after a build.
 
 ## Pull requests

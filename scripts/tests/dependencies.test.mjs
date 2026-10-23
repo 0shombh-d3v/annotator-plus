@@ -37,6 +37,67 @@ const renderSetup = `
   const { renderMathAndMarkdown: render } = await import(${JSON.stringify(renderModule)});
 `;
 
+for (const [tree, manifest] of [
+    ['root', root + 'package.json'],
+    ['vendor', vendor + 'package.json']
+]) {
+    // Resolve from the actual minifier consumer, including any nested copy.
+    const serializerSetup = `
+      const consumer = createRequire(createRequire(${JSON.stringify(manifest)}).resolve('@rollup/plugin-terser'));
+      const serialize = consumer('serialize-javascript');
+      const vm = require('node:vm');
+    `;
+
+    test(`${tree} minifier serializer escapes script endings in nested function sources`, () => {
+        isolated(serializerSetup + String.raw`
+          const rootRequire = createRequire(${JSON.stringify(root + 'package.json')});
+          const { JSDOM } = rootRequire('jsdom');
+          for (const ending of ['</script', '</ScRiPt', '</script>']) {
+            const first = function probe() { return 23; };
+            first.toString = () => 'function probe(){return 23}//' + ending;
+            const second = function tail() { return 17; };
+            second.toString = () => 'function tail(){return 17}// > <b id=serializer-breakout>';
+            for (const nested of [{ first }, new Map([['first', first]]), new Set([first]), [, first]]) {
+              const output = serialize({ nested, second }, { space: 2 });
+              assert.ok(!/<\/script(?:[\s/>]|$)/i.test(output), output);
+              const document = new JSDOM('<!doctype html><script>window.fixture=' + output + '</script>').window.document;
+              assert.equal(document.querySelector('#serializer-breakout'), null);
+            }
+          }
+        `);
+    });
+
+    test(`${tree} minifier preserves function options, licenses, maps, names, and compiled behavior`, () => {
+        isolated(serializerSetup + String.raw`
+          const options = {
+            format: { comments: function (node, comment) { return /@preserve|@license|@cc_on/i.test(comment.value); } },
+            nameCache: {}, maxWorkers: 1
+          };
+          const restored = vm.runInNewContext('(' + serialize(options) + ')');
+          assert.equal(restored.format.comments(null, { value: '@license example' }), true);
+          assert.equal(restored.format.comments(null, { value: 'ordinary comment' }), false);
+          const control = { string: 'literal </script> and </scripture>', arrow: x => x + 2, regex: /a+b/i, bigint: 17n };
+          const roundtrip = vm.runInNewContext('(' + serialize(control) + ')');
+          assert.equal(roundtrip.string, control.string);
+          assert.equal(roundtrip.arrow(5), 7);
+          assert.ok(roundtrip.regex.test('AAAB'));
+          assert.equal(roundtrip.bigint, 17n);
+          const terser = createRequire(${JSON.stringify(manifest)})('@rollup/plugin-terser');
+          const plugin = terser(options);
+          const source = '/* @license example */\n/* ordinary comment */\nfunction calculate(value) { return value + 2; } globalThis.fixture = [calculate(5), "</script><b>"];';
+          const output = await plugin.renderChunk(source, { fileName: 'fixture.js' }, { format: 'cjs', sourcemap: true });
+          assert.ok(output.code.includes('@license example'));
+          assert.ok(!output.code.includes('ordinary comment'));
+          assert.equal(output.map.version, 3);
+          assert.ok(options.nameCache.vars);
+          const context = {};
+          vm.runInNewContext(output.code, context);
+          assert.equal(context.fixture[0], 7);
+          assert.equal(context.fixture[1], '</script><b>');
+        `);
+    });
+}
+
 test('Markdown parser handles nested brackets and malformed links within a bounded process', () => {
     isolated(
         renderSetup +

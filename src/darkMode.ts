@@ -3,6 +3,11 @@ export type DarkModePreference = 'follow-obsidian' | 'dark' | 'light';
 export const DARK_READER_FIXES = {
     invert: ['.canvasWrapper > canvas'],
     css: `
+        .canvasWrapper .selection {
+            background-color: rgb(15, 117, 240) !important;
+            mix-blend-mode: screen !important;
+        }
+
         .hypothesis-highlight-layer {
             mix-blend-mode: normal !important;
         }

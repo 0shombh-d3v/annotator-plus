@@ -13391,6 +13391,54 @@ class TextLayerBuilder {
       this.#selectionChangeAC = null;
     }
   }
+  static #finishSelection(event) {
+    const selection = document.getSelection();
+    const end = selection?.focusNode;
+    if (!selection || selection.isCollapsed || end?.nodeType !== Node.ELEMENT_NODE || !end.classList.contains("endOfContent")) {
+      return;
+    }
+    // Releasing in a line's margin can put Chromium's focus in our page-sized
+    // helper. Moving that helper back to the end of the page would then extend
+    // the selection to the footer. Resolve it to the nearest real glyph first.
+    const textLayer = end.closest(".textLayer");
+    if (!this.#textLayers.has(textLayer)) {
+      return;
+    }
+    const vertical = ["90", "270"].includes(textLayer.dataset.mainRotation);
+    let nearest = null;
+    let nearestBlock = Infinity;
+    let nearestInline = Infinity;
+    for (const span of textLayer.querySelectorAll(":scope > span:not(.markedContent), .markedContent > span:not(.markedContent)")) {
+      const rect = span.getBoundingClientRect();
+      if (!rect.width || !rect.height || span.getAttribute("role") === "img") {
+        continue;
+      }
+      const dx = Math.max(rect.left - event.clientX, 0, event.clientX - rect.right);
+      const dy = Math.max(rect.top - event.clientY, 0, event.clientY - rect.bottom);
+      const block = vertical ? dx : dy;
+      const inline = vertical ? dy : dx;
+      if (block < nearestBlock || block === nearestBlock && inline < nearestInline) {
+        nearest = { span, rect };
+        nearestBlock = block;
+        nearestInline = inline;
+      }
+    }
+    if (!nearest) {
+      return;
+    }
+    const { span, rect } = nearest;
+    const insetX = Math.min(0.01, rect.width / 2);
+    const insetY = Math.min(0.01, rect.height / 2);
+    const x = Math.max(rect.left + insetX, Math.min(event.clientX, rect.right - insetX));
+    const y = Math.max(rect.top + insetY, Math.min(event.clientY, rect.bottom - insetY));
+    const caret = document.caretPositionFromPoint?.(x, y);
+    const range = caret ? null : document.caretRangeFromPoint?.(x, y);
+    const node = caret?.offsetNode || range?.startContainer;
+    const offset = caret?.offset ?? range?.startOffset;
+    if (node && span.contains(node)) {
+      selection.setBaseAndExtent(selection.anchorNode, selection.anchorOffset, node, offset);
+    }
+  }
   static #enableGlobalSelectionListener(globalAbortSignal) {
     if (this.#selectionChangeAC) {
       return;
@@ -13409,8 +13457,9 @@ class TextLayerBuilder {
     }, {
       signal
     });
-    document.addEventListener("pointerup", () => {
+    document.addEventListener("pointerup", event => {
       isPointerDown = false;
+      this.#finishSelection(event);
       this.#textLayers.forEach(reset);
     }, {
       signal
@@ -13483,6 +13532,12 @@ class TextLayerBuilder {
       const parentTextLayer = anchor.parentElement?.closest(".textLayer");
       const endDiv = this.#textLayers.get(parentTextLayer);
       if (endDiv) {
+        // Annotation clients wrap text inside PDF.js's positioned glyph spans.
+        // Keep the page-sized selection sentinel beside those spans: nesting it
+        // inside a highlight covers the following text and blocks native drags.
+        while (anchor.parentElement !== parentTextLayer && !anchor.parentElement.classList.contains("markedContent")) {
+          anchor = anchor.parentElement;
+        }
         endDiv.style.width = parentTextLayer.style.width;
         endDiv.style.height = parentTextLayer.style.height;
         endDiv.style.userSelect = "text";
@@ -14080,11 +14135,14 @@ class PDFPageView extends BasePDFPageView {
     if (this.structTreeLayer && !this.textLayer) {
       this.structTreeLayer = null;
     }
+    // The draw layer also owns selection painting when PDF editing is disabled.
+    // Evict it independently of annotationEditorLayer so a re-render registers
+    // the new text layer instead of retaining a detached page's selection state.
+    if (this.drawLayer && (!keepAnnotationEditorLayer || !this.annotationEditorLayer?.div)) {
+      this.drawLayer.cancel();
+      this.drawLayer = null;
+    }
     if (this.annotationEditorLayer && (!keepAnnotationEditorLayer || !this.annotationEditorLayer.div)) {
-      if (this.drawLayer) {
-        this.drawLayer.cancel();
-        this.drawLayer = null;
-      }
       this.annotationEditorLayer.cancel();
       this.annotationEditorLayer = null;
     }
