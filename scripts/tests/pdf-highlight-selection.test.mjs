@@ -182,3 +182,59 @@ for (const legacyHelperBoundary of [false, true]) {
         });
     }
 }
+
+for (const boundary of ['annotation layer', 'text-layer container']) {
+    for (const backward of [false, true]) {
+        test(`a first ${
+            backward ? 'backward' : 'forward'
+        } margin drag ending at the PDF ${boundary} stays on the intended lines`, async () => {
+            const fixture = await openPDFBrowser({ chromiumSelectionVersion: 142 });
+            const { page, errors } = fixture;
+            try {
+                const points = await highlightedLine(page, true);
+                const start = backward ? points.end : points.start;
+                const end = await page.evaluate(backward => {
+                    const span = viewer.getPageView(0).textLayer.div.querySelector('span');
+                    const r = span.getBoundingClientRect();
+                    return { x: backward ? r.left - 15 : r.right + 15, y: r.y + r.height / 2 };
+                }, backward);
+                await page.mouse.move(start.x, start.y);
+                await page.mouse.down();
+                await page.mouse.move(end.x, end.y);
+                await page.mouse.up();
+                await page.evaluate(
+                    ({ backward, end, boundary }) => {
+                        const p = viewer.getPageView(0);
+                        const [first, second] = p.textLayer.div.querySelectorAll('span[role="presentation"]');
+                        const overlay =
+                            boundary === 'text-layer container'
+                                ? p.textLayer.div
+                                : p.div.querySelector('.annotationLayer') ||
+                                  p.div.appendChild(document.createElement('div'));
+                        if (boundary === 'annotation layer') overlay.classList.add('annotationLayer');
+                        const anchor = backward ? second.firstChild : first.firstChild;
+                        // Obsidian's Chromium 142 can place the first drag's focus at
+                        // these layer containers rather than the text-layer helper.
+                        getSelection().setBaseAndExtent(anchor, backward ? 22 : 0, overlay, 0);
+                        p.div.dispatchEvent(
+                            new PointerEvent('pointerup', { clientX: end.x, clientY: end.y, bubbles: true })
+                        );
+                    },
+                    { backward, end, boundary }
+                );
+                await page.evaluate(
+                    () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+                );
+                const text = await page.evaluate(() => getSelection().toString());
+                assert.ok(text.startsWith('Before highlighted words'), text);
+                if (backward) assert.ok(text.includes('The remainder'), text);
+                else assert.ok(!text.includes('The remainder'), text);
+                assert.ok(!text.includes('Selection across'), text);
+                assert.ok(!text.includes('Page 1'), text);
+                assert.deepEqual(errors, []);
+            } finally {
+                await fixture.close();
+            }
+        });
+    }
+}

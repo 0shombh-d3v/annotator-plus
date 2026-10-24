@@ -5,6 +5,10 @@ import { Annotation, AnnotationList } from 'types';
 const ANNOTATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// The Markdown line remains editable; JSON retains tag boundaries that a
+// comma-separated display cannot represent, such as a pasted comma in a tag.
+const formatTags = (tags: string[]) => tags.map(tag => `#${tag.replace(/[\r\n]+/g, ' ')}`).join(', ');
+
 export const isValidAnnotationId = (value: unknown): value is string =>
     typeof value === 'string' && ANNOTATION_ID_PATTERN.test(value);
 
@@ -43,7 +47,11 @@ const makeAnnotationBlockRegex = (annotationId?: string) =>
 
 const getAnnotationFromAnnotationBlock = (annotationBlock: string, annotationId: string): Annotation => {
     const quotePrefix = /^> ```annotation-json\r?$/m.test(annotationBlock) ? /^> ?/ : /^>/;
-    const lines = annotationBlock.split(/\r?\n/).map(line => line.replace(quotePrefix, ''));
+    // The block match excludes its final newline but can retain the CR half.
+    const lines = annotationBlock
+        .replace(/\r$/, '')
+        .split(/\r?\n/)
+        .map(line => line.replace(quotePrefix, ''));
     const jsonStart = lines.indexOf('```annotation-json');
     const jsonEnd = lines.indexOf('```', jsonStart + 1);
     if (jsonStart < 0 || jsonEnd < 0) throw new Error('The annotation JSON fence is incomplete.');
@@ -59,12 +67,17 @@ const getAnnotationFromAnnotationBlock = (annotationBlock: string, annotationId:
         commentStart < 0
             ? annotation.text || ''
             : metadata.slice(commentStart + 1, tagsStart > commentStart ? tagsStart : undefined).join('\n');
+    const displayedTags = metadata.slice(tagsStart + 1).join('\n');
+    const storedTags =
+        Array.isArray(annotation.tags) && annotation.tags.every(tag => typeof tag === 'string')
+            ? (annotation.tags as string[])
+            : null;
     const tags =
         tagsStart < 0
             ? annotation.tags || []
-            : metadata
-                  .slice(tagsStart + 1)
-                  .join('\n')
+            : storedTags && displayedTags === formatTags(storedTags)
+            ? storedTags
+            : displayedTags
                   .split(',')
                   .map(tag => tag.trim().replace(/^#/, ''))
                   .filter(Boolean);
@@ -121,9 +134,7 @@ const makeAnnotationString = (annotation: Annotation, plugin: IHasAnnotatorSetti
 
     const annotationString =
         '%%\n```annotation-json' +
-        `\n${JSON.stringify(
-            stripDefaultValues(annotation, makeDefaultAnnotationObject(annotation.id, annotation.tags))
-        )}` +
+        `\n${JSON.stringify(stripDefaultValues(annotation, makeDefaultAnnotationObject(annotation.id, [])))}` +
         '\n```\n%%\n' +
         `*${includePrefix ? `%%PREFIX%%${prefix.trim()}` : ''}%%HIGHLIGHT%%${
             highlightHighlightedText ? ' ==' : ''
@@ -131,7 +142,7 @@ const makeAnnotationString = (annotation: Annotation, plugin: IHasAnnotatorSetti
             includePostfix ? `%%POSTFIX%%${suffix.trim()}` : ''
         }*\n%%LINK%%[[#^${annotation.id}|show annotation]]\n%%COMMENT%%\n${
             annotation.text || ''
-        }\n%%TAGS%%\n${annotation.tags.map(x => `#${x}`).join(', ')}`;
+        }\n%%TAGS%%\n${formatTags(annotation.tags)}`;
 
     return (
         '\n' +

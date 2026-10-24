@@ -116,6 +116,36 @@ test('concurrent partial updates preserve independently changed fields', async (
     expect(saved.tags).toEqual(['concurrent-tag']);
 });
 
+test.each(['PUT', 'PATCH'])('a %s racing a deletion cannot recreate the deleted annotation', async method => {
+    const c = context();
+    let releaseRead: () => void;
+    let readStarted: () => void;
+    const started = new Promise<void>(resolve => {
+        readStarted = resolve;
+    });
+    const gate = new Promise<void>(resolve => {
+        releaseRead = resolve;
+    });
+    c.vault.read.mockImplementationOnce(async () => {
+        const snapshot = c.content();
+        readStarted();
+        await gate;
+        return snapshot;
+    });
+    const updating = c.request('annotations/one', method, { text: 'An edit from the old reader' });
+    await started;
+    expect((await c.request('annotations/one', 'DELETE')).response.status).toBe(200);
+    releaseRead();
+    const warning = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+        const result = await updating;
+        expect(result.response.ok).toBe(false);
+        expect(loadAnnotationsAtUriFromFileText(null, c.content()).rows.map(row => row.id)).toEqual(['two', 'three']);
+    } finally {
+        warning.mockRestore();
+    }
+});
+
 test('deleted or renamed notes are never recreated at a stale path', async () => {
     const c = context();
     c.remove();

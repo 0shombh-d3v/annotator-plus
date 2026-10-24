@@ -13394,13 +13394,27 @@ class TextLayerBuilder {
   static #finishSelection(event) {
     const selection = document.getSelection();
     const end = selection?.focusNode;
-    if (!selection || selection.isCollapsed || end?.nodeType !== Node.ELEMENT_NODE || !end.classList.contains("endOfContent")) {
+    if (!selection || selection.isCollapsed || end?.nodeType !== Node.ELEMENT_NODE) {
       return;
     }
     // Releasing in a line's margin can put Chromium's focus in our page-sized
     // helper. Moving that helper back to the end of the page would then extend
     // the selection to the footer. Resolve it to the nearest real glyph first.
-    const textLayer = end.closest(".textLayer");
+    let textLayer = end.classList.contains("endOfContent") ? end.closest(".textLayer") : null;
+    if (!textLayer) {
+      // Chromium 142 can end the first drag at a layer container instead of
+      // the helper. The adjacent annotation layer follows all page text,
+      // including the footer. Only resolve these boundaries for PDF text.
+      const anchor = selection.anchorNode;
+      const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE ? anchor : anchor?.parentElement;
+      if (this.#textLayers.has(anchorElement?.closest(".textLayer"))) {
+        if (this.#textLayers.has(end)) {
+          textLayer = end;
+        } else if (end.classList.contains("annotationLayer")) {
+          textLayer = end.closest(".page")?.querySelector(":scope > .textLayer");
+        }
+      }
+    }
     if (!this.#textLayers.has(textLayer)) {
       return;
     }

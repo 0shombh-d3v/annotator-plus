@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6 — 2026-10-24
+
+- Keep the first text drag after reopening a reader on the intended line when a release in the margin lands at a PDF layer container in Obsidian's Chromium 142.
+- Preserve tag boundaries when a pasted tag contains commas, while retaining editable Markdown tags and support for existing annotation blocks and CRLF notes.
+- Recheck annotation existence and merge updates inside the write queue for both PUT and PATCH. An edit racing a deletion now fails with its draft retained instead of recreating the deleted annotation.
+- Isolate asynchronous Markdown preview renders so an old render cannot append stale content to the current note. If rendering fails, display the current note as plain text and release its renderer.
+- Preserve Obsidian's right-click behavior on annotation links in reading and editing views; only primary and middle clicks trigger annotation navigation.
+
 ## 1.0.5 — 2026-10-24
 
 - Use a lighter selection blue for dark text on light PDFs and a deeper blue for light text in dark mode, preserving the original canvas fonts and mathematical glyphs.

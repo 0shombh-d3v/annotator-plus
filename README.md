@@ -73,7 +73,7 @@ Treat PDFs from unknown sources as untrusted files and keep Obsidian and Annotat
 
 Source, vendored reader code, tests, and release automation all live in this one repository. See [CONTRIBUTING.md](CONTRIBUTING.md). Release notes are in [CHANGELOG.md](CHANGELOG.md), and bundled-project attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-The 1.0.3 reader stack is reproducibly pinned to PDF.js 6.2.108 compatibility builds for both the viewer and worker, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a` with the local fixes in this repository, and Dark Reader 4.9.128. These are bundled locally; Annotator+ does not download executable code at runtime.
+The reader stack is reproducibly pinned to PDF.js 6.2.108 compatibility builds for both the viewer and worker, Hypothesis client commit `b4d085a2f893aa6de3b61d8b8bc3ae4d0f24fc1a` with the local fixes in this repository, and Dark Reader 4.9.128. These are bundled locally; Annotator+ does not download executable code at runtime.
 
 ## Credits and license
 

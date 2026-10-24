@@ -11,6 +11,8 @@ import {
 
 const vaultWriteQueues = new WeakMap<Vault, Map<string, Promise<unknown>>>();
 
+export class AnnotationNotFoundError extends Error {}
+
 function getWriteQueues(vault: Vault) {
     let queues = vaultWriteQueues.get(vault);
     if (!queues) vaultWriteQueues.set(vault, (queues = new Map()));
@@ -55,7 +57,7 @@ export async function writeAnnotation(
         if (tfile instanceof TFile) {
             await vault.process(tfile, text => {
                 const existing = annotation.id ? getAnnotationFromFileContent(annotation.id, text) : null;
-                if (partialUpdate && !existing) throw new Error('The annotation no longer exists.');
+                if (partialUpdate && !existing) throw new AnnotationNotFoundError('The annotation no longer exists.');
                 // Merge patches inside the serialized, atomic update. A snapshot
                 // read before queuing can overwrite a concurrent edit to another field.
                 const saved = partialUpdate ? { ...existing, ...partialUpdate, id: annotation.id } : annotation;

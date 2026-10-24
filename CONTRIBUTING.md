@@ -57,6 +57,8 @@ The bundled viewer library also carries a small local patch to the text layer's 
 
 The viewer clears text selection only after confirming that its scale will change. Hypothesis can reapply an unchanged zoom preset when reporting sidebar layout; clearing before the unchanged-scale check dismisses native selections and their annotation popup. `scripts/tests/pdf-selection.test.mjs` exercises the actual viewer class with native browser selection and unchanged/changed zoom controls.
 
+Check the first margin release after reopening a reader, in both drag directions. Chromium 142 can place its focus at the text-layer container or adjacent annotation layer instead of the text-layer helper; these boundaries need to resolve to the intended PDF line before the selection is finalized. The generated-document regressions exercise those observed boundaries after native pointer input and wait for selection rendering to settle.
+
 `moment` is overridden to 2.31.0 for the development SDK dependency. The SDK remains at the declared minimum supported Obsidian API version; Obsidian supplies the runtime module.
 
 The vendored annotation-ui package has a checked-in Yarn patch replacing Showdown with Marked. Its replacement dependency is declared in `.yarnrc.yml`, since Yarn patches cannot change dependency resolution. KaTeX 0.18.2 is deliberately supplied despite annotation-ui's older peer range; the renderer API and its matching CSS/fonts are checked together. Keep the renderer regressions and both dependency audits passing when updating these packages. The audit command checks every severity and parses Yarn's JSON instead of trusting its exit status.

@@ -307,7 +307,7 @@ function blockExternalNavigation(iframe: HTMLIFrameElement): void {
     );
 }
 
-function patchSidebarMarkdownRendering(
+export function patchSidebarMarkdownRendering(
     iframe: HTMLIFrameElement,
     filePath: string,
     plugin: AnnotatorPlugin,
@@ -358,14 +358,18 @@ function patchSidebarMarkdownRendering(
         attributeChangedCallback(name, oldValue, newValue) {
             if (name == 'markdownbase64') {
                 this.markdown = b64_to_utf8(newValue);
+                const markdown = this.markdown;
+                this.clearRenderChild();
+                // Render into a generation-owned node. Obsidian renderers
+                // can finish asynchronously after a newer preview starts.
+                const renderTarget = this.ownerDocument.createElement('div');
+                this.replaceChildren(renderTarget);
+                const renderChild = new MarkdownRenderChild(renderTarget);
+                this.renderChild = renderChild;
+                renderChild.load();
+                renderChildren.add(renderChild);
                 (async () => {
-                    this.clearRenderChild();
-                    this.replaceChildren();
-                    const renderChild = new MarkdownRenderChild(this);
-                    this.renderChild = renderChild;
-                    renderChild.load();
-                    renderChildren.add(renderChild);
-                    await MarkdownRenderer.renderMarkdown(this.markdown, this, filePath, renderChild);
+                    await MarkdownRenderer.renderMarkdown(markdown, renderTarget, filePath, renderChild);
                     if (this.renderChild !== renderChild) return;
                     const maxDepth = 10;
                     const patchEmbeds = async (el: HTMLElement, filePath: string, depth: number) => {
@@ -418,8 +422,13 @@ function patchSidebarMarkdownRendering(
                             })
                         );
                     };
-                    await patchEmbeds(this, filePath, 1);
-                })();
+                    await patchEmbeds(renderTarget, filePath, 1);
+                })().catch(error => {
+                    if (this.renderChild !== renderChild) return;
+                    this.clearRenderChild();
+                    renderTarget.textContent = markdown;
+                    console.error('Annotator+: could not render annotation Markdown', error);
+                });
             }
         }
 
