@@ -170,6 +170,28 @@ test('comments preserve indentation, Unicode, blank lines, and literal marker li
     );
 });
 
+test.each(['\n', '\r\n'])('unambiguous tags survive saving and reopening in %j notes', lineEnding => {
+    const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
+    const annotation = { ...base, tags: ['functions, polynomials', 'ordinary', 'विषय', 'line\n%%TAGS%%\nvalue'] };
+    const prose = `User prose.${lineEnding}`;
+    const result = annotationUtils.writeAnnotationToAnnotationFileString(annotation, prose, testAnnotatorSettings);
+    expect(annotationUtils.getAnnotationFromFileContent(annotation.id, result.newAnnotationFileString).tags).toEqual(
+        annotation.tags
+    );
+    expect(result.newAnnotationFileString.startsWith(prose)).toBe(true);
+});
+
+test('manual edits to the displayed tags still take precedence over saved JSON tags', () => {
+    const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
+    const result = annotationUtils.writeAnnotationToAnnotationFileString(
+        { ...base, tags: ['old'] },
+        '',
+        testAnnotatorSettings
+    );
+    const edited = result.newAnnotationFileString.replace('%%TAGS%%\n>#old', '%%TAGS%%\n>#new, #other');
+    expect(annotationUtils.getAnnotationFromFileContent(base.id, edited).tags).toEqual(['new', 'other']);
+});
+
 test('saving a trimmed excerpt retains the original selector context and CRLF prose', () => {
     const base = annotationUtils.loadAnnotationsAtUriFromFileText(null, loadMd('testfile2.md')).rows[0];
     const selectors = [

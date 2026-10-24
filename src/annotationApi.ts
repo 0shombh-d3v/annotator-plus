@@ -1,5 +1,11 @@
 import type AnnotatorPlugin from './main';
-import { deleteAnnotation, getAnnotation, loadAnnotations, writeAnnotation } from './annotationFileUtils';
+import {
+    AnnotationNotFoundError,
+    deleteAnnotation,
+    getAnnotation,
+    loadAnnotations,
+    writeAnnotation
+} from './annotationFileUtils';
 import { isValidAnnotationId, isWritableAnnotation } from './annotationUtils';
 import { isLocalAnnotationApiUrl } from './offlinePolicy';
 import { Annotation, AnnotationList } from './types';
@@ -84,7 +90,9 @@ export async function handleAnnotationApi(
                 ) {
                     return { response: json({ reason: 'Annotation ID does not match the request.' }, 400) };
                 }
-                if (method === 'PATCH') partialUpdate = payload;
+                // Both update methods must merge and recheck existence inside
+                // the write queue, after any concurrent edit or deletion.
+                partialUpdate = payload;
                 payload = { ...existing, ...payload, id };
             }
             if (!isWritableAnnotation(payload))
@@ -94,6 +102,14 @@ export async function handleAnnotationApi(
         }
         return { response: json({ reason: 'Unsupported annotation request.' }, 405) };
     } catch (error) {
+        if (error instanceof AnnotationNotFoundError) {
+            return {
+                response: json(
+                    { reason: `${error.message} Your draft has been kept; reopen the note before retrying.` },
+                    404
+                )
+            };
+        }
         console.error('Annotator+: annotation operation failed', error);
         return {
             response: json(

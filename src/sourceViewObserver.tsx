@@ -23,17 +23,18 @@ export default class SourceViewObserver {
                 ? plugin.app.metadataCache.getFirstLinkpathDest(parsed.path, file.path)
                 : file;
             if (!destination || !isValidAnnotationId(id) || !plugin.isAnnotationFile(destination)) return false;
-            this.open(event, destination, id);
-            return true;
+            return this.open(event, destination, id);
         };
         this.editorExtension = EditorView.domEventHandlers({ click: onClick, auxclick: onClick });
     }
 
     private open(event: MouseEvent, file: TFile, id: string) {
+        if (event.button !== 0 && event.button !== 1) return false;
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         void this.plugin.openAnnotationTarget(file, event.metaKey || event.ctrlKey || event.button === 1, id);
+        return true;
     }
 
     addClickListener(element: HTMLAnchorElement, id: string, file: TFile) {
