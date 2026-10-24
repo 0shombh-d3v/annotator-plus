@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5 — 2026-10-24
+
+- Use a lighter selection blue for dark text on light PDFs and a deeper blue for light text in dark mode, preserving the original canvas fonts and mathematical glyphs.
+- Subdue saved annotation tint while a page has an active text selection so overlapping highlights do not muddy the selected text. Restore the original annotation colors when the selection clears.
+- Check rendered text contrast of at least 7:1 with zero, one, and two saved highlights in both themes, including custom dark-mode brightness and contrast settings.
+
 ## 1.0.4 — 2026-10-24
 
 - Restore visible text selection after scrolling far enough to evict a PDF page and returning to it. Dispose the selection draw layer even when PDF editing is disabled.
