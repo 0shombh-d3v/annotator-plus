@@ -8,6 +8,7 @@ import folderZipString from './rollup-folder-zip-string';
 import nodePolyfills from 'rollup-plugin-polyfill-node';
 import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
+import offlineIframeLifecycle from './scripts/offline-iframe-lifecycle.mjs';
 
 const banner = 
 `/*
@@ -57,6 +58,7 @@ export default {
   "@lezer/common",
   "@lezer/lr"],
   plugins: [
+    offlineIframeLifecycle(),
     typescript({
       inlineSourceMap: false,
       sourceMap: process.env.BUILD != 'production',
