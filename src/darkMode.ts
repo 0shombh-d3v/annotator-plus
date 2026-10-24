@@ -4,7 +4,7 @@ export const DARK_READER_FIXES = {
     invert: ['.canvasWrapper > canvas'],
     css: `
         .canvasWrapper .selection {
-            background-color: rgb(8, 34, 74) !important;
+            background-color: rgb(8, 28, 120) !important;
             mix-blend-mode: screen !important;
         }
 
