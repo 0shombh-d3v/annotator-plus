@@ -59,6 +59,8 @@ The viewer clears text selection only after confirming that its scale will chang
 
 Check the first margin release after reopening a reader, in both drag directions. Chromium 142 can place its focus at the text-layer container or adjacent annotation layer instead of the text-layer helper; these boundaries need to resolve to the intended PDF line before the selection is finalized. The generated-document regressions exercise those observed boundaries after native pointer input and wait for selection rendering to settle.
 
+`scripts/offline-iframe-lifecycle.mjs` applies a narrow build-time correction to the pinned iframe wrapper. Its asynchronous HTML preparation can finish after reader disposal; check that the frame is still connected and has a window before installing patches or writing its document. The transform refuses changed upstream initializer code, and the regression tests execute the dependency's actual initializer with removal during both preparation stages. Keep this guard and its tests when updating the wrapper.
+
 `moment` is overridden to 2.31.0 for the development SDK dependency. The SDK remains at the declared minimum supported Obsidian API version; Obsidian supplies the runtime module.
 
 The vendored annotation-ui package has a checked-in Yarn patch replacing Showdown with Marked. Its replacement dependency is declared in `.yarnrc.yml`, since Yarn patches cannot change dependency resolution. KaTeX 0.18.2 is deliberately supplied despite annotation-ui's older peer range; the renderer API and its matching CSS/fonts are checked together. Keep the renderer regressions and both dependency audits passing when updating these packages. The audit command checks every severity and parses Yarn's JSON instead of trusting its exit status.

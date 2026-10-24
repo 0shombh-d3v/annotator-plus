@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.7 — 2026-10-24
+
+- Stop the iframe wrapper from initializing a removed frame when asynchronous HTML preparation finishes after a reader closes or reloads. Live frames still initialize normally; the pinned dependency is corrected during the build without modifying installed dependencies.
+
 ## 1.0.6 — 2026-10-24
 
 - Keep the first text drag after reopening a reader on the intended line when a release in the margin lands at a PDF layer container in Obsidian's Chromium 142.

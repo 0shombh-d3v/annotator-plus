@@ -1,6 +1,6 @@
 {
   "name": "annotator-plus",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Offline, vault-local PDF annotation for Obsidian.",
   "main": "main.js",
   "scripts": {
