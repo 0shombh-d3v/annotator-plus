@@ -6222,6 +6222,11 @@ button.hasPopupMenu{
         image-rendering:pixelated;
       }
     }
+    &:has(.selection) .hypothesis-highlight-layer{
+      /* Keep saved annotation tint from muddying the active selection. */
+      opacity:0.15;
+    }
+
     .selection{
       position:absolute;
       top:0;
@@ -6230,7 +6235,8 @@ button.hasPopupMenu{
       height:100%;
       pointer-events:none;
       /* Blend with the painted PDF so the original glyphs stay visible. */
-      background:rgb(15 117 240);
+      /* Light blue keeps small, dark PDF glyphs readable in light mode. */
+      background:rgb(120 177 250);
       mix-blend-mode:multiply;
       z-index:1;
     }
